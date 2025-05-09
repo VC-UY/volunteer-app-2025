@@ -1,6 +1,7 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from backend.volontaire.utils.get_info import get_statics_infos
 from volontaire.docker_manager import DockerManager
 
 
@@ -98,3 +99,16 @@ class TaskDetailView(APIView):
             return Response(details)
         except Exception as e:
             return Response({"error": str(e)}, status=404)
+
+
+
+# ------------------------- Computer charateristic manage -------------------------------------
+
+# recuperration des caracteristiques de la machine
+
+class MachineInfoView(APIView):
+    def get(self, request):
+        infos = get_statics_infos()
+        if not infos:
+            return Response({"error": "Failed to retrieve machine information."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(infos, status=status.HTTP_200_OK)

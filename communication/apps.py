@@ -46,8 +46,6 @@ def handle_task_assignment(message:dict):
             workflow_info = task.get("workflow") # Supposons que les infos du workflow sont sous la clé "workflow"
             task_info = task # Le reste des infos dans "ask" sont pour la tâche
 
-        
-
             # 2. Récupération de l'instance du workflow depuis la base de données
             try:
                 workflow_instance = Workflow(

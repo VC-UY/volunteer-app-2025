@@ -11,7 +11,6 @@ from django.core.exceptions import ValidationError
 
 # model des information statique
 
-from django.db import models
 
 class MachineInfo(models.Model):
     volunteer_id =models.UUIDField(unique=True, default=uuid.uuid4, editable=False)
