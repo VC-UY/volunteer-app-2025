@@ -5,6 +5,10 @@ from django.apps import AppConfig
 
 from django.apps import AppConfig
 import threading
+<<<<<<< HEAD
+=======
+from volontaire.utils.regster_in_bd import register_in_bd
+>>>>>>> 786acc5b158bf5aef3b8865c29bf1cf491ec0800
 from communication.PubSub.redis import RedisPubSubManager  # Chemin vers ta classe
 
 
@@ -12,6 +16,10 @@ import os
 import json
 import requests
 from django.utils import timezone
+<<<<<<< HEAD
+=======
+from volontaire.models import Task, Workflow  # adapte le chemin si besoin
+>>>>>>> 786acc5b158bf5aef3b8865c29bf1cf491ec0800
 from volontaire.docker_manager import DockerManager
 
 INPUT_BASE_PATH = "input_data"
@@ -46,7 +54,10 @@ def handle_task_assignment(message:dict):
 
             # 2. Récupération de l'instance du workflow depuis la base de données
             try:
+<<<<<<< HEAD
                 from volontaire.models import Task, Workflow  
+=======
+>>>>>>> 786acc5b158bf5aef3b8865c29bf1cf491ec0800
                 workflow_instance = Workflow(
                     name=workflow_info.get("name", "Nouveau Workflow"),
                     description=workflow_info.get("description", ""),
@@ -66,6 +77,10 @@ def handle_task_assignment(message:dict):
                     estimated_execution_time=task_info.get("estimated_execution_time"),
                     input_data_size=task_info.get("input_data_size"),
                     output_data_size=task_info.get("output_data_size"),
+<<<<<<< HEAD
+=======
+                    docker_information=task_info.get("docker_information", {}),
+>>>>>>> 786acc5b158bf5aef3b8865c29bf1cf491ec0800
                     docker_information = docker_data,
                     # N'incluez pas les champs du workflow ici, car ils sont stockés dans l'instance de Workflow
                 )
@@ -128,7 +143,10 @@ def handle_message(message):
         # recuperer request_id
         request_id = 'dd'
         if response['request_id']:
+<<<<<<< HEAD
             from volontaire.utils.regster_in_bd import register_in_bd
+=======
+>>>>>>> 786acc5b158bf5aef3b8865c29bf1cf491ec0800
             register_in_bd()
         pass # Appel de la fonction de l'enregistrement
 

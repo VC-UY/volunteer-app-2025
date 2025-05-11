@@ -1,9 +1,14 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+<<<<<<< HEAD
 from volontaire.utils.get_info import get_statics_infos
 from volontaire.docker_manager import DockerManager
 from django.shortcuts import render
+=======
+from backend.volontaire.utils.get_info import get_statics_infos
+from volontaire.docker_manager import DockerManager
+>>>>>>> 786acc5b158bf5aef3b8865c29bf1cf491ec0800
 
 
 manager = DockerManager()
@@ -113,6 +118,7 @@ class MachineInfoView(APIView):
         if not infos:
             return Response({"error": "Failed to retrieve machine information."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         return Response(infos, status=status.HTTP_200_OK)
+<<<<<<< HEAD
 
 
 def home(request):
@@ -132,3 +138,5 @@ def home(request):
     ]
     # Renvoyer les informations dans le template
     return render(request, 'home.html', {'infos': infos, 'containers': result})
+=======
+>>>>>>> 786acc5b158bf5aef3b8865c29bf1cf491ec0800
