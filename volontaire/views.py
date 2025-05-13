@@ -1,14 +1,9 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-<<<<<<< HEAD
 from volontaire.utils.get_info import get_statics_infos
 from volontaire.docker_manager import DockerManager
 from django.shortcuts import render
-=======
-from backend.volontaire.utils.get_info import get_statics_infos
-from volontaire.docker_manager import DockerManager
->>>>>>> 786acc5b158bf5aef3b8865c29bf1cf491ec0800
 
 
 manager = DockerManager()
@@ -118,16 +113,17 @@ class MachineInfoView(APIView):
         if not infos:
             return Response({"error": "Failed to retrieve machine information."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         return Response(infos, status=status.HTTP_200_OK)
-<<<<<<< HEAD
 
 
 def home(request):
     # Récupérer les informations de la machine
-    infos = get_statics_infos()
-    if not infos:
-        return Response({"error": "Failed to retrieve machine information."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    infos_raw = get_statics_infos()
+    
+    if not infos_raw:
+        infos_raw = {"error": "Failed to retrieve machine information."}
+
     # Récupérer la liste des conteneurs
-    containers = manager.list_tasks()
+    containers = manager.list_tasks()  # assure-toi que `manager` est bien importé
     result = [
         {
             "id": c['id'],
@@ -136,7 +132,39 @@ def home(request):
             "image": c['image']
         } for c in containers
     ]
-    # Renvoyer les informations dans le template
+
+    # dictionnaire des icônes
+    icon_map = {
+        "volunteer_id": "fa-id-badge",
+        "adresse_mac": "fa-network-wired",
+        "machine_type": "fa-desktop",
+        "system": "fa-cogs",
+        "node_name": "fa-server",
+        "host_name": "fa-server",
+        "os_release": "fa-code-branch",
+        "os_version": "fa-info",
+        "machine_arch": "fa-microchip",
+        "processor_name": "fa-microchip",
+        "cpu_type": "fa-microchip",
+        "cpu_cores": "fa-microchip",
+        "cpu_logical_cores": "fa-microchip",
+        "cpu_frequency": "fa-tachometer-alt",
+        "total_memory": "fa-memory",
+        "screen_resolution": "fa-tv",
+        "total_disk": "fa-hdd"
+    }
+
+    # Structurer les infos avec icônes
+    infos = [
+        {
+            "label": key.replace("_", " ").capitalize(),
+            "value": ", ".join(value) if isinstance(value, list) else value,
+            "icon": icon_map.get(key, "fa-info-circle")
+        }
+        for key, value in infos_raw.items()
+    ]
+
     return render(request, 'home.html', {'infos': infos, 'containers': result})
-=======
->>>>>>> 786acc5b158bf5aef3b8865c29bf1cf491ec0800
+
+ 
+

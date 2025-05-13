@@ -22,9 +22,5 @@ from communication.views import publier_message
 urlpatterns = [
     path('admin/', admin.site.urls),
     path("pubsub/", publier_message),
-<<<<<<< HEAD
     path("", include("volontaire.urls"))
-=======
-    path("volunteer/", include("volontaire.urls"))
->>>>>>> 786acc5b158bf5aef3b8865c29bf1cf491ec0800
 ]

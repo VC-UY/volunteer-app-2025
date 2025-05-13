@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     "volontaire",
     "communication",
+    'rest_framework',
 ]
 
 MIDDLEWARE = [
@@ -56,11 +57,7 @@ ROOT_URLCONF = 'backend.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-<<<<<<< HEAD
         'DIRS': [ 'volontaire/templates' ],
-=======
-        'DIRS': [],
->>>>>>> 786acc5b158bf5aef3b8865c29bf1cf491ec0800
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
