@@ -1,10 +1,21 @@
 import docker
 from docker.errors import NotFound, APIError
-
+from threading import Lock
 
 class DockerManager:
+    _instance = None
+    _lock = Lock()
+
     def __init__(self):
         self.client = docker.from_env()
+        self.tasks = {}  # task_id: container_id
+
+    @classmethod
+    def get_instance(cls):
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = DockerManager()
+        return cls._instance
 
     def pull_image(self, image_name):
         try:
@@ -16,124 +27,102 @@ class DockerManager:
             print(f"Error pulling image: {e}")
             return None
 
-    def run_container(self, image_name, name=None, cpu_limit=None, mem_limit=None, detach=True, **kwargs):
+    def run_container(self, image_name, task_id, cpu_limit=None, mem_limit=None, **kwargs):
         try:
-            print(f"Running container from image {image_name}...")
+            print(f"Running container for task {task_id}...")
             container = self.client.containers.run(
                 image=image_name,
-                name=name,
-                detach=detach,
-                cpu_quota=int(cpu_limit * 100000) if cpu_limit else None,  # e.g., 0.5 CPU => 50000
+                detach=True,
+                cpu_quota=int(cpu_limit * 100000) if cpu_limit else None,
                 mem_limit=mem_limit,
                 **kwargs
             )
-            print(f"Container started with ID {container.id}")
+            self.tasks[task_id] = container.id
+            print(f"Container started for task {task_id}: {container.id}")
             return container
         except APIError as e:
-            print(f"Error running container: {e}")
+            print(f"Error running container for task {task_id}: {e}")
             return None
 
-    def pause_container(self, container_id):
+    def get_container_by_task(self, task_id):
+        container_id = self.tasks.get(task_id)
+        if not container_id:
+            print(f"No container found for task {task_id}")
+            return None
         try:
-            container = self.client.containers.get(container_id)
+            return self.client.containers.get(container_id)
+        except NotFound:
+            print(f"Container for task {task_id} not found.")
+            return None
+
+    def get_task_status(self, task_id):
+        container = self.get_container_by_task(task_id)
+        return container.status if container else "not found"
+
+    def get_task_logs(self, task_id, tail=20):
+        container = self.get_container_by_task(task_id)
+        if not container:
+            return "No logs available."
+        try:
+            return container.logs(tail=tail).decode()
+        except APIError as e:
+            return f"Error getting logs: {e}"
+
+    def pause_task(self, task_id):
+        container = self.get_container_by_task(task_id)
+        if container:
             container.pause()
-            print("Container paused.")
-        except NotFound:
-            print("Container not found.")
-        except APIError as e:
-            print(f"Error pausing container: {e}")
+            print(f"Task {task_id} paused.")
 
-    def resume_container(self, container_id):
-        try:
-            container = self.client.containers.get(container_id)
+    def resume_task(self, task_id):
+        container = self.get_container_by_task(task_id)
+        if container:
             container.unpause()
-            print("Container resumed.")
-        except NotFound:
-            print("Container not found.")
-        except APIError as e:
-            print(f"Error resuming container: {e}")
+            print(f"Task {task_id} resumed.")
 
-    def stop_container(self, container_id):
-        try:
-            container = self.client.containers.get(container_id)
+    def stop_task(self, task_id):
+        container = self.get_container_by_task(task_id)
+        if container:
             container.stop()
-            print("Container stopped.")
-        except NotFound:
-            print("Container not found.")
-        except APIError as e:
-            print(f"Error stopping container: {e}")
+            print(f"Task {task_id} stopped.")
 
-    def remove_container(self, container_id):
-        try:
-            container = self.client.containers.get(container_id)
+    def remove_task(self, task_id):
+        container = self.get_container_by_task(task_id)
+        if container:
             container.remove(force=True)
-            print("Container removed.")
-        except NotFound:
-            print("Container not found.")
-        except APIError as e:
-            print(f"Error removing container: {e}")
+            print(f"Task {task_id} container removed.")
+            self.tasks.pop(task_id, None)
 
-    def set_limits(self, container_id, cpu_limit=None, mem_limit=None):
-        try:
-            container = self.client.containers.get(container_id)
+    def update_limits(self, task_id, cpu_limit=None, mem_limit=None):
+        container = self.get_container_by_task(task_id)
+        if container:
             container.update(
                 cpu_quota=int(cpu_limit * 100000) if cpu_limit else None,
                 mem_limit=mem_limit
             )
-            print("Limits updated.")
-        except NotFound:
-            print("Container not found.")
-        except APIError as e:
-            print(f"Error updating limits: {e}")
-
-    def purge_all(self):
-        try:
-            containers = self.client.containers.list(all=True)
-            for container in containers:
-                container.remove(force=True)
-                print(f"Removed container: {container.id}")
-            print("All containers purged.")
-        except APIError as e:
-            print(f"Error purging containers: {e}")
+            print(f"Limits updated for task {task_id}.")
 
     def list_tasks(self):
-        containers = self.client.containers.list(all=True)
-        return [
-            {
-                "id": c.id,
-                "name": c.name,
-                "status": c.status,
-                "image": c.image.tags
-            } for c in containers
-        ]
+        result = []
+        for task_id, container_id in self.tasks.items():
+            try:
+                container = self.client.containers.get(container_id)
+                result.append({
+                    "task_id": task_id,
+                    "container_id": container.id,
+                    "status": container.status,
+                    "image": container.image.tags,
+                })
+            except NotFound:
+                result.append({
+                    "task_id": task_id,
+                    "container_id": container_id,
+                    "status": "not found",
+                    "image": [],
+                })
+        return result
 
-    def task_details(self, container_id):
-        try:
-            container = self.client.containers.get(container_id)
-            return {
-                "id": container.id,
-                "name": container.name,
-                "status": container.status,
-                "image": container.image.tags,
-                "created": container.attrs['Created'],
-                "started_at": container.attrs['State']['StartedAt'],
-                "finished_at": container.attrs['State']['FinishedAt'],
-                "logs": container.logs(tail=20).decode()
-            }
-        except NotFound:
-            print("Container not found.")
-            return None
-        except APIError as e:
-            print(f"Error getting details: {e}")
-            return None
-
-
-    def limit_cpu(self, container_id, cpu_quota):
-            container = self.client.containers.get(container_id)
-            container.update(cpu_quota=cpu_quota)
-            return f"CPU limited for {container_id}."
-
-    def limit_ram(self, container_id, mem_limit):
-        container = self.client.containers.get(container_id)
-        container.update(mem_limit=mem_limit)
-        return f"RAM limited for {container_id}."
+    def purge_all(self):
+        for task_id in list(self.tasks.keys()):
+            self.remove_task(task_id)
+        print("All tasks purged.")

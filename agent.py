@@ -163,21 +163,54 @@ def get_bios_motherboard_info() -> Dict[str, str]:
     
     elif platform.system() == "Linux":
         try:
-            # Essayer dmidecode pour le BIOS (nécessite des droits root)
+            # Essayer d'abord sans sudo
             try:
-                bios_output = subprocess.check_output("sudo dmidecode -t bios", shell=True).decode()
+                # Utiliser dmidecode pour obtenir des informations sur le BIOS
+                bios_output = subprocess.check_output("dmidecode -t bios", shell=True).decode()
                 vendor = next((line.split("Vendor:")[1].strip() for line in bios_output.splitlines() if "Vendor:" in line), "Non disponible")
                 version = next((line.split("Version:")[1].strip() for line in bios_output.splitlines() if "Version:" in line), "Non disponible")
-                bios_info["BIOS"] = {"Fabricant": vendor, "Version": version}
-            except:
-                pass
-            
-            # Essayer dmidecode pour la carte mère (nécessite des droits root)
-            try:
-                board_output = subprocess.check_output("sudo dmidecode -t baseboard", shell=True).decode()
+                release_date = next((line.split("Release Date:")[1].strip() for line in bios_output.splitlines() if "Release Date:" in line), "Non disponible")
+                bios_info["BIOS"] = {"Fabricant": vendor, "Version": version, "Date de sortie": release_date}
+                
+                # Utiliser dmidecode pour obtenir des informations sur la carte mère
+                board_output = subprocess.check_output("dmidecode -t baseboard", shell=True).decode()
                 manufacturer = next((line.split("Manufacturer:")[1].strip() for line in board_output.splitlines() if "Manufacturer:" in line), "Non disponible")
                 product = next((line.split("Product Name:")[1].strip() for line in board_output.splitlines() if "Product Name:" in line), "Non disponible")
                 bios_info["Carte mère"] = {"Fabricant": manufacturer, "Modèle": product}
+            except (subprocess.CalledProcessError, PermissionError) as e:
+                # Si l'exécution sans sudo échoue, utiliser des méthodes alternatives
+                logging.warning(f"Impossible d'exécuter dmidecode sans privilèges: {e}")
+                
+                # Méthode alternative pour obtenir des informations sur le système
+                # Utiliser /sys/class/dmi/id/ qui est souvent accessible sans privilèges
+                try:
+                    if os.path.exists('/sys/class/dmi/id/bios_vendor'):
+                        with open('/sys/class/dmi/id/bios_vendor', 'r') as f:
+                            vendor = f.read().strip()
+                    if os.path.exists('/sys/class/dmi/id/bios_version'):
+                        with open('/sys/class/dmi/id/bios_version', 'r') as f:
+                            version = f.read().strip()
+                    if os.path.exists('/sys/class/dmi/id/bios_date'):
+                        with open('/sys/class/dmi/id/bios_date', 'r') as f:
+                            release_date = f.read().strip()
+                    
+                    bios_info["BIOS"] = {"Fabricant": vendor if 'vendor' in locals() else "Non disponible", 
+                                      "Version": version if 'version' in locals() else "Non disponible", 
+                                      "Date de sortie": release_date if 'release_date' in locals() else "Non disponible"}
+                    
+                    # Informations sur la carte mère
+                    if os.path.exists('/sys/class/dmi/id/board_vendor'):
+                        with open('/sys/class/dmi/id/board_vendor', 'r') as f:
+                            manufacturer = f.read().strip()
+                    if os.path.exists('/sys/class/dmi/id/board_name'):
+                        with open('/sys/class/dmi/id/board_name', 'r') as f:
+                            product = f.read().strip()
+                    
+                    bios_info["Carte mère"] = {"Fabricant": manufacturer if 'manufacturer' in locals() else "Non disponible", 
+                                           "Modèle": product if 'product' in locals() else "Non disponible"}
+                except Exception as e2:
+                    logging.warning(f"Méthode alternative pour obtenir les informations BIOS/Carte mère a échoué: {e2}")
+                    # Laisser les valeurs par défaut
             except:
                 pass
         except Exception as e:

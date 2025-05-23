@@ -22,7 +22,7 @@ from django.utils import timezone
 from typing import Dict, Any, Optional, List, Tuple
 
 # Import des fonctions d'authentification
-from .auth_client import get_volunteer_info, save_volunteer_info
+from .auth_client import save_volunteer_info
 
 # Configuration du logging pour afficher les messages dans la console
 logger = logging.getLogger('redis_communication')
@@ -710,7 +710,14 @@ def publish_availability(volunteer_id):
         }
         
         # Publier le message
-        client.publish('volunteer/available', availability_message)
+        client.publish( 
+                        'volunteer/available',
+                        availability_message, 
+                        str(uuid.uuid4()),
+                        self.volunteer_token,
+                        'request'
+                    )
+                    
         logger.info(f"Disponibilité publiée pour le volontaire {volunteer_id}")
         return True
     except Exception as e:
@@ -779,6 +786,8 @@ class RedisAppConfig(AppConfig):
     data_sending_thread = None
     availability_thread = None
     task_listener_thread = None
+    username = None
+    password = None
     
     # Stockage des données collectées
     static_data = None
@@ -821,41 +830,49 @@ class RedisAppConfig(AppConfig):
             if volunteer_info and volunteer_info.volunteer_id:
                 # Le volontaire est déjà enregistré, se connecter
                 logger.info(f"Volontaire déjà enregistré avec l'ID {volunteer_info.volunteer_id}")
-                
-                success, data = login_volunteer(
-                    username=volunteer_info.username,
-                    password=volunteer_info.password
-                )
-                
-                if success:
-                    logger.info("Volontaire authentifié avec succès")
-                    
-                    # Mettre à jour les identifiants
-                    self.volunteer_id = data.get('volunteer_id')
-                    self.volunteer_token = data.get('token')
-                    
-                    # Ecrire les informations dans .volunteer/volunteer_info.json
-                    if not os.path.exists('.volunteer'):
-                        os.makedirs('.volunteer')
-                    with open('.volunteer/volunteer_auth_info.json', 'w') as f:
-                        json.dump({
-                            'volunteer_id': volunteer_info.volunteer_id,
-                            'token': data.get('token'),
-                            'refresh_token': data.get('refresh_token'),
-                            'last_login': time.time()
-                        }, f)
-                    logger.debug("Volontaire authentifié avec succès")
 
-                    # lancer le processus de tâche
-                    from task_handlers import TaskManager
-                    task_manager = TaskManager.get_instance()
-                    task_manager.start(self.volunteer_id)
+                self.load_volunteer_credentials()
+                if self.username and self.password:
+                    success, data = login_volunteer(
+                        username=self.username,
+                        password=self.password
+                    )
+                
+                    if success:
+                        logger.info("Volontaire authentifié avec succès")
+                        
+                        # Mettre à jour les identifiants
+                        self.volunteer_id = data.get('volunteer_id')
+                        self.volunteer_token = data.get('token')
+                        
+                        # Ecrire les informations dans .volunteer/volunteer_info.json
+                        if not os.path.exists('.volunteer'):
+                            os.makedirs('.volunteer')
+                        with open('.volunteer/volunteer_auth_info.json', 'w') as f:
+                            json.dump({
+                                'volunteer_id': str(volunteer_info.volunteer_id),
+                                'token': data.get('token'),
+                                'refresh_token': data.get('refresh_token'),
+                                'last_login': time.time()
+                            }, f)
+                        logger.debug("Volontaire authentifié avec succès")
+
+                        # lancer le processus de tâche
+                        from .task_handlers import TaskManager
+                        task_manager = TaskManager.get_instance()
+                        task_manager.start(self.volunteer_id)
+                    else:
+                        logger.error(f"Échec de l'authentification du volontaire: {data}")
                 else:
-                    logger.error(f"Échec de l'authentification du volontaire: {data}")
+                    raise ValueError("Aucun identifiant de volontaire trouvé")
             elif volunteer_info:
                 # Le volontaire est créé, mais pas enregistré aupres du coordinateur
                 logger.info(f"Volontaire enregistré avec l'ID {volunteer_info.id}, mais pas authentifié")
-
+                
+                # Générer un nom d'utilisateur et mot de passe aléatoires
+                username = f"volunteer_{uuid.uuid4().hex[:8]}"
+                password = uuid.uuid4().hex
+                
                 # preparer les données d'enregistrement:
                 success, data = register_volunteer(
                     name=volunteer_info.name,
@@ -863,8 +880,8 @@ class RedisAppConfig(AppConfig):
                     cpu_cores=volunteer_info.cpu_cores,
                     ram_mb=volunteer_info.ram_mb,
                     disk_gb=volunteer_info.disk_gb,
-                    username=volunteer_info.username,
-                    password=volunteer_info.password,
+                    username=username,
+                    password=password,
                     machine_info=volunteer_info.machine_info,
                     callback=volunteer_info.callback,
                 )
@@ -966,7 +983,7 @@ class RedisAppConfig(AppConfig):
                         ip_address = "127.0.0.1"
                     
                     # Extraire les informations CPU, RAM et disque
-                    cpu_cores = int(self.static_data.get('cpu', {}).get('coeurs_physiques', 1))
+                    cpu_cores = int(self.static_data.get('cpu', {}).get('coeurs_logiques', 1))
                     
                     # Convertir la RAM en Mo
                     total_memory = self.static_data.get('memoire', {}).get('ram', {}).get('total', 0)
@@ -1121,6 +1138,9 @@ class RedisAppConfig(AppConfig):
             if volunteer_info:
                 self.volunteer_id = volunteer_info.get('volunteer_id')
                 self.volunteer_token = volunteer_info.get('token')
+                self.volunteer_refresh_token = volunteer_info.get('refresh_token')
+                self.username = volunteer_info.get('username')
+                self.password = volunteer_info.get('password')
                 logger.info(f"Identifiants du volontaire chargés avec succès: ID={self.volunteer_id}")
             else:
                 logger.warning("Aucun identifiant de volontaire trouvé, l'enregistrement sera nécessaire")
@@ -1265,13 +1285,17 @@ class RedisAppConfig(AppConfig):
             data_to_send = {
                 'volunteer_id': self.volunteer_id,
                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                'static_data': self.static_data,
                 'dynamic_data': self.dynamic_data_history[-1] if self.dynamic_data_history else None
             }
             
             # Envoyer les données au coordinateur
-            channel = f"volunteer/data/{self.volunteer_id}"
-            success = self.redis_client.publish(channel, json.dumps(data_to_send))
+            channel = "volunteer/data"
+            success = self.redis_client.publish(channel, 
+                                                json.dumps(data_to_send), 
+                                                str(uuid.uuid4()), 
+                                                self.volunteer_token,
+                                                'request'
+                                                )
             
             if success:
                 logger.info(f"Données envoyées au coordinateur sur le canal {channel}")

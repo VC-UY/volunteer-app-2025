@@ -97,65 +97,81 @@ class TaskManager:
             channel: Canal sur lequel le message a été reçu
             message: Message reçu
         """
-        # Import des modèles ici pour éviter les importations circulaires
-        from django.apps import apps
-        Task = apps.get_model('volontaire', 'Task')
-        TaskProgress = apps.get_model('volontaire', 'TaskProgress')
-        
-        data = message.data
-        logger.info(f"Tâche reçue: {data.get('name', 'Sans nom')}")
-        
-        # Vérifier si la tâche est destinée à ce volontaire
-        target_volunteer = data.get('volunteer_id')
-        if target_volunteer != self.volunteer_id:
-            logger.debug(f"Tâche ignorée: destinée au volontaire {target_volunteer}, pas à {self.volunteer_id}")
-            return
-        
-        # Vérifier si la tâche existe déjà
-        task_id = data.get('task_id')
-        existing_task = Task.objects.filter(task_id=task_id).first()
-        if existing_task:
-            logger.warning(f"Tâche {task_id} déjà reçue, statut actuel: {existing_task.status}")
+        logger.info(f"Message d'assignation de tâche reçu: {message.to_dict()}")
             
-            # Si la tâche est déjà terminée ou a échoué, envoyer une mise à jour au manager
-            if existing_task.status in ['completed', 'failed']:
-                self._send_task_status_update(existing_task)
+        # Récupérer les données du message
+        data = message.data
+        
+        # Vérifier si le message contient des assignations pour ce volontaire
+        assignments = data.get('assignments', {})
+        workflow_id = data.get('workflow_id')
+        
+        if not assignments:
+            logger.warning(f"Aucune assignation de tâche dans le message: {message.to_dict()}")
             return
         
-        # Créer une nouvelle tâche
-        task = Task(
-            task_id=task_id,
-            name=data.get('name', 'Tâche sans nom'),
-            workflow_id=data.get('workflow_id', None),
-            parameters=data.get('parameters', {}),
-            status='pending',
-            input_data=data.get('input_data', {}),
-            estimated_execution_time=data.get('estimated_execution_time', 0),
-            input_data_size=data.get('input_data_size', 0)
-        )
-        task.save()
+        # Vérifier si des tâches sont assignées à ce volontaire
+        volunteer_tasks = assignments.get(self.volunteer_id, [])
         
-        # Créer un événement de progression pour l'assignation
-        TaskProgress.objects.create(
-            task=task,
-            progress_type='start',
-            percentage=0,
-            message="Tâche assignée au volontaire",
-            details={
-                'volunteer_id': self.volunteer_id,
-                'channel': channel
-            }
-        )
+        if not volunteer_tasks:
+            logger.info(f"Aucune tâche assignée au volontaire {self.volunteer_id} dans ce message")
+            return
         
-        # Télécharger les fichiers d'entrée si nécessaires
-        if task.input_data and 'files' in task.input_data:
-            self._download_input_files(task)
+        logger.info(f"{len(volunteer_tasks)} tâches assignées au volontaire {self.volunteer_id}")
         
-        # Envoyer une réponse d'acceptation
-        self._accept_task(task)
-
-
-        # lancer le processus de tâche
+        # Traiter chaque tâche assignée à ce volontaire
+        for task_data in volunteer_tasks:
+            task_id = task_data.get('task_id')
+            
+            # Vérifier si la tâche existe déjà
+            from django.apps import apps
+            Task = apps.get_model('volontaire', 'Task')
+            existing_task = Task.objects.filter(task_id=task_id).first()
+            if existing_task:
+                logger.warning(f"Tâche {task_id} déjà reçue, statut actuel: {existing_task.status}")
+                
+                # Si la tâche est déjà terminée ou a échoué, envoyer une mise à jour au manager
+                if existing_task.status in ['completed', 'failed']:
+                    self._send_task_status_update(existing_task)
+                continue
+            
+            # Créer une nouvelle tâche
+            task = Task(
+                task_id=task_id,
+                name=task_data.get('name', 'Tâche sans nom'),
+                workflow_id=workflow_id,
+                parameters=task_data.get('parameters', {}),
+                status='pending',
+                input_data=task_data.get('input_data', {}),
+                estimated_execution_time=task_data.get('estimated_execution_time', 0),
+                input_data_size=task_data.get('input_data_size', 0),
+                docker_information=task_data.get('docker_information', {}),
+            )
+            task.save()
+            
+            # Créer un événement de progression pour l'assignation
+            from django.apps import apps
+            TaskProgress = apps.get_model('volontaire', 'TaskProgress')
+            TaskProgress.objects.create(
+                task=task,
+                progress_type='start',
+                percentage=0,
+                message="Tâche assignée au volontaire",
+                details={
+                    'volunteer_id': self.volunteer_id,
+                    'channel': channel
+                }
+            )
+            
+            # Envoyer une réponse d'acceptation
+            self._accept_task(task)
+            
+            # Télécharger les fichiers d'entrée si nécessaires
+            if task.input_data and 'files' in task.input_data:
+                self._download_input_files(task)
+            
+            # Exécuter la tâche dans un thread séparé
+            self._execute_task(task)
         
     
     def handle_task_cancel(self, channel: str, message: Message):
@@ -291,33 +307,22 @@ class TaskManager:
         self._send_task_status_update(task)
         
         try:
-            # Préparer la commande
-            # Utiliser les paramètres du modèle Task existant
-            command = task.parameters.get('command', 'echo "Aucune commande spécifiée"')
-            
-            # Créer le répertoire de travail
-            work_dir = os.path.join(TASKS_DIR, str(task.id))
-            os.makedirs(work_dir, exist_ok=True)
-            
-            # Exécuter la commande
-            logger.info(f"Exécution de la commande: {command}")
-            self.task_process = subprocess.Popen(
-                command,
-                shell=True,
-                cwd=work_dir,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                universal_newlines=True
-            )
+            # Executer la tache avec docker manager dans un thread
+            from volontaire.docker_manager import DockerManager
+            import threading
+
+            manager = DockerManager.get_instance()
+            thread = threading.Thread(target=manager.run_container, args=(task.docker_information.get("image_name"), task.task_id))
+            thread.start()
             
             # Suivre la progression
             self._monitor_task_progress(task)
             
             # Attendre la fin de l'exécution
-            stdout, stderr = self.task_process.communicate()
+            stdout, stderr = manager.get_container_by_task(task.task_id).logs().decode()
             
             # Vérifier le code de retour
-            if self.task_process.returncode == 0:
+            if manager.get_container_by_task(task.task_id).exit_code == 0:
                 # Tâche réussie
                 result = {
                     'stdout': stdout[-1000:],  # Limiter la taille de la sortie
@@ -471,16 +476,135 @@ class TaskManager:
         
         Args:
             task: Tâche pour laquelle télécharger les fichiers
+        
+        Returns:
+            bool: True si tous les fichiers ont été téléchargés avec succès, False sinon
         """
+        import os
+        import requests
+        from pathlib import Path
+        
         logger.info(f"Téléchargement des fichiers d'entrée pour la tâche {task.task_id}")
         
-        # TODO: Implémenter le téléchargement des fichiers depuis le manager
-        # Pour l'instant, on simule juste la création de fichiers vides
-        for filename in task.input_files:
-            file_path = task.get_input_file_path(filename)
-            with open(file_path, 'w') as f:
-                f.write('')
-            logger.debug(f"Fichier d'entrée créé: {file_path}")
+        # Vérifier si les informations du serveur de fichiers sont disponibles
+        if not task.input_data or 'files' not in task.input_data or 'file_server' not in task.input_data:
+            logger.warning(f"Aucune information de fichier d'entrée pour la tâche {task.task_id}")
+            return False
+        
+        # Récupérer les informations du serveur de fichiers
+        file_server = task.input_data.get('file_server', {})
+        base_url = file_server.get('base_url')
+        
+        if not base_url:
+            logger.error(f"URL du serveur de fichiers manquante pour la tâche {task.task_id}")
+            return False
+        
+        # Récupérer la liste des fichiers à télécharger
+        files = task.input_data.get('files', [])
+        
+        if not files:
+            logger.warning(f"Aucun fichier à télécharger pour la tâche {task.task_id}")
+            return False
+        
+        # Créer le répertoire de travail pour la tâche
+        task_dir = Path(f"{TASKS_DIR}/{task.task_id}")
+        task_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Créer le répertoire d'entrée
+        input_dir = task_dir / "input"
+        input_dir.mkdir(exist_ok=True)
+        
+        # Mettre à jour le statut de la tâche
+        task.status = 'downloading'
+        task.save()
+        
+        # Créer un événement de progression pour le téléchargement
+        from django.apps import apps
+        TaskProgress = apps.get_model('volontaire', 'TaskProgress')
+        progress = TaskProgress.objects.create(
+            task=task,
+            progress_type='progress',
+            percentage=0,
+            message="Téléchargement des fichiers d'entrée"
+        )
+        
+        # Télécharger chaque fichier
+        downloaded_files = []
+        total_files = len(files)
+        
+        for i, file_info in enumerate(files):
+            file_path = file_info.get('path')
+            file_url = f"{base_url}/{file_path}"
+            
+            # Déterminer le chemin local
+            local_path = input_dir / Path(file_path).name
+            
+            try:
+                # Télécharger le fichier
+                logger.info(f"Téléchargement du fichier {file_url} vers {local_path}")
+                response = requests.get(file_url, stream=True)
+                response.raise_for_status()
+                
+                # Écrire le fichier sur le disque
+                with open(local_path, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        f.write(chunk)
+                
+                downloaded_files.append({
+                    'remote_path': file_path,
+                    'local_path': str(local_path)
+                })
+                
+                # Mettre à jour la progression
+                progress.percentage = ((i + 1) / total_files) * 100
+                progress.save()
+                
+            except Exception as e:
+                logger.error(f"Erreur lors du téléchargement du fichier {file_url}: {e}")
+                
+                # Créer un événement d'erreur
+                TaskProgress.objects.create(
+                    task=task,
+                    progress_type='error',
+                    percentage=progress.percentage,
+                    message=f"Erreur lors du téléchargement du fichier {file_path}",
+                    details={'error': str(e)}
+                )
+        
+        # Mettre à jour le statut de la tâche
+        if len(downloaded_files) == total_files:
+            # Tous les fichiers ont été téléchargés avec succès
+            task.status = 'ready'
+            task.local_input_path = str(input_dir)
+            task.save()
+            
+            # Créer un événement de progression pour la fin du téléchargement
+            TaskProgress.objects.create(
+                task=task,
+                progress_type='progress',
+                percentage=100,
+                message="Téléchargement des fichiers d'entrée terminé",
+                details={'downloaded_files': downloaded_files}
+            )
+            
+            logger.info(f"Téléchargement des fichiers d'entrée terminé pour la tâche {task.task_id}")
+            return True
+        else:
+            # Certains fichiers n'ont pas pu être téléchargés
+            task.status = 'error'
+            task.save()
+            
+            # Créer un événement d'erreur
+            TaskProgress.objects.create(
+                task=task,
+                progress_type='error',
+                percentage=progress.percentage,
+                message=f"Téléchargement incomplet: {len(downloaded_files)}/{total_files} fichiers téléchargés",
+                details={'downloaded_files': downloaded_files}
+            )
+            
+            logger.error(f"Téléchargement incomplet pour la tâche {task.task_id}: {len(downloaded_files)}/{total_files} fichiers téléchargés")
+            return False
     
     def _collect_output_files(self, task):
         """
