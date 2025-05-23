@@ -1,104 +1,201 @@
 from django.db import models
-# from django.contrib.postgres.fields import JSONField, ArrayField
 from django.db.models import JSONField
 from django.utils import timezone
 import uuid
-from django.db import models
 from django.core.exceptions import ValidationError
-# Create your models here.
-
-# 
-
-# model des information statique
 
 
+class MachineInfoManager(models.Manager):
+    def get_last_inserted(self):
+        try:
+            return self.latest('id')
+        except self.model.DoesNotExist:
+            return None
+
+
+# Modèle des informations statiques de la machine
 class MachineInfo(models.Model):
-    volunteer_id =models.UUIDField(unique=True, default=uuid.uuid4, editable=False)
-    adresse_mac = models.JSONField(default=list)
-    machine_type = models.CharField(max_length=50)
-    system = models.CharField(max_length=50)
-    node_name = models.CharField(max_length=100)
-    host_name = models.CharField(max_length=255)
-    os_release = models.CharField(max_length=100)
-    os_version = models.CharField(max_length=100)
-    machine_arch = models.CharField(max_length=50)
-    processor_name = models.CharField(max_length=100)
+    objects = MachineInfoManager()
+    # Identifiants
+    volunteer_id = models.UUIDField(unique=True, default=uuid.uuid4, editable=False)
+    adresse_mac = models.JSONField(default=list, help_text="Liste des adresses MAC de la machine")
     
-    cpu_type = models.CharField(max_length=100)
-    cpu_cores = models.IntegerField()
-    cpu_logical_cores = models.IntegerField()
-    cpu_frequency = models.FloatField(null=True, blank=True)
-
-    total_memory = models.BigIntegerField()
-    screen_resolution = models.CharField(max_length=50)
-
-    total_disk = models.BigIntegerField()
-
-    last_update = models.DateTimeField(default=timezone.now)
-    registration_date = models.DateTimeField(auto_now_add=True)
+    # Informations sur le système d'exploitation
+    os_name = models.CharField(max_length=50, default="", help_text="Nom du système d'exploitation")
+    os_version = models.CharField(max_length=100, default="", help_text="Version du système d'exploitation")
+    os_release = models.CharField(max_length=100, default="", help_text="Release du système d'exploitation")
+    os_architecture = models.CharField(max_length=50, default="", help_text="Architecture du système d'exploitation")
+    hostname = models.CharField(max_length=255, default="", help_text="Nom d'hôte de la machine")
+    
+    # Type de machine
+    machine_type = models.CharField(max_length=50, default="", help_text="Type de machine (Portable, PC de bureau, etc.)")
+    
+    # Informations sur le processeur
+    cpu_type = models.CharField(max_length=100, default="", help_text="Type de processeur")
+    cpu_architecture = models.CharField(max_length=50, default="", help_text="Architecture du processeur")
+    cpu_bits = models.CharField(max_length=10, default="", help_text="Nombre de bits du processeur (32-bit, 64-bit)")
+    cpu_cores_physical = models.IntegerField(default=1, help_text="Nombre de cœurs physiques")
+    cpu_cores_logical = models.IntegerField(default=1, help_text="Nombre de cœurs logiques")
+    cpu_frequency_current = models.FloatField(null=True, blank=True, help_text="Fréquence actuelle du processeur en MHz")
+    cpu_frequency_min = models.FloatField(null=True, blank=True, help_text="Fréquence minimale du processeur en MHz")
+    cpu_frequency_max = models.FloatField(null=True, blank=True, help_text="Fréquence maximale du processeur en MHz")
+    
+    # Informations sur la mémoire
+    ram_total = models.BigIntegerField(default=0, help_text="Mémoire RAM totale en octets")
+    ram_total_human = models.CharField(max_length=20, default="0", help_text="Mémoire RAM totale en format lisible")
+    swap_total = models.BigIntegerField(default=0, help_text="Mémoire swap totale en octets")
+    swap_total_human = models.CharField(max_length=20, default="0", help_text="Mémoire swap totale en format lisible")
+    
+    # Informations sur le disque
+    disk_total = models.BigIntegerField(default=0, help_text="Espace disque total en octets")
+    disk_total_human = models.CharField(max_length=20, default="0", help_text="Espace disque total en format lisible")
+    partitions = models.JSONField(default=list, help_text="Liste des partitions de disque")
+    
+    # Informations sur l'écran
+    screen_resolution = models.CharField(max_length=50, default="", help_text="Résolution de l'écran")
+    
+    # Informations sur le réseau
+    network_interfaces = models.JSONField(default=list, help_text="Liste des interfaces réseau")
+    
+    # Informations sur le BIOS et la carte mère
+    bios_info = models.JSONField(default=dict, null=True, blank=True, help_text="Informations sur le BIOS")
+    motherboard_info = models.JSONField(default=dict, null=True, blank=True, help_text="Informations sur la carte mère")
+    
+    # Informations sur les périphériques USB
+    usb_devices = models.JSONField(default=list, null=True, blank=True, help_text="Liste des périphériques USB")
+    
+    # Informations sur les utilisateurs connectés
+    logged_users = models.JSONField(default=list, help_text="Liste des utilisateurs connectés")
+    
+    # Métadonnées
+    last_update = models.DateTimeField(default=timezone.now, help_text="Dernière mise à jour des informations")
+    registration_date = models.DateTimeField(auto_now_add=True, help_text="Date d'enregistrement de la machine")
+    
+    # Données brutes (pour stocker toutes les informations collectées)
+    raw_data = models.JSONField(default=dict, null=True, blank=True, help_text="Données brutes collectées")
 
     def __str__(self):
-        return f"{self.mac_address} ({self.machine_type})"
+        return f"{self.hostname} ({self.machine_type})"
 
 
-# model des information variable
-
-
+# Modèle des informations variables de la machine
 class EtatMachine(models.Model):
-
     VOLUNTEER_STATUS_CHOICES = [
-    ('available', 'Available'),
-    ('busy', 'Busy'),
-    ('offline', 'Offline'),
-]
+        ('available', 'Available'),
+        ('busy', 'Busy'),
+        ('offline', 'Offline'),
+    ]
 
+    # Référence à la machine
     machine = models.ForeignKey(MachineInfo, on_delete=models.CASCADE, related_name='etats')
-
-    used_memory = models.BigIntegerField()
-    memory_usage = models.FloatField()
-    cache = models.BigIntegerField()
-
-    swap_total = models.BigIntegerField()
-    swap_used = models.BigIntegerField()
-    swap_percentage = models.FloatField()
-
-    used_disk = models.BigIntegerField()
-    disk_percentage = models.FloatField()
-
-    cpu_usage_per_core = models.JSONField()
-    gpu_usage_percentage = models.FloatField()
-    cpu_temperature = models.FloatField()
-
-    net_bytes_sent = models.BigIntegerField()
-    net_bytes_received = models.BigIntegerField()
-
-    battery_percentage = models.FloatField()
-    uptime = models.BigIntegerField()
-    boot_time = models.DateTimeField()
-    shutdown_time = models.DateTimeField(null=True, blank=True)
-
-    internet_enabled = models.BooleanField()
-    timestamp = models.DateTimeField(auto_now_add=True)
-
+    
+    # Horodatage
+    timestamp = models.DateTimeField(auto_now_add=True, help_text="Horodatage de la collecte")
+    
+    # Informations sur le CPU
+    cpu_usage_global = models.FloatField(default=0, help_text="Utilisation globale du CPU en pourcentage")
+    cpu_usage_per_core = models.JSONField(default=list, help_text="Utilisation du CPU par cœur")
+    cpu_temperature = models.FloatField(null=True, blank=True, help_text="Température du CPU en degrés Celsius")
+    
+    # Informations sur la mémoire RAM
+    ram_used = models.BigIntegerField(default=0, help_text="Mémoire RAM utilisée en octets")
+    ram_used_human = models.CharField(max_length=20, default="0", help_text="Mémoire RAM utilisée en format lisible")
+    ram_available = models.BigIntegerField(default=0, help_text="Mémoire RAM disponible en octets")
+    ram_available_human = models.CharField(max_length=20, default="0", help_text="Mémoire RAM disponible en format lisible")
+    ram_percent_used = models.FloatField(default=0, help_text="Pourcentage d'utilisation de la RAM")
+    ram_percent_free = models.FloatField(default=0, help_text="Pourcentage de RAM libre")
+    
+    # Informations sur la mémoire swap
+    swap_used = models.BigIntegerField(default=0, help_text="Mémoire swap utilisée en octets")
+    swap_used_human = models.CharField(max_length=20, default="0", help_text="Mémoire swap utilisée en format lisible")
+    swap_free = models.BigIntegerField(default=0, help_text="Mémoire swap libre en octets")
+    swap_free_human = models.CharField(max_length=20, default="0", help_text="Mémoire swap libre en format lisible")
+    swap_percent_used = models.FloatField(default=0, help_text="Pourcentage d'utilisation du swap")
+    swap_percent_free = models.FloatField(default=0, help_text="Pourcentage de swap libre")
+    
+    # Informations sur le cache
+    cache_used = models.BigIntegerField(default=0, null=True, blank=True, help_text="Mémoire cache utilisée en octets")
+    cache_used_human = models.CharField(max_length=20, null=True, blank=True, help_text="Mémoire cache utilisée en format lisible")
+    
+    # Informations sur le disque
+    disk_percent_used = models.FloatField(default=0, help_text="Pourcentage d'utilisation du disque")
+    disk_percent_free = models.FloatField(default=0, help_text="Pourcentage de disque libre")
+    
+    # Informations sur le GPU
+    gpu_usage = models.JSONField(default=list, null=True, blank=True, help_text="Utilisation du GPU")
+    
+    # Informations sur le réseau
+    net_bytes_sent = models.BigIntegerField(default=0, help_text="Octets envoyés")
+    net_bytes_sent_human = models.CharField(max_length=20, default="0", help_text="Octets envoyés en format lisible")
+    net_bytes_received = models.BigIntegerField(default=0, help_text="Octets reçus")
+    net_bytes_received_human = models.CharField(max_length=20, default="0", help_text="Octets reçus en format lisible")
+    net_packets_sent = models.BigIntegerField(default=0, help_text="Paquets envoyés")
+    net_packets_received = models.BigIntegerField(default=0, help_text="Paquets reçus")
+    net_errors_in = models.IntegerField(default=0, help_text="Erreurs en réception")
+    net_errors_out = models.IntegerField(default=0, help_text="Erreurs en envoi")
+    net_drop_in = models.IntegerField(default=0, help_text="Paquets supprimés en réception")
+    net_drop_out = models.IntegerField(default=0, help_text="Paquets supprimés en envoi")
+    
+    # Informations sur la connexion Internet
+    internet_connected = models.BooleanField(default=False, help_text="Connexion Internet active")
+    
+    # Informations sur les processus
+    process_count = models.IntegerField(default=1, help_text="Nombre de processus actifs")
+    
+    # Informations sur la batterie
+    battery = models.JSONField(default=dict, null=True, blank=True, help_text="Informations sur la batterie")
+    
+    # Informations sur l'uptime
+    uptime = models.CharField(max_length=50, default="0", help_text="Temps de fonctionnement")
+    uptime_seconds = models.BigIntegerField(default=0, help_text="Temps de fonctionnement en secondes")
+    
+    # Informations sur le seuil d'utilisation des ressources
+    threshold_reached = models.JSONField(default=dict, null=True, blank=True, help_text="Seuils d'utilisation des ressources atteints")
+    
+    # Statut du volontaire
     statut_actuel = models.CharField(
         max_length=10,
         choices=VOLUNTEER_STATUS_CHOICES,
-        default="available"
+        default="available",
+        help_text="Statut actuel du volontaire"
     )
+    
+    # Données brutes (pour stocker toutes les informations collectées)
+    raw_data = models.JSONField(default=dict, null=True, blank=True, help_text="Données brutes collectées")
 
     def __str__(self):
-        return f"État de {self.machine.mac_address} à {self.timestamp}"
+        return f"État de {self.machine.hostname} à {self.timestamp}"
 
 
 
 
 
-# --------------------------------------------- Preference Model
-
-
-
+# --------------------------------------------- Modèle de préférences
 class PreferenceModel(models.Model):
-    cpu_max_utilisation = models.IntegerField(default=100)
+    # Machine associée
+    machine = models.OneToOneField(MachineInfo, on_delete=models.CASCADE, related_name='preferences', default=None)
+    
+    # Préférences d'utilisation des ressources
+    cpu_max_utilisation = models.IntegerField(default=80, help_text="Utilisation maximale du CPU en pourcentage")
+    ram_max_utilisation = models.IntegerField(default=80, help_text="Utilisation maximale de la RAM en pourcentage")
+    disk_max_utilisation = models.IntegerField(default=90, help_text="Utilisation maximale du disque en pourcentage")
+    
+    # Préférences de collecte de données
+    collection_interval = models.IntegerField(default=60, help_text="Intervalle de collecte des données en secondes")
+    send_interval = models.IntegerField(default=300, help_text="Intervalle d'envoi des données en secondes")
+    
+    # Préférences de disponibilité
+    available_hours_start = models.TimeField(null=True, blank=True, help_text="Heure de début de disponibilité")
+    available_hours_end = models.TimeField(null=True, blank=True, help_text="Heure de fin de disponibilité")
+    available_days = models.JSONField(default=list, help_text="Jours de disponibilité (0-6, 0=lundi)")
+    
+    # Préférences de notification
+    notify_on_task_assignment = models.BooleanField(default=True, help_text="Notifier lors de l'assignation d'une tâche")
+    notify_on_resource_threshold = models.BooleanField(default=True, help_text="Notifier lorsqu'un seuil de ressource est atteint")
+    
+    def __str__(self):
+        return f"Préférences pour {self.machine.hostname}"
+
     ram_max_utilisation = models.IntegerField(default=100)
     priorite_min_acceptee = models.IntegerField(default=0)
     duree_max_execution = models.IntegerField(default=0)
@@ -220,3 +317,32 @@ class Task(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class TaskProgress(models.Model):
+    """
+    Modèle pour suivre la progression d'une tâche.
+    Chaque entrée représente un événement de progression pour une tâche spécifique.
+    """
+    PROGRESS_TYPE_CHOICES = [
+        ('start', 'Démarrage'),
+        ('progress', 'Progression'),
+        ('complete', 'Terminée'),
+        ('error', 'Erreur'),
+        ('cancel', 'Annulée'),
+    ]
+    
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='progress_events')
+    timestamp = models.DateTimeField(auto_now_add=True)
+    progress_type = models.CharField(max_length=20, choices=PROGRESS_TYPE_CHOICES)
+    percentage = models.FloatField(default=0)
+    message = models.TextField(blank=True, null=True)
+    details = models.JSONField(null=True, blank=True)
+    
+    class Meta:
+        ordering = ['timestamp']
+        verbose_name = 'Progression de tâche'
+        verbose_name_plural = 'Progressions de tâches'
+    
+    def __str__(self):
+        return f"{self.task.name} - {self.progress_type} ({self.percentage}%)"

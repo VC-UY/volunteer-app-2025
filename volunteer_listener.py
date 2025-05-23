@@ -5,7 +5,6 @@ import time
 from uuid import UUID
 import redis
 
-<<<<<<< HEAD
 #  Configuration Django
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "backend.settings")  # remplace par ton vrai nom de projet
 django.setup()
@@ -14,18 +13,8 @@ django.setup()
 from volontaire.models import MachineInfo  # type: ignore
 from django.utils import timezone
 
-#  Initialiser Redis
-=======
-# ⚙️ Configuration Django
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "backend.settings")  # remplace par ton vrai nom de projet
-django.setup()
-
-# 📦 Import après setup Django
-from volontaire.models import MachineInfo  # type: ignore
-from django.utils import timezone
 
 # 🔌 Initialiser Redis
->>>>>>> 786acc5b158bf5aef3b8865c29bf1cf491ec0800
 redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
 pubsub = redis_client.pubsub()
 
@@ -48,11 +37,8 @@ def ecouter_taches():
             try:
                 data = json.loads(message["data"])
                 print(f" Tâche reçue : {data}")
-<<<<<<< HEAD
                 #  Tu peux lancer ici une fonction d'exécution de la tâche
-=======
                 # 👉 Tu peux lancer ici une fonction d'exécution de la tâche
->>>>>>> 786acc5b158bf5aef3b8865c29bf1cf491ec0800
             except Exception as e:
                 print(f" Erreur : {e}")
 

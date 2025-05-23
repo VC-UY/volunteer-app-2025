@@ -38,7 +38,8 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     "volontaire",
-    "communication",
+    # "communication",
+    'redis_communication',
     'rest_framework',
 ]
 
@@ -124,3 +125,9 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Configuration Redis
+REDIS_PROXY_HOST = 'localhost'
+REDIS_PROXY_PORT = 6380
+REDIS_DB = 0
+REDIS_PASSWORD = 'redis123'  # Mot de passe pour l'authentification Redis
