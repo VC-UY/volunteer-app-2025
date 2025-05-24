@@ -6,7 +6,8 @@ from volontaire.docker_manager import DockerManager
 from django.shortcuts import render
 
 
-manager = DockerManager()
+# Utiliser l'instance singleton de DockerManager
+manager = DockerManager.get_instance()
 
 
 
@@ -14,7 +15,7 @@ manager = DockerManager()
 class PauseContainerView(APIView):
     def post(self, request, container_id):
         try:
-            msg = manager.pause_container(container_id)
+            msg = manager.pause_task(container_id)
             return Response({"message": msg})
         except Exception as e:
             return Response({"error": str(e)}, status=400)
@@ -23,7 +24,7 @@ class PauseContainerView(APIView):
 class ReplayContainerView(APIView):
     def post(self, request, container_id):
         try:
-            msg = manager.resume_container(container_id)
+            msg = manager.resume_task(container_id)
             return Response({"message": msg})
         except Exception as e:
             return Response({"error": str(e)}, status=400)
@@ -32,7 +33,7 @@ class ReplayContainerView(APIView):
 class SuspendContainerView(APIView):
     def post(self, request, container_id):
         try:
-            msg = manager.stop_container(container_id)
+            msg = manager.stop_task(container_id)
             return Response({"message": msg})
         except Exception as e:
             return Response({"error": str(e)}, status=400)
@@ -41,7 +42,7 @@ class SuspendContainerView(APIView):
 class DeleteContainerView(APIView):
     def delete(self, request, container_id):
         try:
-            msg = manager.remove_container(container_id)
+            msg = manager.remove_task(container_id)
             return Response({"message": msg})
         except Exception as e:
             return Response({"error": str(e)}, status=400)
@@ -51,7 +52,7 @@ class LimitCPUView(APIView):
     def post(self, request, container_id):
         try:
             cpu_quota = int(request.data.get("cpu_quota", 50000))  # ex: 50000 = 5% CPU
-            msg = manager.limit_cpu(container_id, cpu_quota)
+            msg = manager.update_limits(container_id, cpu_quota)
             return Response({"message": msg})
         except Exception as e:
             return Response({"error": str(e)}, status=400)
@@ -61,7 +62,7 @@ class LimitRAMView(APIView):
     def post(self, request, container_id):
         try:
             mem_limit = request.data.get("mem_limit", "500m")  # ex: "500m", "1g"
-            msg = manager.limit_ram(container_id, mem_limit)
+            msg = manager.update_limits(container_id, mem_limit)
             return Response({"message": msg})
         except Exception as e:
             return Response({"error": str(e)}, status=400)
@@ -102,6 +103,25 @@ class TaskDetailView(APIView):
             return Response({"error": str(e)}, status=404)
 
 
+
+# ------------------------- Docker Container Status API -------------------------------------
+
+# API pour récupérer les états de tous les conteneurs Docker
+class DockerContainersStatusView(APIView):
+    def get(self, request):
+        try:
+            # Récupérer la liste des tâches avec leurs conteneurs associés
+            containers = manager.list_tasks()
+            
+            # Formater la réponse
+            response_data = {
+                "total_containers": len(containers),
+                "containers": containers
+            }
+            
+            return Response(response_data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 # ------------------------- Computer charateristic manage -------------------------------------
 

@@ -260,6 +260,7 @@ class PlageHoraire(models.Model):
 
 class Workflow(models.Model):
     name = models.CharField(max_length=255)
+    workflow_id = models.CharField(max_length=255, unique=True, null=True)
     description = models.TextField(blank=True)
     creation_date = models.DateTimeField(auto_now_add=True)
     modification_date = models.DateTimeField(auto_now=True)
