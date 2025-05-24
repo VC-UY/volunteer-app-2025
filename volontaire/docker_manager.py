@@ -1,3 +1,4 @@
+import os
 import docker
 from docker.errors import NotFound, APIError
 from threading import Lock
@@ -7,6 +8,8 @@ class DockerManager:
     _lock = Lock()
 
     def __init__(self):
+
+        os.environ["DOCKER_HOST"] = "unix:///run/user/1000/docker.sock"
         self.client = docker.from_env()
         self.tasks = {}  # task_id: container_id
 
@@ -29,6 +32,14 @@ class DockerManager:
 
     def run_container(self, image_name, task_id, cpu_limit=None, mem_limit=None, **kwargs):
         try:
+            # Vérifie d'abord si l'image est présente localement
+            try:
+                self.client.images.get(image_name)
+                print(f"Using local image {image_name}")
+            except docker.errors.ImageNotFound:
+                print(f"Local image {image_name} not found. Attempting to pull...")
+                self.client.images.pull(image_name)
+                
             print(f"Running container for task {task_id}...")
             container = self.client.containers.run(
                 image=image_name,

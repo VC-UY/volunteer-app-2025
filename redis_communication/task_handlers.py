@@ -7,16 +7,13 @@ import json
 import os
 import time
 import uuid
-from typing import Dict, Any, Optional
 from datetime import datetime
 import threading
-import subprocess
 
 from django.utils import timezone
-from django.conf import settings
 
 from .client import RedisClient
-from .message import Message, MessageType
+from .message import Message
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +115,13 @@ class TaskManager:
             return
         
         logger.info(f"{len(volunteer_tasks)} tâches assignées au volontaire {self.volunteer_id}")
+
+        # Creer le workflow s'il n'existe pas
+        from django.apps import apps
+        Workflow = apps.get_model('volontaire', 'Workflow')
+        workflow = Workflow.objects.filter(workflow_id=workflow_id).first()
+        if not workflow:
+            workflow = Workflow.objects.create(workflow_id=workflow_id, name="Workflow", description="Workflow")
         
         # Traiter chaque tâche assignée à ce volontaire
         for task_data in volunteer_tasks:
@@ -137,9 +141,9 @@ class TaskManager:
             
             # Créer une nouvelle tâche
             task = Task(
-                task_id=task_id,
+                task_id=str(task_id),
                 name=task_data.get('name', 'Tâche sans nom'),
-                workflow_id=workflow_id,
+                workflow=workflow,
                 parameters=task_data.get('parameters', {}),
                 status='pending',
                 input_data=task_data.get('input_data', {}),
@@ -224,12 +228,17 @@ class TaskManager:
         )
         
         # Envoyer une confirmation d'annulation
+        from redis_communication.utils import get_volunteer_auth_token
         self.redis_client.publish('task/status', {
-            'task_id': task_id,
-            'volunteer_id': self.volunteer_id,
-            'status': 'cancelled',
-            'timestamp': datetime.now().isoformat()
-        })
+                'task_id': task_id,
+                'volunteer_id': self.volunteer_id,
+                'status': 'Cancel',
+                'timestamp': datetime.now().isoformat()
+            },
+            str(uuid.uuid4()),
+            get_volunteer_auth_token() ,
+            'request' 
+        )
         
         logger.info(f"Tâche {task_id} annulée")
     
@@ -239,13 +248,16 @@ class TaskManager:
         
         Args:
             task: Tâche à accepter
+        
+        Returns:
+            Task: La tâche acceptée
         """
         # Import des modèles ici pour éviter les importations circulaires
         from django.apps import apps
         TaskProgress = apps.get_model('volontaire', 'TaskProgress')
         
         # Mettre à jour le statut de la tâche
-        task.status = 'in_progress'
+        task.status = 'progress'
         task.start_date = timezone.now()
         task.save()
         
@@ -253,7 +265,7 @@ class TaskManager:
         TaskProgress.objects.create(
             task=task,
             progress_type='progress',
-            percentage=5,
+            percentage=2,
             message="Tâche acceptée par le volontaire",
             details={
                 'volunteer_id': self.volunteer_id,
@@ -262,67 +274,301 @@ class TaskManager:
         )
         
         # Envoyer une confirmation d'acceptation
+        from redis_communication.utils import get_volunteer_auth_token
+        auth_token = get_volunteer_auth_token()
         self.redis_client.publish('task/accept', {
-            'task_id': task.task_id,
-            'volunteer_id': self.volunteer_id,
-            'timestamp': datetime.now().isoformat()
-        })
+                'task_id': task.task_id,
+                'volunteer_id': self.volunteer_id,
+                'workflow_id': task.workflow.workflow_id if hasattr(task, 'workflow') and task.workflow else None,
+                'timestamp': datetime.now().isoformat()
+            },
+            str(uuid.uuid4()),
+            auth_token,
+            'request'
+        )
         
         logger.info(f"Tâche {task.task_id} acceptée")
+        return task
+    
+    def pause_task(self, task_id):
+        """
+        Met en pause une tâche en cours d'exécution.
         
-        # Démarrer la tâche dans un thread séparé
-        self.task_thread = threading.Thread(target=self._execute_task, args=(task,))
-        self.task_thread.daemon = True
-        self.task_thread.start()
+        Args:
+            task_id: ID de la tâche à mettre en pause
+        
+        Returns:
+            bool: True si la tâche a été mise en pause avec succès, False sinon
+        """
+        from django.apps import apps
+        Task = apps.get_model('volontaire', 'Task')
+        TaskProgress = apps.get_model('volontaire', 'TaskProgress')
+        from volontaire.docker_manager import DockerManager
+        
+        try:
+            # Récupérer la tâche
+            task = Task.objects.get(task_id=task_id)
+            
+            # Vérifier que la tâche est en cours d'exécution
+            if task.status != 'progress':
+                logger.warning(f"Impossible de mettre en pause la tâche {task_id} car elle n'est pas en cours d'exécution")
+                return False
+            
+            # Mettre à jour le statut de la tâche
+            task.status = 'paused'
+            task.save()
+            
+            # Créer un événement de progression pour la pause
+            TaskProgress.objects.create(
+                task=task,
+                progress_type='progress',
+                percentage=TaskProgress.objects.filter(task=task).order_by('-timestamp').first().percentage,
+                message="Tâche mise en pause"
+            )
+            
+            # Mettre en pause le conteneur Docker
+            docker_manager = DockerManager.get_instance()
+            docker_manager.pause_task(task_id)
+            from redis_communication.utils import get_volunteer_auth_token
+            
+            # Envoyer une notification de pause
+            self.redis_client.publish('task/status', {
+                'task_id': task.task_id,
+                'volunteer_id': self.volunteer_id,
+                'status': 'Paused',
+                'timestamp': datetime.now().isoformat()
+            },
+            str(uuid.uuid4()),
+            get_volunteer_auth_token() ,
+            'request' 
+            )
+            
+            logger.info(f"Tâche {task_id} mise en pause")
+            return True
+        except Task.DoesNotExist:
+            logger.error(f"Tâche {task_id} introuvable")
+            return False
+        except Exception as e:
+            logger.error(f"Erreur lors de la mise en pause de la tâche {task_id}: {e}")
+            return False
+    
+    def resume_task(self, task_id):
+        """
+        Reprend l'exécution d'une tâche en pause.
+        
+        Args:
+            task_id: ID de la tâche à reprendre
+        
+        Returns:
+            bool: True si la tâche a été reprise avec succès, False sinon
+        """
+        from django.apps import apps
+        Task = apps.get_model('volontaire', 'Task')
+        TaskProgress = apps.get_model('volontaire', 'TaskProgress')
+        from volontaire.docker_manager import DockerManager
+        
+        try:
+            # Récupérer la tâche
+            task = Task.objects.get(task_id=task_id)
+            
+            # Vérifier que la tâche est en pause
+            if task.status != 'paused':
+                logger.warning(f"Impossible de reprendre la tâche {task_id} car elle n'est pas en pause")
+                return False
+            
+            # Mettre à jour le statut de la tâche
+            task.status = 'progress'
+            task.save()
+            
+            # Créer un événement de progression pour la reprise
+            TaskProgress.objects.create(
+                task=task,
+                progress_type='progress',
+                percentage=TaskProgress.objects.filter(task=task).order_by('-timestamp').first().percentage,
+                message="Tâche reprise"
+            )
+            
+            # Reprendre le conteneur Docker
+            docker_manager = DockerManager.get_instance()
+            docker_manager.resume_task(task_id)
+            from redis_communication.utils import get_volunteer_auth_token
+            
+            # Envoyer une notification de reprise
+            self.redis_client.publish('task/status', {
+                'task_id': task.task_id,
+                'volunteer_id': self.volunteer_id,
+                'status': 'Running',
+                'timestamp': datetime.now().isoformat()
+            },
+            str(uuid.uuid4()),
+            get_volunteer_auth_token() ,
+            'request' 
+            )
+            
+            logger.info(f"Tâche {task_id} reprise")
+            return True
+        except Task.DoesNotExist:
+            logger.error(f"Tâche {task_id} introuvable")
+            return False
+        except Exception as e:
+            logger.error(f"Erreur lors de la reprise de la tâche {task_id}: {e}")
+            return False
+    
+    def stop_task(self, task_id):
+        """
+        Arrête l'exécution d'une tâche.
+        
+        Args:
+            task_id: ID de la tâche à arrêter
+        
+        Returns:
+            bool: True si la tâche a été arrêtée avec succès, False sinon
+        """
+        from django.apps import apps
+        Task = apps.get_model('volontaire', 'Task')
+        TaskProgress = apps.get_model('volontaire', 'TaskProgress')
+        from volontaire.docker_manager import DockerManager
+        
+        try:
+            # Récupérer la tâche
+            task = Task.objects.get(task_id=task_id)
+            
+            # Vérifier que la tâche est en cours d'exécution ou en pause
+            if task.status not in ['progress', 'paused']:
+                logger.warning(f"Impossible d'arrêter la tâche {task_id} car elle n'est pas en cours d'exécution ou en pause")
+                return False
+            
+            # Mettre à jour le statut de la tâche
+            task.status = 'Cancel'
+            task.end_date = timezone.now()
+            task.save()
+            
+            # Créer un événement de progression pour l'arrêt
+            TaskProgress.objects.create(
+                task=task,
+                progress_type='progress',
+                percentage=TaskProgress.objects.filter(task=task).order_by('-timestamp').first().percentage,
+                message="Tâche arrêtée"
+            )
+            
+            # Arrêter le conteneur Docker
+            docker_manager = DockerManager.get_instance()
+            docker_manager.stop_task(task_id)
+            
+            # Envoyer une notification d'arrêt
+            from redis_communication.utils import get_volunteer_auth_token
+            self.redis_client.publish('task/status', {
+                'task_id': task.task_id,
+                'volunteer_id': self.volunteer_id,
+                'status': 'Cancel',
+                'timestamp': datetime.now().isoformat()
+            },
+            str(uuid.uuid4()),
+            get_volunteer_auth_token() ,
+            'request' 
+            )
+            
+            logger.info(f"Tâche {task_id} arrêtée")
+            return True
+        except Task.DoesNotExist:
+            logger.error(f"Tâche {task_id} introuvable")
+            return False
+        except Exception as e:
+            logger.error(f"Erreur lors de l'arrêt de la tâche {task_id}: {e}")
+            return False
     
     def _execute_task(self, task):
         """
-        Exécute une tâche dans un thread séparé.
+        Exécute une tâche dans un thread séparé en utilisant Docker.
         
         Args:
             task: Tâche à exécuter
         """
         # Import des modèles ici pour éviter les importations circulaires
         from django.apps import apps
+        import traceback
+        from volontaire.docker_manager import DockerManager
+        
         TaskProgress = apps.get_model('volontaire', 'TaskProgress')
         
         # Marquer la tâche comme démarrée
-        task.status = 'in_progress'
+        task.status = 'Running'
         task.save()
         self.current_task = task
         
         # Créer un événement de progression pour le démarrage
         TaskProgress.objects.create(
             task=task,
-            progress_type='start',
+            progress_type='progress',
             percentage=10,
-            message="Exécution de la tâche démarrée",
-            details={
-                'volunteer_id': self.volunteer_id,
-                'started_at': timezone.now().isoformat()
-            }
+            message="Exécution de la tâche démarrée"
         )
         
-        # Envoyer une mise à jour de statut
+        # Envoyer une notification de démarrage
         self._send_task_status_update(task)
         
         try:
-            # Executer la tache avec docker manager dans un thread
-            from volontaire.docker_manager import DockerManager
-            import threading
-
-            manager = DockerManager.get_instance()
-            thread = threading.Thread(target=manager.run_container, args=(task.docker_information.get("image_name"), task.task_id))
-            thread.start()
+            # Récupérer l'instance unique de DockerManager
+            docker_manager = DockerManager.get_instance()
+            
+            # Récupérer les informations Docker
+            docker_info = task.docker_information or {}
+            image_name = docker_info.get("name") or docker_info.get("image_name")
+            
+            if not image_name:
+                raise ValueError("Nom d'image Docker manquant dans les informations de la tâche")
+            
+            # Définir les limites de ressources
+            cpu_limit = docker_info.get("cpu_limit", 1.0)  # Par défaut, 1 CPU
+            mem_limit = docker_info.get("memory_limit", "1g")  # Par défaut, 1GB
+            
+            # Préparer les volumes pour monter les fichiers d'entrée/sortie
+            volumes = {}
+            if hasattr(task, 'local_input_path') and task.local_input_path:
+                volumes[task.local_input_path] = {'bind': '/app/input', 'mode': 'ro'}
+            
+            # Créer un répertoire de sortie
+            import os
+            from pathlib import Path
+            output_dir = Path(f"{TASKS_DIR}/{task.task_id}/output")
+            output_dir.mkdir(parents=True, exist_ok=True)
+            volumes[str(output_dir)] = {'bind': '/app/output', 'mode': 'rw'}
+            
+            # Démarrer le conteneur Docker
+            logger.info(f"Démarrage du conteneur Docker pour la tâche {task.task_id} avec l'image {image_name}")
+            container = docker_manager.run_container(
+                image_name=image_name,
+                task_id=task.task_id,
+                cpu_limit=cpu_limit,
+                mem_limit=mem_limit,
+                volumes=volumes
+            )
+            
+            if not container:
+                raise Exception(f"Impossible de démarrer le conteneur Docker pour la tâche {task.task_id}")
             
             # Suivre la progression
             self._monitor_task_progress(task)
             
-            # Attendre la fin de l'exécution
-            stdout, stderr = manager.get_container_by_task(task.task_id).logs().decode()
+            # Attendre que le conteneur soit terminé
+            import time
+            container = docker_manager.get_container_by_task(task.task_id)
+            while container and container.status in ['created', 'running']:
+                time.sleep(2)
+                container = docker_manager.get_container_by_task(task.task_id)
+            
+            if not container:
+                raise Exception(f"Conteneur Docker perdu pour la tâche {task.task_id}")
+            
+            # Récupérer les logs
+            logs = container.logs().decode('utf-8', errors='replace')
+            stdout = logs
+            stderr = ""
             
             # Vérifier le code de retour
-            if manager.get_container_by_task(task.task_id).exit_code == 0:
+            exit_code = container.attrs.get('State', {}).get('ExitCode', -1)
+            
+            if exit_code == 0:
                 # Tâche réussie
                 result = {
                     'stdout': stdout[-1000:],  # Limiter la taille de la sortie
@@ -345,81 +591,61 @@ class TaskManager:
                     task=task,
                     progress_type='complete',
                     percentage=100,
-                    message="Tâche terminée avec succès",
-                    details={
-                        'volunteer_id': self.volunteer_id,
-                        'completed_at': timezone.now().isoformat(),
-                        'execution_time': task.actual_execution_time,
-                        'output_files': output_files
-                    }
+                    message="Tâche terminée avec succès"
                 )
                 
-                # Envoyer une mise à jour de statut
+                # Envoyer une notification de complétion
                 self._send_task_completion(task)
                 
                 logger.info(f"Tâche {task.task_id} terminée avec succès")
             else:
                 # Tâche échouée
-                error = f"Code de retour: {self.task_process.returncode}\nStderr: {stderr[-1000:]}"
+                error = f"Code de retour: {exit_code}\nStderr: {stderr}\nStdout: {stdout[-1000:]}"
                 
-                task.status = 'failed'
+                task.status = 'error'
                 task.end_date = timezone.now()
                 task.error_message = error
-                task.error_code = str(self.task_process.returncode)
+                task.error_code = str(exit_code)
                 task.save()
                 
-                # Créer un événement de progression pour l'échec
+                # Créer un événement de progression pour l'erreur
                 TaskProgress.objects.create(
                     task=task,
                     progress_type='error',
-                    percentage=TaskProgress.objects.filter(task=task).order_by('-timestamp').first().percentage,
-                    message="Tâche échouée",
-                    details={
-                        'volunteer_id': self.volunteer_id,
-                        'error': error,
-                        'error_code': self.task_process.returncode
-                    }
+                    percentage=100,
+                    message="Tâche échouée"
                 )
                 
-                # Envoyer une mise à jour de statut
+                # Envoyer une notification d'échec
                 self._send_task_failure(task, error)
                 
                 logger.error(f"Tâche {task.task_id} échouée: {error}")
-        
         except Exception as e:
             # Erreur lors de l'exécution
-            import traceback
-            error = f"Erreur lors de l'exécution: {str(e)}\n{traceback.format_exc()}"
+            error = f"Erreur lors de l'exécution: {str(e)}"
             
             task.status = 'failed'
             task.end_date = timezone.now()
             task.error_message = error
-            task.error_code = 'exception'
             task.save()
             
             # Créer un événement de progression pour l'erreur
             TaskProgress.objects.create(
                 task=task,
                 progress_type='error',
-                percentage=TaskProgress.objects.filter(task=task).order_by('-timestamp').first().percentage if TaskProgress.objects.filter(task=task).exists() else 0,
+                percentage=100,
                 message="Erreur lors de l'exécution",
-                details={
-                    'volunteer_id': self.volunteer_id,
-                    'error': str(e),
-                    'traceback': traceback.format_exc()
-                }
+                details={'error': str(e)}
             )
             
-            # Envoyer une mise à jour de statut
+            # Envoyer une notification d'échec
             self._send_task_failure(task, error)
             
             logger.error(f"Erreur lors de l'exécution de la tâche {task.task_id}: {e}")
             logger.error(traceback.format_exc())
-        
         finally:
-            # Réinitialiser l'état
-            self.task_process = None
             self.current_task = None
+            self.task_process = None
     
     def _monitor_task_progress(self, task):
         """
@@ -533,7 +759,13 @@ class TaskManager:
         total_files = len(files)
         
         for i, file_info in enumerate(files):
-            file_path = file_info.get('path')
+            # Gérer les deux formats possibles : chaîne ou dictionnaire
+            if isinstance(file_info, dict):
+                file_path = file_info.get('path')
+            else:
+                # Si c'est une chaîne, utiliser directement
+                file_path = file_info
+                
             file_url = f"{base_url}/{file_path}"
             
             # Déterminer le chemin local
@@ -641,14 +873,18 @@ class TaskManager:
         # Récupérer la dernière progression enregistrée
         latest_progress = TaskProgress.objects.filter(task=task).order_by('-timestamp').first()
         progress_value = latest_progress.percentage if latest_progress else 0
-        
+        from redis_communication.utils import get_volunteer_auth_token
         self.redis_client.publish('task/status', {
-            'task_id': task.task_id,
-            'volunteer_id': self.volunteer_id,
-            'status': task.status,
-            'progress': progress_value,
-            'timestamp': datetime.now().isoformat()
-        })
+                    'task_id': task.task_id,
+                    'volunteer_id': self.volunteer_id,
+                    'status': task.status,
+                    'progress': progress_value,
+                    'timestamp': datetime.now().isoformat()
+                },
+                str(uuid.uuid4()),
+                get_volunteer_auth_token() ,
+                'request' 
+                )
     
     def _send_task_progress(self, task, progress):
         """
@@ -658,12 +894,17 @@ class TaskManager:
             task: Tâche pour laquelle envoyer une mise à jour
             progress: Valeur de progression actuelle
         """
+        from redis_communication.utils import get_volunteer_auth_token
         self.redis_client.publish('task/progress', {
-            'task_id': task.task_id,
-            'volunteer_id': self.volunteer_id,
-            'progress': progress,
-            'timestamp': datetime.now().isoformat()
-        })
+                'task_id': task.task_id,
+                'volunteer_id': self.volunteer_id,
+                'progress': progress,
+                'timestamp': datetime.now().isoformat()
+            },
+            str(uuid.uuid4()),
+            get_volunteer_auth_token() ,
+            'request' 
+        )
     
     def _send_task_completion(self, task):
         """
@@ -676,14 +917,19 @@ class TaskManager:
         result_file = self._save_result_to_file(task)
         
         # Envoyer la notification
+        from redis_communication.utils import get_volunteer_auth_token
         self.redis_client.publish('task/complete', {
-            'task_id': task.task_id,
-            'volunteer_id': self.volunteer_id,
-            'result': task.results,
-            'output_files': task.output_data.get('files', []) if task.output_data else [],
-            'execution_time': task.actual_execution_time,
-            'timestamp': datetime.now().isoformat()
-        })
+                'task_id': task.task_id,
+                'volunteer_id': self.volunteer_id,
+                'result': task.results,
+                'output_files': task.output_data.get('files', []) if task.output_data else [],
+                'execution_time': task.actual_execution_time,
+                'timestamp': datetime.now().isoformat()
+            },
+            str(uuid.uuid4()),
+            get_volunteer_auth_token() ,
+            'request' 
+        )
     
     def _save_result_to_file(self, task):
         """
@@ -723,13 +969,18 @@ class TaskManager:
             task: Tâche échouée
             error: Message d'erreur
         """
+        from redis_communication.utils import get_volunteer_auth_token
         self.redis_client.publish('task/status', {
-            'task_id': task.task_id,
-            'volunteer_id': self.volunteer_id,
-            'status': 'failed',
-            'error': error,
-            'timestamp': datetime.now().isoformat()
-        })
+                'task_id': task.task_id,
+                'volunteer_id': self.volunteer_id,
+                'status': 'Failed',
+                'error': error,
+                'timestamp': datetime.now().isoformat()
+            },
+            str(uuid.uuid4()),
+            get_volunteer_auth_token() ,
+            'request' 
+        )
 
 # Gestionnaire pour les messages d'assignation de tâches
 def task_assignment_handler(channel: str, message: Message):

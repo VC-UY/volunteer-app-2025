@@ -1,5 +1,5 @@
 """
-Fonctions client pour l'authentification des managers et des volontaires.
+Fonctions client pour l'authentification des volontaires.
 """
 
 import logging
@@ -14,7 +14,7 @@ from .message import Message
 logger = logging.getLogger(__name__)
 
 # Répertoire pour stocker les réponses
-RESPONSES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.manager/temp_data')
+RESPONSES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.volunteer/temp_data')
 os.makedirs(RESPONSES_DIR, exist_ok=True)
 
 # Répertoire pour stocker les informations du volontaire

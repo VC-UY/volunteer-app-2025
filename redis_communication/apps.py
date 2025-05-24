@@ -680,6 +680,7 @@ def publish_availability(volunteer_id):
     
     Args:
         volunteer_id: ID du volontaire
+        token: Token du volontaire
     """
     logger.info(f"Publication de la disponibilité du volontaire {volunteer_id}...")
     
@@ -710,11 +711,13 @@ def publish_availability(volunteer_id):
         }
         
         # Publier le message
+        from .utils import get_volunteer_auth_token
+        token = get_volunteer_auth_token()
         client.publish( 
                         'volunteer/available',
                         availability_message, 
                         str(uuid.uuid4()),
-                        self.volunteer_token,
+                        token,
                         'request'
                     )
                     
@@ -848,13 +851,19 @@ class RedisAppConfig(AppConfig):
                         # Ecrire les informations dans .volunteer/volunteer_info.json
                         if not os.path.exists('.volunteer'):
                             os.makedirs('.volunteer')
-                        with open('.volunteer/volunteer_auth_info.json', 'w') as f:
-                            json.dump({
-                                'volunteer_id': str(volunteer_info.volunteer_id),
-                                'token': data.get('token'),
-                                'refresh_token': data.get('refresh_token'),
-                                'last_login': time.time()
-                            }, f)
+                        # Vérifier si le token est un JWT valide (contient au moins un point)
+                        token = data.get('token')
+                        if token and (not isinstance(token, str) or '.' not in token):
+                            # Si ce n'est pas un JWT, le convertir
+                            logger.warning(f"Token non-JWT détecté lors de l'authentification: {token}. Conversion en JWT.")
+                        else:
+                            with open('.volunteer/volunteer_auth_info.json', 'w') as f:
+                                json.dump({
+                                    'volunteer_id': str(volunteer_info.volunteer_id),
+                                    'token': token,
+                                    'refresh_token': data.get('refresh_token'),
+                                    'last_login': time.time()
+                                }, f)
                         logger.debug("Volontaire authentifié avec succès")
 
                         # lancer le processus de tâche
@@ -891,7 +900,6 @@ class RedisAppConfig(AppConfig):
                     
                     # Mettre à jour les identifiants
                     self.volunteer_id = data.get('volunteer_id')
-                    self.volunteer_token = data.get('token')
 
                     volunteer_info.volunteer_id = data.get('volunteer_id')
                     volunteer_info.registration_date = datetime.now()
@@ -905,8 +913,6 @@ class RedisAppConfig(AppConfig):
                     with open('.volunteer/volunteer_auth_info.json', 'w') as f:
                         json.dump({
                             'volunteer_id': volunteer_info.volunteer_id,
-                            'token': data.get('token'),
-                            'refresh_token': data.get('refresh_token'),
                             'last_login': time.time()
                         }, f)
                     logger.debug("Volontaire authentifié avec succès")
@@ -917,15 +923,12 @@ class RedisAppConfig(AppConfig):
                         'volunteer_id': data.get('volunteer_id'),
                         'username': username,
                         'password': password,
-                        'token': data.get('token'),
-                        'refresh_token': data.get('refresh_token'),
                         'registration_date': time.time(),
                         'machine_info': self.static_data
                     }
                     save_volunteer_info(volunteer_info)
                     logger.info("Volontaire enregistré avec succès")
                     self.volunteer_id = volunteer_info.get('volunteer_id')
-                    self.volunteer_token = volunteer_info.get('token')
                     
                     
                     # Lancer le login
@@ -1053,22 +1056,18 @@ class RedisAppConfig(AppConfig):
                         
                         # Mettre à jour les identifiants
                         self.volunteer_id = data.get('volunteer_id')
-                        self.volunteer_token = data.get('token')
                         
                         # Enregistrer les informations du volontaire
                         volunteer_info = {
                             'volunteer_id': data.get('volunteer_id'),
                             'username': username,
                             'password': password,
-                            'token': data.get('token'),
-                            'refresh_token': data.get('refresh_token'),
                             'registration_date': time.time(),
                             'machine_info': self.static_data
                         }
                         save_volunteer_info(volunteer_info)
                         logger.info("Volontaire enregistré avec succès")
                         self.volunteer_id = volunteer_info.get('volunteer_id')
-                        self.volunteer_token = volunteer_info.get('token')
                         
                         
                         # Lancer le login
@@ -1097,7 +1096,7 @@ class RedisAppConfig(AppConfig):
                             logger.debug("Volontaire authentifié avec succès")
 
                             # lancer le processus de tâche
-                            from task_handlers import TaskManager
+                            from .task_handlers import TaskManager
                             task_manager = TaskManager.get_instance()
                             task_manager.start(self.volunteer_id)
                         else:
@@ -1290,10 +1289,11 @@ class RedisAppConfig(AppConfig):
             
             # Envoyer les données au coordinateur
             channel = "volunteer/data"
+            from .utils import get_volunteer_auth_token
             success = self.redis_client.publish(channel, 
                                                 json.dumps(data_to_send), 
                                                 str(uuid.uuid4()), 
-                                                self.volunteer_token,
+                                                get_volunteer_auth_token(),
                                                 'request'
                                                 )
             
