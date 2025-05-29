@@ -1,63 +1,88 @@
-APPLICATION VOLONTAIRE POUR L'EXECUTION DES CALCULS DISTRIBUES
+# 💻 APPLICATION VOLONTAIRE POUR L’EXÉCUTION DES CALCULS DISTRIBUÉS
 
-DESCRIPTION DU PROJET
-Cette application permet aux volontaires d'utiliser leurs ressources informatiques inutilisées pour effectuer des calculs demandés par des gestionnaires de workflow. 
-Elle offre une solution flexible et peu coûteuse pour le calcul distribué, particulièrement adaptée aux environnements à ressources limitées.
+---
 
-OBJECTIFS
-Objectif principal : Développer un système permettant aux volontaires de partager leurs ressources informatiques pour l'exécution de tâches de calcul
-Problématique : Pallier les difficultés d'accès aux supercalculateurs et infrastructures HPC dans les environnements contraints (réseau instable, alimentation irrégulière)
-Solution : Système de calcul distribué basé sur des machines volontaires non dédiées.
+## 📝 DESCRIPTION DU PROJET
 
-FONCTIONNALITES
+Cette application permet à des **volontaires d’utiliser leurs ressources informatiques inutilisées** pour effectuer des calculs demandés par des gestionnaires de workflow.  
+Elle offre une solution **flexible et peu coûteuse**, particulièrement adaptée aux environnements à **ressources limitées**.
 
-  INSCRIPTION DES VOLONTAIRES
- 1) Enregistrement des capacités machine (CPU, RAM, stockage)
-   la machine volontaire entre ses caracteristiques 
- 2) Configuration des préférences d'exécution
-   La machine volontaire decide elle-meme de la quantite de ressources dans sa machine et ceci a des heures et jours qui lui conviennent
- 4) Gestion du profil utilisateur
+---
 
-    SUIVI DE LA DISPONIBILITE
-    
-    Pendant que le volontaire execute un calcul, il est monotorise en temps reel, c'est-a-dire que le systeme Surveiller si la machine est allumée et disponible mesure l'utilisation du CPU, de la RAM, du disque,
-    détecte les pannes ou ralentissements,suit les performances des tâches en cours. La communication automatique avec le coordinateur et la mise a jour dynamique du statut des volontaires et des taches
+## 🎯 OBJECTIFS
 
-    GESTION DES TACHES
-    Réception automatique des tâches de calcul via un canal pub/sub (Redis)
-    Exécution, suspension, reprise et annulation des tâches( le coordinateur est au courant en temps reel de l'avancement de l'execution de la tache
-    Envoi sécurisé des résultats
+- **Objectif principal** : Développer un système permettant aux volontaires de partager leurs ressources pour l’exécution de tâches de calcul.
+- **Problématique** : Pallier les difficultés d’accès aux supercalculateurs et infrastructures HPC dans les zones à connectivité ou énergie instables.
+- **Solution** : Système de calcul distribué basé sur des machines volontaires non dédiées, avec communication Pub/Sub via Redis.
 
-    INTERFACE GRAPHIQUE
-    Tableau de bord pour le suivi des tâches(Le volontaire peut voir ses taches en cours, celles deja traitees et celle en attente ou suspendues)
-    Visualisation des performances( Ici le volontaire peut voir ses performances concernant le traitement des taches)
-    Configuration des préférences( Ici le volontaire peut modifier a volonte ses preferences concernant l'utilisation de sa machine)
+---
 
-    GESTION DES FICHIERS
-    Il s'agit ici des fichiers necessaires ( fichiers d'entree et de sortie) pour le traitement de la tache. Quand le volontaire recoit une tache( nous la mettons dans une image docker qui contient tout le necessaire pour traiter la tache)
-   Une fois la tache terminee, le systeme nettoie automatiquemnt les fichiers utilises afin de ne pas surcharger le stockage local du volontaire.
+## 🧩 FONCTIONNALITÉS
 
- COMMENT LANCER LE PROJET?
+### ✅ INSCRIPTION DES VOLONTAIRES
+- Enregistrement des capacités machine (CPU, RAM, stockage).
+- Configuration des préférences d’exécution (périodes d’activation, limites de ressources).
+- Gestion de profil utilisateur.
 
- PREREQUIS
- Avoir dans sa machine installes les technologies suivantes
-  * Redis pour la communication pub/sub
-  * Docker pour la conteneurisation des taches
-  * Python( Django )
+### 📡 SUIVI DE LA DISPONIBILITÉ
+- Surveillance en temps réel de la machine volontaire.
+- Détection des anomalies, pannes ou ralentissements.
+- Mise à jour dynamique du statut vers le coordinateur.
 
-    INSTALLATION
-     git clone git@github.com:VC-UY/volunteer-app-2025.git
-     cd volunteer-app-2025
-    Commandes pour lancer le projet
-    Il faut au prealable etre connecte sur le resau du coordinateur afin de permettre la communication
-     python manage.py runserver
-    
+### 📥 GESTION DES TÂCHES
+- Réception automatique des tâches via **canal Redis Pub/Sub**.
+- Exécution, suspension, reprise, annulation des tâches.
+- Communication en temps réel de l’état de chaque tâche.
+- Envoi sécurisé des résultats.
 
+### 📊 INTERFACE GRAPHIQUE
+- Tableau de bord du volontaire (tâches en cours, terminées, suspendues).
+- Visualisation des performances personnelles.
+- Modification des préférences d’exécution à tout moment.
 
-    LICENCE
-    Open source
+### 📁 GESTION DES FICHIERS
+- Réception et exécution des tâches dans des **conteneurs Docker** contenant tous les fichiers nécessaires.
+- Nettoyage automatique des fichiers à la fin de l’exécution pour préserver l’espace disque.
 
-    CONTRIBUTEURS
-      Ismael Delibes Yemte Ngongang
-      Demteli Emmanuel Moise
-      Sopie Pokaa Morel
+---
+
+## 🚀 COMMENT LANCER LE PROJET ?
+
+### 🔧 PRÉREQUIS
+
+- Python (avec Django)
+- Redis (pour le canal Pub/Sub)
+- Docker (pour l’exécution isolée des tâches)
+
+### 📦 INSTALLATION
+
+```bash
+git clone https://github.com/VC-UY/volunteer-app-2025.git
+cd volunteer-app-2025
+```
+
+### ▶️ LANCEMENT
+
+```bash
+# Depuis le dossier backend du projet
+python manage.py runserver
+```
+
+📝 **Important** : Assurez-vous que le volontaire est connecté au **réseau du coordinateur** pour activer la communication Pub/Sub Redis.
+
+---
+
+## 📄 LICENCE
+
+Ce projet est **open source**.  
+Réutilisation, modification et contribution sont autorisées sous licence MIT.
+
+---
+
+## 👥 CONTRIBUTEURS
+
+- GitHub : https://github.com/DelibesYemte
+- GitHub : https://github.com/KamronDev
+- GitHub : https://github.com/MorelSOPIE
+
+---
