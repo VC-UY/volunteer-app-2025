@@ -46,4 +46,18 @@ FONCTIONNALITES
   * Python( Django )
 
     INSTALLATION
-     git clone 
+     git clone git@github.com:VC-UY/volunteer-app-2025.git
+     cd volunteer-app-2025
+    Commandes pour lancer le projet
+    Il faut au prealable etre connecte sur le resau du coordinateur afin de permettre la communication
+     python manage.py runserver
+    
+
+
+    LICENCE
+    Open source
+
+    CONTRIBUTEURS
+      Ismael Delibes Yemte Ngongang
+      Demteli Emmanuel Moise
+      Sopie Pokaa Morel
