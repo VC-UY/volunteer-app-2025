@@ -6,6 +6,7 @@
 
 Cette application permet à des **volontaires d’utiliser leurs ressources informatiques inutilisées** pour effectuer des calculs demandés par des gestionnaires de workflow.  
 Elle offre une solution **flexible et peu coûteuse**, particulièrement adaptée aux environnements à **ressources limitées**.
+Dépôt du projet : https://github.com/VC-UY/volunteer-app-2025
 
 ---
 
