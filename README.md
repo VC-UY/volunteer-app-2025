@@ -81,8 +81,8 @@ Réutilisation, modification et contribution sont autorisées sous licence MIT.
 
 ## 👥 CONTRIBUTEURS
 
-- GitHub : https://github.com/DelibesYemte
-- GitHub : https://github.com/KamronDev
+- GitHub : https://github.com/SalvadorDelibes
+- GitHub : https://github.com/
 - GitHub : https://github.com/MorelSOPIE
 
 ---
