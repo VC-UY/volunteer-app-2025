@@ -17,6 +17,10 @@ from .message import Message
 
 logger = logging.getLogger(__name__)
 
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
+
+
 # Import des modèles à l'intérieur des fonctions pour éviter les importations circulaires
 
 # Répertoire pour stocker les fichiers des tâches
@@ -49,7 +53,7 @@ class TaskManager:
         self.current_task = None
         self.task_process = None
         self.task_thread = None
-        self.running = False
+        self.running = False           
     
     def start(self, volunteer_id):
         """
@@ -138,7 +142,13 @@ class TaskManager:
                 if existing_task.status in ['completed', 'failed']:
                     self._send_task_status_update(existing_task)
                 continue
-            
+            # for task_data in volunteer_tasks
+            # 
+            # 
+            #  afficher les informations dans le frontend
+            # 
+            # 
+            # 
             # Créer une nouvelle tâche
             task = Task(
                 task_id=str(task_id),
@@ -152,6 +162,27 @@ class TaskManager:
                 docker_information=task_data.get('docker_information', {}),
             )
             task.save()
+
+
+
+            # Notifier les clients WebSocket
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                "task_updates",
+                {
+                    "type": "send_task_update",
+                    "data": {
+                        "task_id": task.task_id,
+                        "name": task.name,
+                        "status": task.status,
+                        "estimated_execution_time": task.estimated_execution_time,
+                    }
+                }
+            )
+
+
+
+
             
             # Créer un événement de progression pour l'assignation
             from django.apps import apps
@@ -176,6 +207,28 @@ class TaskManager:
             
             # Exécuter la tâche dans un thread séparé
             self._execute_task(task)
+
+            # config django channel
+
+            # from asgiref.sync import async_to_sync
+            # from channels.layers import get_channel_layer
+
+            # channel_layer = get_channel_layer()
+
+            # async_to_sync(channel_layer.group_send)(
+            #     f"tasks_{self.volunteer_id}",
+            #     {
+            #         "type": "send_task",
+            #         "task": {
+            #             "id": task.task_id,
+            #             "name": task.name,
+            #             "status": task.status,
+            #             "estimated_time": task.estimated_execution_time,
+            #             "input_data": task.input_data,
+            #         }
+            #     }
+            # )
+
         
     
     def handle_task_cancel(self, channel: str, message: Message):

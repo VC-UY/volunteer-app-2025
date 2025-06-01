@@ -475,6 +475,7 @@
       </form>
     </div>
   </div>
+      <!-- end first section for preference  -->
 
   <div class="container">
     <div class="left-panel" id="animated-bg">
@@ -490,7 +491,7 @@
         
         
       </div>
-      
+      <!-- Start Second section for preference  -->
       <div class="section">
         <h2><i class="fas fa-sliders-h"></i> Préférences</h2>
         <button class="btn" onclick="openModal()">
@@ -502,8 +503,20 @@
           <table id="prefsTable" class="prefs-table"></table>
         </div>
       </div>
+   
     </div>
 
+
+
+
+
+
+
+
+
+
+
+   <!-- ENd Affichage de preferences -->
     <div class="right-panel">
       <div class="section">
         <h2><i class="fas fa-tasks"></i> Gestion des Tâches</h2>
@@ -731,7 +744,7 @@
       });
 
 
-      // Gest des action sur un conteneur 
+      // Gestion des action sur un conteneur 
 
       function handleAction(action, taskId) {
         fetch(`/task/${action}/${taskId}/`, {
@@ -767,7 +780,7 @@
       }
       
 
-
+    // End gestion des taches
 
     // Gestion du curseur personnalisé
     const aura = document.getElementById('cursorAura');
@@ -787,6 +800,23 @@
       aura.style.height = '30px';
       aura.style.background = 'rgba(52, 152, 219, 0.3)';
     });
+
+
+
+
+    // Start Manage Preference
+
+
+
+    //récupérer le CSRF token
+
+    function getCSRFToken() {
+      return document.cookie.split('; ')
+        .find(row => row.startsWith('csrftoken='))
+        ?.split('=')[1];
+    }
+    
+
 
     // Variables globales
     let currentPreferences = [];
@@ -834,7 +864,7 @@
     }
     
     // Sauvegarder les préférences dans localStorage et dans un fichier
-    function savePreferencesToFile() {
+    {% comment %} function savePreferencesToFile() {
       try {
         localStorage.setItem('preferences', JSON.stringify(currentPreferences));
         
@@ -853,7 +883,52 @@
       } catch (e) {
         console.error('Erreur lors de la sauvegarde des préférences:', e);
       }
+    } {% endcomment %}
+
+
+
+
+
+
+
+
+    function savePreferencesToServer() {
+      const payload = {
+        preferences: currentPreferences  // tableau complet de préférences à enregistrer
+      };
+    
+      fetch('/enregistrer_preferences/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCSRFToken()  // à ajouter pour Django
+        },
+        body: JSON.stringify(payload)
+      })
+      .then(response => {
+        if (!response.ok) throw new Error("Erreur lors de l'enregistrement");
+        return response.json();
+      })
+      .then(data => {
+        alert("Préférences enregistrées !");
+        closeModal();
+      })
+      .catch(error => {
+        console.error("Erreur : ", error);
+        alert("Échec de l'enregistrement.");
+      });
     }
+    
+
+
+
+
+
+
+
+
+
+
     
     // Ajouter un créneau horaire temporaire
     function addTimeSlot() {
@@ -945,7 +1020,8 @@
       });
       
       // Sauvegarder et mettre à jour l'affichage
-      savePreferencesToFile();
+      //savePreferencesToFile();
+      savePreferencesToServer()
       renderPrefs();
       closeModal();
     }
@@ -1018,12 +1094,56 @@
     // Supprimer une préférence
     function removePref(index) {
       currentPreferences.splice(index, 1);
-      //savePreferencesToFile();
+      savePreferencesToFile();
       renderPrefs();
     }
     
     // Initialiser l'application
-    loadPreferences();
+    loadPreferences(); 
+
+      let creneaux = [];
+    
+      function ajouterCreneau() {
+        const debut = document.getElementById("heure_debut").value;
+        const fin = document.getElementById("heure_fin").value;
+        const jours = Array.from(document.querySelectorAll("input[name='jours_disponibles']:checked")).map(j => j.value);
+    
+        if (!debut || !fin || jours.length === 0) {
+          alert("Veuillez sélectionner au moins un jour et entrer une plage horaire.");
+          return;
+        }
+    
+        jours.forEach(jour => {
+          creneaux.push({ jour, heure_debut: debut, heure_fin: fin });
+          document.getElementById("liste_creneaux").innerHTML +=
+            `<li class="list-group-item">${jour} : ${debut} - ${fin}</li>`;
+        });
+    
+        // Réinitialise les inputs de la plage horaire
+        document.getElementById("heure_debut").value = '';
+        document.getElementById("heure_fin").value = '';
+    
+        // Mise à jour du champ JSON caché
+        document.getElementById("creneaux_json").value = JSON.stringify(creneaux);
+      }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// End Preference 
+
 
     async function loadSystemInfo() {
     try {

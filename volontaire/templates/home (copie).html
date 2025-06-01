@@ -475,6 +475,7 @@
       </form>
     </div>
   </div>
+      <!-- end first section for preference  -->
 
   <div class="container">
     <div class="left-panel" id="animated-bg">
@@ -490,7 +491,7 @@
         
         
       </div>
-      
+      <!-- Start Second section for preference  -->
       <div class="section">
         <h2><i class="fas fa-sliders-h"></i> Préférences</h2>
         <button class="btn" onclick="openModal()">
@@ -502,8 +503,24 @@
           <table id="prefsTable" class="prefs-table"></table>
         </div>
       </div>
+
+      <!--  iiiiiiiiii-iiiiiiiiiii  -->
+  
+      <h2>Préférences de la machine</h2>
+        <form method="post">
+          {% csrf_token %}
+          {{ form.as_p }}
+          <button type="submit">Enregistrer</button>
+        </form>
+
     </div>
 
+
+
+
+
+
+   <!-- ENd Affichage de preferences -->
     <div class="right-panel">
       <div class="section">
         <h2><i class="fas fa-tasks"></i> Gestion des Tâches</h2>
@@ -731,7 +748,7 @@
       });
 
 
-      // Gest des action sur un conteneur 
+      // Gestion des action sur un conteneur 
 
       function handleAction(action, taskId) {
         fetch(`/task/${action}/${taskId}/`, {
@@ -767,7 +784,7 @@
       }
       
 
-
+    // End gestion des taches
 
     // Gestion du curseur personnalisé
     const aura = document.getElementById('cursorAura');
@@ -787,6 +804,13 @@
       aura.style.height = '30px';
       aura.style.background = 'rgba(52, 152, 219, 0.3)';
     });
+
+
+
+
+    // Start Manage Preference
+
+
 
     // Variables globales
     let currentPreferences = [];
@@ -825,7 +849,7 @@
         } else {
           currentPreferences = [];
         }
-        //savePreferencesToFile();
+        savePreferencesToFile();
         renderPrefs();
       } catch (e) {
         console.error('Erreur lors du chargement des préférences:', e);
@@ -1018,12 +1042,16 @@
     // Supprimer une préférence
     function removePref(index) {
       currentPreferences.splice(index, 1);
-      //savePreferencesToFile();
+      savePreferencesToFile();
       renderPrefs();
     }
     
     // Initialiser l'application
     loadPreferences();
+
+
+// End Preference 
+
 
     async function loadSystemInfo() {
     try {

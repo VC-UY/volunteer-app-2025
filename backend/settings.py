@@ -41,7 +41,23 @@ INSTALLED_APPS = [
     # "communication",
     'redis_communication',
     'rest_framework',
+    'channels',
 ]
+
+# Configuration de Django Channels
+# Utiliser Channels comme serveur ASGI
+ASGI_APPLICATION = 'voontaire.asgi.application'
+
+# Redis comme backend pour les WebSockets
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [("127.0.0.1", 6379)],
+        },
+    },
+}
+
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -127,7 +143,7 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Configuration Redis
-REDIS_PROXY_HOST = 'localhost'
+REDIS_PROXY_HOST = '192.168.207.139'
 REDIS_PROXY_PORT = 6380
 REDIS_DB = 0
 REDIS_PASSWORD = 'redis123'  # Mot de passe pour l'authentification Redis

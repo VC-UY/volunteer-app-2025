@@ -1,4 +1,4 @@
-import os
+# import os
 import docker
 from docker.errors import NotFound, APIError
 from threading import Lock
@@ -9,7 +9,7 @@ class DockerManager:
 
     def __init__(self):
 
-        os.environ["DOCKER_HOST"] = "unix:///run/user/1000/docker.sock"
+        # os.environ["DOCKER_HOST"] = "unix:///run/user/1000/docker.sock"
         self.client = docker.from_env()
         self.tasks = {}  # task_id: container_id
 

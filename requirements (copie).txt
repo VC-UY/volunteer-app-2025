@@ -1,0 +1,3 @@
+ afficher les details d'une tache dans une side bar a droite apres avoir cliquer sur un bouton
+ 
+ lors qu'une tache est echoue on le met en rouge

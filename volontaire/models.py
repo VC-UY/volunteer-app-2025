@@ -77,8 +77,8 @@ class MachineInfo(models.Model):
     def __str__(self):
         return f"{self.hostname} ({self.machine_type})"
 
-
 # Modèle des informations variables de la machine
+
 class EtatMachine(models.Model):
     VOLUNTEER_STATUS_CHOICES = [
         ('available', 'Available'),
@@ -211,6 +211,7 @@ class PreferenceModel(models.Model):
         verbose_name = "Préférence"
         verbose_name_plural = "Préférences"
 
+# Preference Management Model
 
 class JourDisponible(models.Model):
     JOUR_CHOICES = [
@@ -247,7 +248,7 @@ class PlageHoraire(models.Model):
     def __str__(self):
         return f"{self.heure_debut} - {self.heure_fin} ({self.jour.jour})"
 
-
+# End Preference
 
 
 #  -------------- Workflow And Task Model 
