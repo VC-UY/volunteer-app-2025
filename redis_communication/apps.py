@@ -1118,9 +1118,9 @@ class RedisAppConfig(AppConfig):
                 logger.info(f"Gestionnaire de tâches démarré pour le volontaire {self.volunteer_id}")
                 
                 # Démarrer le serveur de fichiers
-                from .file_server import start_file_server
-                file_server_port = start_file_server(8090)
-                logger.info(f"Serveur de fichiers démarré sur le port {file_server_port}")
+                # from .file_server import start_file_server
+                # file_server_port = start_file_server(8090)
+                # logger.info(f"Serveur de fichiers démarré sur le port {file_server_port}")
             
             logger.info("Application Redis Communication initialisée avec succès")
         except Exception as e:

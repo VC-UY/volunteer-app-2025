@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 # Import des modèles à l'intérieur des fonctions pour éviter les importations circulaires
 
 # Répertoire pour stocker les fichiers des tâches
-TASKS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'tasks')
+TASKS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.volunteer', 'tasks')
 os.makedirs(TASKS_DIR, exist_ok=True)
 
 class TaskManager:
@@ -58,6 +58,10 @@ class TaskManager:
         Args:
             volunteer_id: ID du volontaire
         """
+        if self.running:
+            logger.warning("Le gestionnaire de tâches est déjà en cours d'exécution")
+            return
+        
         self.volunteer_id = volunteer_id
         self.running = True
         
@@ -175,7 +179,10 @@ class TaskManager:
                 self._download_input_files(task)
             
             # Exécuter la tâche dans un thread séparé
-            self._execute_task(task)
+            import threading    
+            thread = threading.Thread(target=self._execute_task, args=(task,))
+            thread.setDaemon(True)
+            thread.start()
         
     
     def handle_task_cancel(self, channel: str, message: Message):
@@ -232,6 +239,7 @@ class TaskManager:
         self.redis_client.publish('task/status', {
                 'task_id': task_id,
                 'volunteer_id': self.volunteer_id,
+                'workflow_id': task.workflow.workflow_id if hasattr(task, 'workflow') and task.workflow else None,
                 'status': 'Cancel',
                 'timestamp': datetime.now().isoformat()
             },
@@ -335,13 +343,13 @@ class TaskManager:
             self.redis_client.publish('task/status', {
                 'task_id': task.task_id,
                 'volunteer_id': self.volunteer_id,
-                'status': 'Paused',
+                'workflow_id': task.workflow.workflow_id if hasattr(task, 'workflow') and task.workflow else None,
+                'status': 'paused',
                 'timestamp': datetime.now().isoformat()
             },
             str(uuid.uuid4()),
-            get_volunteer_auth_token() ,
-            'request' 
-            )
+            get_volunteer_auth_token(),
+            'request')
             
             logger.info(f"Tâche {task_id} mise en pause")
             return True
@@ -397,13 +405,13 @@ class TaskManager:
             self.redis_client.publish('task/status', {
                 'task_id': task.task_id,
                 'volunteer_id': self.volunteer_id,
-                'status': 'Running',
+                'workflow_id': task.workflow.workflow_id if hasattr(task, 'workflow') and task.workflow else None,
+                'status': 'progress',
                 'timestamp': datetime.now().isoformat()
             },
             str(uuid.uuid4()),
-            get_volunteer_auth_token() ,
-            'request' 
-            )
+            get_volunteer_auth_token(),
+            'request')
             
             logger.info(f"Tâche {task_id} reprise")
             return True
@@ -460,13 +468,13 @@ class TaskManager:
             self.redis_client.publish('task/status', {
                 'task_id': task.task_id,
                 'volunteer_id': self.volunteer_id,
-                'status': 'Cancel',
+                'workflow_id': task.workflow.workflow_id if hasattr(task, 'workflow') and task.workflow else None,
+                'status': 'stopped',
                 'timestamp': datetime.now().isoformat()
             },
             str(uuid.uuid4()),
-            get_volunteer_auth_token() ,
-            'request' 
-            )
+            get_volunteer_auth_token(),
+            'request')
             
             logger.info(f"Tâche {task_id} arrêtée")
             return True
@@ -476,6 +484,117 @@ class TaskManager:
         except Exception as e:
             logger.error(f"Erreur lors de l'arrêt de la tâche {task_id}: {e}")
             return False
+    
+    def complete_task(self, task_id):
+        """
+        Marque une tâche comme terminée et démarre un serveur de fichiers pour les fichiers de sortie.
+        
+        Args:
+            task_id: ID de la tâche terminée
+            
+        Returns:
+            bool: True si la tâche a été marquée comme terminée avec succès, False sinon
+        """
+        from django.apps import apps
+        Task = apps.get_model('volontaire', 'Task')
+        from volontaire.docker_manager import DockerManager
+        from redis_communication.file_server import start_task_file_server
+        import os
+        
+        try:
+            # Récupérer la tâche
+            task = Task.objects.get(task_id=task_id)
+            
+            
+            # Arrêter le conteneur Docker si nécessaire
+            docker_manager = DockerManager.get_instance()
+            docker_manager.stop_task(task_id)
+            
+            # Déterminer le chemin des fichiers de sortie
+            output_dir = os.path.join(TASKS_DIR, str(task.task_id), 'output')
+            if not os.path.exists(output_dir):
+                os.makedirs(output_dir, exist_ok=True)
+            
+            # Démarrer le serveur de fichiers pour cette tâche
+            port = start_task_file_server(task_id, output_dir)
+            
+            # Envoyer une notification de complétion avec les informations du serveur de fichiers
+            from redis_communication.utils import get_volunteer_auth_token
+            self.redis_client.publish('task/status', {
+                'task_id': task.task_id,
+                'volunteer_id': self.volunteer_id,
+                'workflow_id': task.workflow.workflow_id if hasattr(task, 'workflow') and task.workflow else None,
+                'status': 'completed',
+                'timestamp': datetime.now().isoformat(),
+                'file_server': {
+                    'host': '127.0.0.1',  # Utiliser l'adresse IP du volontaire en production
+                    'port': port,
+                    'path': '/files/',
+                    'output_files': [f for f in os.listdir(output_dir) if os.path.isfile(os.path.join(output_dir, f))]
+                }
+            },
+            str(uuid.uuid4()),
+            get_volunteer_auth_token(),
+            'request')
+            
+            # S'abonner au canal task/terminate pour recevoir la notification de fin de tâche
+            self.redis_client.subscribe('task/terminate', self._handle_task_terminate)
+            
+            logger.info(f"Tâche {task_id} terminée et serveur de fichiers démarré sur le port {port}")
+            return True
+        except Task.DoesNotExist:
+            logger.error(f"Tâche {task_id} introuvable")
+            return False
+        except Exception as e:
+            logger.error(f"Erreur lors de la complétion de la tâche {task_id}: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return False
+    
+    def _handle_task_terminate(self, channel, message):
+        """
+        Gère la notification de fin de tâche envoyée par le manager.
+        
+        Args:
+            channel: Canal de la notification
+            message: Message reçu
+        """
+        try:
+            data = message.data
+            task_id = data.get('task_id')
+            
+            if not task_id:
+                logger.error("Message de fin de tâche sans ID de tâche")
+                return
+            
+            logger.info(f"Notification de fin de tâche reçue pour la tâche {task_id}")
+            
+            # Arrêter le serveur de fichiers
+            from redis_communication.file_server import stop_task_file_server
+            stop_task_file_server(task_id)
+            
+            # Nettoyer les fichiers si nécessaire
+            import shutil
+            import os
+            output_dir = os.path.join(os.getcwd(), 'task_outputs', task_id)
+            if os.path.exists(output_dir) and data.get('clean_files', False):
+                shutil.rmtree(output_dir)
+                logger.info(f"Fichiers de sortie de la tâche {task_id} supprimés")
+            
+            # Mettre à jour le statut de la tâche
+            from django.apps import apps
+            Task = apps.get_model('volontaire', 'Task')
+            try:
+                task = Task.objects.get(task_id=task_id)
+                task.status = 'terminated'
+                task.save()
+                logger.info(f"Tâche {task_id} marquée comme terminée")
+            except Task.DoesNotExist:
+                logger.error(f"Tâche {task_id} introuvable")
+        except Exception as e:
+            logger.error(f"Erreur lors du traitement de la notification de fin de tâche: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
     
     def _execute_task(self, task):
         """
@@ -500,7 +619,7 @@ class TaskManager:
         TaskProgress.objects.create(
             task=task,
             progress_type='progress',
-            percentage=10,
+            percentage=2,
             message="Exécution de la tâche démarrée"
         )
         
@@ -535,26 +654,29 @@ class TaskManager:
             volumes[str(output_dir)] = {'bind': '/app/output', 'mode': 'rw'}
             
             # Démarrer le conteneur Docker
-            logger.info(f"Démarrage du conteneur Docker pour la tâche {task.task_id} avec l'image {image_name}")
+            logger.error(f"Démarrage du conteneur Docker pour la tâche {task.task_id} avec l'image {image_name}")
             container = docker_manager.run_container(
                 image_name=image_name,
                 task_id=task.task_id,
                 cpu_limit=cpu_limit,
                 mem_limit=mem_limit,
-                volumes=volumes
+                volumes=volumes, 
             )
             
             if not container:
                 raise Exception(f"Impossible de démarrer le conteneur Docker pour la tâche {task.task_id}")
             
-            # Suivre la progression
-            self._monitor_task_progress(task)
+            # Démarrer le monitoring de progression dans un thread séparé
+            import threading
+            monitor_thread = threading.Thread(target=self._monitor_task_progress, args=(task,))
+            monitor_thread.daemon = True
+            monitor_thread.start()
             
             # Attendre que le conteneur soit terminé
             import time
             container = docker_manager.get_container_by_task(task.task_id)
             while container and container.status in ['created', 'running']:
-                time.sleep(2)
+                time.sleep(5)
                 container = docker_manager.get_container_by_task(task.task_id)
             
             if not container:
@@ -593,9 +715,11 @@ class TaskManager:
                     percentage=100,
                     message="Tâche terminée avec succès"
                 )
+
+                # Lancer le server d'ecoute pour les fichiers de sortie
+                self.complete_task(task.task_id)
                 
-                # Envoyer une notification de complétion
-                self._send_task_completion(task)
+                
                 
                 logger.info(f"Tâche {task.task_id} terminée avec succès")
             else:
@@ -650,6 +774,7 @@ class TaskManager:
     def _monitor_task_progress(self, task):
         """
         Surveille la progression d'une tâche et envoie des mises à jour périodiques.
+        Cette fonction est conçue pour être exécutée dans un thread séparé.
         
         Args:
             task: Tâche à surveiller
@@ -658,43 +783,75 @@ class TaskManager:
         from django.apps import apps
         TaskProgress = apps.get_model('volontaire', 'TaskProgress')
         
-        start_time = time.time()
-        last_update_time = start_time
-        last_progress_value = 10  # Déjà à 10% après le démarrage
+        # Attendre un peu pour laisser le conteneur démarrer
+        time.sleep(2)
         
-        # Simuler la progression (à remplacer par une vraie mesure de progression)
-        while self.task_process and self.task_process.poll() is None:
-            # Calculer la progression basée sur le temps écoulé et le temps estimé
-            elapsed_time = time.time() - start_time
-            if task.estimated_execution_time and task.estimated_execution_time > 0:
-                progress = min(95.0, (elapsed_time / task.estimated_execution_time) * 100.0)
-            else:
-                # Si pas de temps estimé, incrémenter progressivement jusqu'à 95%
-                progress = min(95.0, last_progress_value + 1.0)
+        start_time = time.time()
+        last_progress_value = 2  # Déjà à 2% après le démarrage
+    
+        from volontaire.docker_manager import DockerManager
+        docker_manager = DockerManager.get_instance()
+        
+        logger.info(f"Démarrage du monitoring de progression pour la tâche {task.task_id}")
+        
+        # Boucle de surveillance de la progression
+        while True:
+            try:
+                # Récupérer l'état actuel du conteneur
+                container = docker_manager.get_container_by_task(task.task_id)
+                
+                # Vérifier si le conteneur existe et s'il est toujours en cours d'exécution
+                if not container:
+                    logger.info(f"Monitoring terminé pour la tâche {task.task_id}: conteneur non trouvé")
+                    break
+                    
+                if container.status not in ['created', 'running']:
+                    logger.info(f"Monitoring terminé pour la tâche {task.task_id}: conteneur {container.status}")
+                    break
+                
+                # Calculer la progression basée sur le temps écoulé et le temps estimé
+                elapsed_time = time.time() - start_time
+                if task.estimated_execution_time and task.estimated_execution_time > 0:
+                    progress = min(95.0, (elapsed_time / task.estimated_execution_time) * 100.0)
+                else:
+                    # Si pas de temps estimé, incrémenter progressivement jusqu'à 95%
+                    progress = min(95.0, last_progress_value + 5.0)  # Augmenter de 5% à chaque fois
+                
+                # Mettre à jour la progression seulement si elle a changé significativement
+                if progress - last_progress_value >= 5.0:  # Mise à jour tous les 5%
+                    # Créer un événement de progression
+                    TaskProgress.objects.create(
+                        task=task,
+                        progress_type='progress',
+                        percentage=progress,
+                        message=f"Progression: {int(progress)}%",
+                        details={
+                            'elapsed_time': elapsed_time,
+                            'timestamp': timezone.now().isoformat()
+                        }
+                    )
+                    last_progress_value = progress
+                    
+                    # Envoyer la progression au manager
+                    self._send_task_progress(task, progress)
+                    logger.info(f"Progression de la tâche {task.name}: {int(progress)}%")
+                
+                # Vérifier le statut de la tâche dans la base de données
+                try:
+                    Task = apps.get_model('volontaire', 'Task')
+                    updated_task = Task.objects.get(task_id=task.task_id)
+                    if updated_task.status not in ['Running', 'progress']:
+                        logger.info(f"Monitoring arrêté pour la tâche {task.name}: statut {updated_task.status}")
+                        break
+                except Exception as e:
+                    logger.error(f"Erreur lors de la vérification du statut de la tâche: {e}")
+            except Exception as e:
+                logger.error(f"Erreur dans le monitoring de la tâche {task.task_id}: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
             
-            # Mettre à jour la progression seulement si elle a changé significativement
-            if progress - last_progress_value >= 5.0:  # Mise à jour tous les 5%
-                # Créer un événement de progression
-                TaskProgress.objects.create(
-                    task=task,
-                    progress_type='progress',
-                    percentage=progress,
-                    message=f"Progression: {int(progress)}%",
-                    details={
-                        'elapsed_time': elapsed_time,
-                        'timestamp': timezone.now().isoformat()
-                    }
-                )
-                last_progress_value = progress
-            
-            # Envoyer une mise à jour toutes les 5 secondes
-            current_time = time.time()
-            if current_time - last_update_time >= 5.0:
-                self._send_task_progress(task, progress)
-                last_update_time = current_time
-            
-            # Attendre un peu
-            time.sleep(1.0)
+            # Attendre avant la prochaine vérification
+            time.sleep(3.0)
     
     def _download_input_files(self, task):
         """
@@ -706,7 +863,7 @@ class TaskManager:
         Returns:
             bool: True si tous les fichiers ont été téléchargés avec succès, False sinon
         """
-        import os
+        
         import requests
         from pathlib import Path
         
@@ -848,7 +1005,7 @@ class TaskManager:
         Returns:
             list: Liste des noms de fichiers de sortie
         """
-        output_dir = os.path.join(TASKS_DIR, str(task.id), 'output')
+        output_dir = os.path.join(TASKS_DIR, str(task.task_id), 'output')
         os.makedirs(output_dir, exist_ok=True)
         
         # Lister tous les fichiers dans le répertoire de sortie
@@ -877,6 +1034,7 @@ class TaskManager:
         self.redis_client.publish('task/status', {
                     'task_id': task.task_id,
                     'volunteer_id': self.volunteer_id,
+                    'workflow_id': task.workflow.workflow_id if hasattr(task, 'workflow') and task.workflow else None,
                     'status': task.status,
                     'progress': progress_value,
                     'timestamp': datetime.now().isoformat()
@@ -897,6 +1055,7 @@ class TaskManager:
         from redis_communication.utils import get_volunteer_auth_token
         self.redis_client.publish('task/progress', {
                 'task_id': task.task_id,
+                'workflow_id': task.workflow.workflow_id if hasattr(task, 'workflow') and task.workflow else None,
                 'volunteer_id': self.volunteer_id,
                 'progress': progress,
                 'timestamp': datetime.now().isoformat()
@@ -905,31 +1064,9 @@ class TaskManager:
             get_volunteer_auth_token() ,
             'request' 
         )
+
+        logger.info(f"Publication de la progression pour la tâche {task.name}: {progress}")
     
-    def _send_task_completion(self, task):
-        """
-        Envoie une notification de complétion pour une tâche.
-        
-        Args:
-            task: Tâche terminée
-        """
-        # Sauvegarder le résultat dans un fichier
-        result_file = self._save_result_to_file(task)
-        
-        # Envoyer la notification
-        from redis_communication.utils import get_volunteer_auth_token
-        self.redis_client.publish('task/complete', {
-                'task_id': task.task_id,
-                'volunteer_id': self.volunteer_id,
-                'result': task.results,
-                'output_files': task.output_data.get('files', []) if task.output_data else [],
-                'execution_time': task.actual_execution_time,
-                'timestamp': datetime.now().isoformat()
-            },
-            str(uuid.uuid4()),
-            get_volunteer_auth_token() ,
-            'request' 
-        )
     
     def _save_result_to_file(self, task):
         """
@@ -942,7 +1079,7 @@ class TaskManager:
             str: Chemin du fichier de résultat ou None si pas de résultat
         """
         if task.results:
-            output_dir = os.path.join(TASKS_DIR, str(task.id), 'output')
+            output_dir = os.path.join(TASKS_DIR, str(task.task_id), 'output')
             os.makedirs(output_dir, exist_ok=True)
             result_file = os.path.join(output_dir, 'result.json')
             
@@ -973,6 +1110,7 @@ class TaskManager:
         self.redis_client.publish('task/status', {
                 'task_id': task.task_id,
                 'volunteer_id': self.volunteer_id,
+                'workflow_id': task.workflow.workflow_id if hasattr(task, 'workflow') and task.workflow else None,
                 'status': 'Failed',
                 'error': error,
                 'timestamp': datetime.now().isoformat()

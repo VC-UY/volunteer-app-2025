@@ -6,25 +6,30 @@ import os
 import logging
 import threading
 import json
-from http.server import HTTPServer, SimpleHTTPRequestHandler
-from urllib.parse import urlparse, parse_qs
-import socketserver
-
-from django.conf import settings
+from http.server import SimpleHTTPRequestHandler
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
-# Répertoire pour stocker les fichiers des tâches
-TASKS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'tasks')
 
-class TaskFileHandler(SimpleHTTPRequestHandler):
+
+# Dictionnaire pour stocker les serveurs de fichiers par tâche
+task_file_servers = {}
+
+
+# Classe pour le gestionnaire de fichiers spécifique à une tâche
+class TaskSpecificFileHandler(SimpleHTTPRequestHandler):
     """
-    Gestionnaire HTTP pour servir les fichiers de tâches.
+    Gestionnaire HTTP pour servir les fichiers d'une tâche spécifique.
     """
     
-    def __init__(self, *args, **kwargs):
-        self.directory = TASKS_DIR
-        super().__init__(*args, **kwargs)
+    def __init__(self, task_id, directory, *args, **kwargs):
+        self.task_id = task_id
+        self.directory = directory
+        # Définir le répertoire de base avant d'initialiser la classe parente
+        # C'est crucial pour que SimpleHTTPRequestHandler serve les fichiers du bon répertoire
+        super().__init__(directory=directory, *args, **kwargs)
     
     def do_GET(self):
         """
@@ -33,71 +38,53 @@ class TaskFileHandler(SimpleHTTPRequestHandler):
         # Analyser l'URL
         parsed_url = urlparse(self.path)
         path = parsed_url.path
-        query = parse_qs(parsed_url.query)
         
-        # Vérifier le chemin
-        if path.startswith('/api/tasks'):
-            # API pour lister les tâches ou les fichiers
-            self._handle_api_request(path, query)
-        elif path.startswith('/download'):
+        if path == '/' or path == '/index.html' or path == '/files/':
+            # Lister les fichiers disponibles
+            self._list_files()
+        elif path.startswith('/files/'):
             # Téléchargement de fichier
-            self._handle_download_request(path, query)
+            filename = path[7:]  # Enlever '/files/'
+            self._serve_file(filename)
         else:
-            # Page d'accueil ou 404
-            if path == '/' or path == '/index.html':
-                self._serve_index_page()
-            else:
-                self.send_error(404, "Fichier non trouvé")
+            # 404 pour tout autre chemin
+            self.send_error(404, "Fichier non trouvé")
     
-    def _handle_api_request(self, path, query):
+    def _list_files(self):
         """
-        Gère les requêtes API.
+        Liste les fichiers disponibles pour cette tâche.
+        """
+        try:
+            files = []
+            for filename in os.listdir(self.directory):
+                file_path = os.path.join(self.directory, filename)
+                if os.path.isfile(file_path):
+                    files.append({
+                        'name': filename,
+                        'size': os.path.getsize(file_path),
+                        'url': f'/files/{filename}'
+                    })
+            
+            # Créer une reponse json pour lister les fichiers
+            self._send_json_response(files)
+            
+        except Exception as e:
+            logger.error(f"Erreur lors de la liste des fichiers: {e}")
+            self.send_error(500, "Erreur interne du serveur")
+    
+    def _serve_file(self, filename):
+        """
+        Sert un fichier spécifique.
         
         Args:
-            path: Chemin de l'URL
-            query: Paramètres de requête
+            filename: Nom du fichier à servir
         """
-        if path == '/api/tasks':
-            # Lister toutes les tâches
-            self._list_tasks()
-        elif path.startswith('/api/tasks/'):
-            # Lister les fichiers d'une tâche spécifique
-            task_id = path.split('/')[3]
-            self._list_task_files(task_id)
-        else:
-            self.send_error(404, "API non trouvée")
-    
-    def _handle_download_request(self, path, query):
-        """
-        Gère les requêtes de téléchargement.
+        file_path = os.path.join(self.directory, filename)
         
-        Args:
-            path: Chemin de l'URL
-            query: Paramètres de requête
-        """
-        # Format: /download/task_id/type/filename
-        parts = path.split('/')
-        if len(parts) < 5:
-            self.send_error(400, "URL de téléchargement invalide")
-            return
-        
-        task_id = parts[2]
-        file_type = parts[3]  # 'input' ou 'output'
-        filename = '/'.join(parts[4:])  # Au cas où le nom de fichier contient des '/'
-        
-        # Construire le chemin du fichier
-        if file_type not in ['input', 'output']:
-            self.send_error(400, "Type de fichier invalide")
-            return
-        
-        file_path = os.path.join(TASKS_DIR, task_id, file_type, filename)
-        
-        # Vérifier si le fichier existe
         if not os.path.isfile(file_path):
             self.send_error(404, "Fichier non trouvé")
             return
         
-        # Servir le fichier
         try:
             with open(file_path, 'rb') as f:
                 self.send_response(200)
@@ -110,286 +97,57 @@ class TaskFileHandler(SimpleHTTPRequestHandler):
             logger.error(f"Erreur lors du téléchargement du fichier {file_path}: {e}")
             self.send_error(500, "Erreur lors du téléchargement")
     
-    def _list_tasks(self):
+    def _format_size(self, size_bytes):
         """
-        Liste toutes les tâches disponibles.
-        """
-        try:
-            # Lister les répertoires de tâches
-            tasks = []
-            for task_id in os.listdir(TASKS_DIR):
-                task_dir = os.path.join(TASKS_DIR, task_id)
-                if os.path.isdir(task_dir):
-                    # Vérifier s'il y a un fichier de métadonnées
-                    meta_file = os.path.join(task_dir, 'meta.json')
-                    task_info = {
-                        'id': task_id,
-                        'has_input': os.path.isdir(os.path.join(task_dir, 'input')),
-                        'has_output': os.path.isdir(os.path.join(task_dir, 'output'))
-                    }
-                    
-                    if os.path.isfile(meta_file):
-                        try:
-                            with open(meta_file, 'r') as f:
-                                meta = json.load(f)
-                                task_info.update(meta)
-                        except:
-                            pass
-                    
-                    tasks.append(task_info)
-            
-            # Envoyer la réponse
-            self._send_json_response(tasks)
-        
-        except Exception as e:
-            logger.error(f"Erreur lors de la liste des tâches: {e}")
-            self.send_error(500, "Erreur lors de la liste des tâches")
-    
-    def _list_task_files(self, task_id):
-        """
-        Liste les fichiers d'une tâche spécifique.
+        Formate la taille en bytes en une chaîne lisible.
         
         Args:
-            task_id: ID de la tâche
+            size_bytes: Taille en bytes
+            
+        Returns:
+            str: Taille formatée
         """
-        try:
-            task_dir = os.path.join(TASKS_DIR, task_id)
-            if not os.path.isdir(task_dir):
-                self.send_error(404, "Tâche non trouvée")
-                return
-            
-            # Collecter les informations sur les fichiers
-            files = {
-                'input': [],
-                'output': []
-            }
-            
-            # Fichiers d'entrée
-            input_dir = os.path.join(task_dir, 'input')
-            if os.path.isdir(input_dir):
-                for filename in os.listdir(input_dir):
-                    file_path = os.path.join(input_dir, filename)
-                    if os.path.isfile(file_path):
-                        files['input'].append({
-                            'name': filename,
-                            'size': os.path.getsize(file_path),
-                            'url': f'/download/{task_id}/input/{filename}'
-                        })
-            
-            # Fichiers de sortie
-            output_dir = os.path.join(task_dir, 'output')
-            if os.path.isdir(output_dir):
-                for filename in os.listdir(output_dir):
-                    file_path = os.path.join(output_dir, filename)
-                    if os.path.isfile(file_path):
-                        files['output'].append({
-                            'name': filename,
-                            'size': os.path.getsize(file_path),
-                            'url': f'/download/{task_id}/output/{filename}'
-                        })
-            
-            # Envoyer la réponse
-            self._send_json_response(files)
-        
-        except Exception as e:
-            logger.error(f"Erreur lors de la liste des fichiers de la tâche {task_id}: {e}")
-            self.send_error(500, "Erreur lors de la liste des fichiers")
-    
-    def _serve_index_page(self):
-        """
-        Sert la page d'accueil.
-        """
-        html = """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Serveur de fichiers de tâches</title>
-            <style>
-                body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
-                h1 { color: #333; }
-                .task-list { margin-top: 20px; }
-                .task-item { border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; border-radius: 5px; }
-                .task-item h3 { margin-top: 0; }
-                .file-list { margin-top: 10px; }
-                .file-item { padding: 5px; }
-                .hidden { display: none; }
-                button { padding: 5px 10px; background-color: #4CAF50; color: white; border: none; border-radius: 3px; cursor: pointer; }
-                button:hover { background-color: #45a049; }
-            </style>
-        </head>
-        <body>
-            <h1>Serveur de fichiers de tâches</h1>
-            <p>Ce serveur permet de télécharger les fichiers d'entrée et de sortie des tâches.</p>
-            
-            <div class="task-list" id="taskList">
-                <p>Chargement des tâches...</p>
-            </div>
-            
-            <script>
-                // Charger la liste des tâches
-                fetch('/api/tasks')
-                    .then(response => response.json())
-                    .then(tasks => {
-                        const taskList = document.getElementById('taskList');
-                        taskList.innerHTML = '';
-                        
-                        if (tasks.length === 0) {
-                            taskList.innerHTML = '<p>Aucune tâche disponible.</p>';
-                            return;
-                        }
-                        
-                        tasks.forEach(task => {
-                            const taskItem = document.createElement('div');
-                            taskItem.className = 'task-item';
-                            
-                            const taskName = task.name || `Tâche ${task.id}`;
-                            
-                            taskItem.innerHTML = `
-                                <h3>${taskName}</h3>
-                                <p>ID: ${task.id}</p>
-                                ${task.description ? `<p>${task.description}</p>` : ''}
-                                <button onclick="loadTaskFiles('${task.id}')">Voir les fichiers</button>
-                                <div id="files-${task.id}" class="file-list hidden"></div>
-                            `;
-                            
-                            taskList.appendChild(taskItem);
-                        });
-                    })
-                    .catch(error => {
-                        console.error('Erreur lors du chargement des tâches:', error);
-                        document.getElementById('taskList').innerHTML = '<p>Erreur lors du chargement des tâches.</p>';
-                    });
-                
-                // Charger les fichiers d'une tâche
-                function loadTaskFiles(taskId) {
-                    const filesDiv = document.getElementById(`files-${taskId}`);
-                    
-                    if (!filesDiv.classList.contains('hidden')) {
-                        filesDiv.classList.add('hidden');
-                        return;
-                    }
-                    
-                    filesDiv.innerHTML = '<p>Chargement des fichiers...</p>';
-                    filesDiv.classList.remove('hidden');
-                    
-                    fetch(`/api/tasks/${taskId}`)
-                        .then(response => response.json())
-                        .then(files => {
-                            filesDiv.innerHTML = '';
-                            
-                            // Fichiers d'entrée
-                            if (files.input.length > 0) {
-                                filesDiv.innerHTML += '<h4>Fichiers d\'entrée</h4>';
-                                const inputList = document.createElement('ul');
-                                
-                                files.input.forEach(file => {
-                                    const fileItem = document.createElement('li');
-                                    fileItem.className = 'file-item';
-                                    fileItem.innerHTML = `
-                                        <a href="${file.url}" download>${file.name}</a> (${formatFileSize(file.size)})
-                                    `;
-                                    inputList.appendChild(fileItem);
-                                });
-                                
-                                filesDiv.appendChild(inputList);
-                            }
-                            
-                            // Fichiers de sortie
-                            if (files.output.length > 0) {
-                                filesDiv.innerHTML += '<h4>Fichiers de sortie</h4>';
-                                const outputList = document.createElement('ul');
-                                
-                                files.output.forEach(file => {
-                                    const fileItem = document.createElement('li');
-                                    fileItem.className = 'file-item';
-                                    fileItem.innerHTML = `
-                                        <a href="${file.url}" download>${file.name}</a> (${formatFileSize(file.size)})
-                                    `;
-                                    outputList.appendChild(fileItem);
-                                });
-                                
-                                filesDiv.appendChild(outputList);
-                            }
-                            
-                            if (files.input.length === 0 && files.output.length === 0) {
-                                filesDiv.innerHTML = '<p>Aucun fichier disponible pour cette tâche.</p>';
-                            }
-                        })
-                        .catch(error => {
-                            console.error(`Erreur lors du chargement des fichiers de la tâche ${taskId}:`, error);
-                            filesDiv.innerHTML = '<p>Erreur lors du chargement des fichiers.</p>';
-                        });
-                }
-                
-                // Formater la taille du fichier
-                function formatFileSize(size) {
-                    if (size < 1024) {
-                        return `${size} octets`;
-                    } else if (size < 1024 * 1024) {
-                        return `${(size / 1024).toFixed(2)} Ko`;
-                    } else if (size < 1024 * 1024 * 1024) {
-                        return `${(size / (1024 * 1024)).toFixed(2)} Mo`;
-                    } else {
-                        return `${(size / (1024 * 1024 * 1024)).toFixed(2)} Go`;
-                    }
-                }
-            </script>
-        </body>
-        </html>
-        """
-        
-        self.send_response(200)
-        self.send_header('Content-Type', 'text/html')
-        self.send_header('Content-Length', str(len(html.encode())))
-        self.end_headers()
-        self.wfile.write(html.encode())
-    
+        for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+            if size_bytes < 1024.0:
+                return f"{size_bytes:.2f} {unit}"
+            size_bytes /= 1024.0
+        return f"{size_bytes:.2f} PB"
+
+
     def _send_json_response(self, data):
-        """
-        Envoie une réponse JSON.
-        
-        Args:
-            data: Données à envoyer
-        """
-        json_data = json.dumps(data).encode()
-        
         self.send_response(200)
         self.send_header('Content-Type', 'application/json')
-        self.send_header('Content-Length', str(len(json_data)))
+        self.send_header('Content-Length', str(len(json.dumps(data))))
         self.end_headers()
-        self.wfile.write(json_data)
+        self.wfile.write(json.dumps(data).encode())
+
     
     def log_message(self, format, *args):
         """
         Redirige les logs vers le logger Django.
         """
-        logger.debug(f"FileServer: {format % args}")
+        logger.debug(f"TaskFileServer[{self.task_id}]: {format % args}")
 
-class FileServer:
+# Classe pour le serveur de fichiers spécifique à une tâche
+class TaskFileServer:
     """
-    Serveur de fichiers pour les tâches.
+    Serveur de fichiers pour une tâche spécifique.
     """
-    _instance = None
-    _lock = threading.Lock()
     
-    @classmethod
-    def get_instance(cls):
+    def __init__(self, task_id, directory):
         """
-        Récupère l'instance unique du serveur de fichiers.
+        Initialise le serveur de fichiers pour une tâche spécifique.
+        
+        Args:
+            task_id: ID de la tâche
+            directory: Répertoire contenant les fichiers de la tâche
         """
-        with cls._lock:
-            if cls._instance is None:
-                cls._instance = cls()
-            return cls._instance
-    
-    def __init__(self):
-        """
-        Initialise le serveur de fichiers.
-        """
+        self.task_id = task_id
+        self.directory = directory
         self.server = None
         self.server_thread = None
         self.running = False
-        self.port = 8080  # Port par défaut
+        self.port = None
     
     def start(self, port=None):
         """
@@ -397,23 +155,51 @@ class FileServer:
         
         Args:
             port: Port sur lequel démarrer le serveur (optionnel)
+            
+        Returns:
+            int: Port sur lequel le serveur a été démarré
         """
         if self.running:
-            logger.warning("Le serveur de fichiers est déjà en cours d'exécution")
-            return
+            logger.warning(f"Le serveur de fichiers pour la tâche {self.task_id} est déjà en cours d'exécution")
+            return self.port
         
-        if port is not None:
-            self.port = port
+        # Créer le répertoire s'il n'existe pas
+        os.makedirs(self.directory, exist_ok=True)
         
-        # Créer le répertoire des tâches s'il n'existe pas
-        os.makedirs(TASKS_DIR, exist_ok=True)
+        # Trouver un port disponible si non spécifié
+        if port is None:
+            import socket
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.bind(('', 0))
+            port = s.getsockname()[1]
+            s.close()
+        
+        self.port = port
+        
+        # Créer une classe de gestionnaire avec le répertoire spécifié
+        # Utiliser une fonction pour créer le gestionnaire avec le répertoire correct
+        def handler_factory(*args, **kwargs):
+            return TaskSpecificFileHandler(self.task_id, self.directory, *args, **kwargs)
+        handler = handler_factory
         
         # Démarrer le serveur dans un thread séparé
-        self.server_thread = threading.Thread(target=self._run_server)
+        def run_server():
+            self.running = True
+            try:
+                import socketserver
+                self.server = socketserver.ThreadingTCPServer(('0.0.0.0', self.port), handler)
+                self.server.allow_reuse_address = True
+                logger.info(f"Serveur de fichiers pour la tâche {self.task_id} en écoute sur http://localhost:{self.port} pour le dossier {self.directory}")
+                self.server.serve_forever()
+            except Exception as e:
+                logger.error(f"Erreur lors du démarrage du serveur de fichiers pour la tâche {self.task_id}: {e}")
+                self.running = False
+        
+        self.server_thread = threading.Thread(target=run_server)
         self.server_thread.daemon = True
         self.server_thread.start()
         
-        logger.info(f"Serveur de fichiers démarré sur le port {self.port}")
+        logger.info(f"Serveur de fichiers pour la tâche {self.task_id} démarré sur le port {self.port}")
         return self.port
     
     def stop(self):
@@ -421,7 +207,7 @@ class FileServer:
         Arrête le serveur de fichiers.
         """
         if not self.running:
-            logger.warning("Le serveur de fichiers n'est pas en cours d'exécution")
+            logger.warning(f"Le serveur de fichiers pour la tâche {self.task_id} n'est pas en cours d'exécution")
             return
         
         self.running = False
@@ -429,45 +215,46 @@ class FileServer:
             self.server.shutdown()
             self.server.server_close()
         
-        logger.info("Serveur de fichiers arrêté")
-    
-    def _run_server(self):
-        """
-        Exécute le serveur HTTP.
-        """
-        self.running = True
-        
-        # Créer le serveur
-        try:
-            self.server = socketserver.ThreadingTCPServer(('0.0.0.0', self.port), TaskFileHandler)
-            self.server.allow_reuse_address = True
-            
-            # Servir jusqu'à ce que le serveur soit arrêté
-            logger.info(f"Serveur de fichiers en écoute sur http://localhost:{self.port}")
-            self.server.serve_forever()
-        
-        except Exception as e:
-            logger.error(f"Erreur lors du démarrage du serveur de fichiers: {e}")
-            self.running = False
+        logger.info(f"Serveur de fichiers pour la tâche {self.task_id} arrêté")
 
-# Fonction pour démarrer le serveur de fichiers
-def start_file_server(port=None):
+# Fonction pour démarrer un serveur de fichiers pour une tâche spécifique
+def start_task_file_server(task_id, directory, port=None):
     """
-    Démarre le serveur de fichiers.
+    Démarre un serveur de fichiers pour une tâche spécifique.
     
     Args:
+        task_id: ID de la tâche
+        directory: Répertoire contenant les fichiers de la tâche
         port: Port sur lequel démarrer le serveur (optionnel)
         
     Returns:
         int: Port sur lequel le serveur a été démarré
     """
-    server = FileServer.get_instance()
-    return server.start(port)
+    # Arrêter le serveur existant si nécessaire
+    if task_id in task_file_servers:
+        task_file_servers[task_id].stop()
+    
+    # Créer et démarrer un nouveau serveur
+    server = TaskFileServer(task_id, directory)
+    port = server.start(port)
+    
+    # Stocker le serveur pour pouvoir l'arrêter plus tard
+    task_file_servers[task_id] = server
+    
+    return port
 
-# Fonction pour arrêter le serveur de fichiers
-def stop_file_server():
+# Fonction pour arrêter un serveur de fichiers pour une tâche spécifique
+def stop_task_file_server(task_id):
     """
-    Arrête le serveur de fichiers.
+    Arrête un serveur de fichiers pour une tâche spécifique.
+    
+    Args:
+        task_id: ID de la tâche
     """
-    server = FileServer.get_instance()
-    server.stop()
+    if task_id in task_file_servers:
+        task_file_servers[task_id].stop()
+        del task_file_servers[task_id]
+        logger.info(f"Serveur de fichiers pour la tâche {task_id} supprimé")
+    else:
+        logger.warning(f"Aucun serveur de fichiers trouvé pour la tâche {task_id}")
+

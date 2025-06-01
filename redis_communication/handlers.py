@@ -169,6 +169,4 @@ DEFAULT_HANDLERS = {
     "auth/volunteer_login_response": volunteer_login_response_handler,
     
     # Canaux de tâches
-    "task/assignment": log_message_handler,
-    "task/status": log_message_handler
 }
