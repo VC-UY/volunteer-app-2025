@@ -1098,26 +1098,43 @@ class TaskManager:
             return result_file
         return None
     
-    def _send_task_failure(self, task, error):
+    def _send_task_failure(self, task, error, error_type='unknown'):
         """
-        Envoie une notification d'échec pour une tâche.
+        Envoie une notification d'échec pour une tâche avec le type d'erreur.
         
         Args:
             task: Tâche échouée
             error: Message d'erreur
+            error_type: Type d'erreur (docker, user_pause, user_stop, etc.)
         """
         from redis_communication.utils import get_volunteer_auth_token
-        self.redis_client.publish('task/status', {
+        
+        # Déterminer le type d'erreur si non spécifié
+        if 'docker' in str(error).lower():
+            error_type = 'docker'
+        elif hasattr(task, 'status') and task.status == 'paused':
+            error_type = 'user_pause'
+        elif hasattr(task, 'status') and task.status == 'stopped':
+            error_type = 'user_stop'
+        
+        logger.info(f"Envoi de notification d'échec pour la tâche {task.task_id} - Type: {error_type}")
+        
+        self.redis_client.publish(
+            'task/status', 
+            {
                 'task_id': task.task_id,
                 'volunteer_id': self.volunteer_id,
                 'workflow_id': task.workflow.workflow_id if hasattr(task, 'workflow') and task.workflow else None,
                 'status': 'Failed',
-                'error': error,
+                'error': str(error),
+                'error_type': error_type,
+                'error_message': str(error),
                 'timestamp': datetime.now().isoformat()
             },
             str(uuid.uuid4()),
-            get_volunteer_auth_token() ,
-            'request' 
+            get_volunteer_auth_token(),
+            'request',
+            real_sender_id=self.volunteer_id
         )
 
 # Gestionnaire pour les messages d'assignation de tâches

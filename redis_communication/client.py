@@ -52,7 +52,8 @@ class RedisClient:
         
         self.config = config or {}
         self.client_type = self.config.get('client_type', 'volunteer')
-        self.client_id = self.config.get('client_id', str(uuid.uuid4()))
+        from redis_communication.utils import get_volunteer_auth_token
+        self.client_id = get_volunteer_auth_token()
         
         # Paramètres de connexion
         self.host = self.config.get('host', getattr(settings, 'REDIS_PROXY_HOST', 'localhost'))
