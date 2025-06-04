@@ -19,7 +19,7 @@ import importlib.util
 import subprocess
 from datetime import datetime, timedelta
 from django.utils import timezone
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Dict, Any, Optional
 
 # Import des fonctions d'authentification
 from .auth_client import save_volunteer_info
@@ -873,7 +873,7 @@ class RedisAppConfig(AppConfig):
                     else:
                         logger.error(f"Échec de l'authentification du volontaire: {data}")
                 else:
-                    raise ValueError("Aucun identifiant de volontaire trouvé")
+                    logger.error("Aucun identifiant de volontaire trouvé")
             elif volunteer_info:
                 # Le volontaire est créé, mais pas enregistré aupres du coordinateur
                 logger.info(f"Volontaire enregistré avec l'ID {volunteer_info.id}, mais pas authentifié")

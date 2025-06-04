@@ -1,7 +1,5 @@
 from django.db import models
-from django.db.models import JSONField
 from django.utils import timezone
-import uuid
 from django.core.exceptions import ValidationError
 
 
@@ -17,7 +15,7 @@ class MachineInfoManager(models.Manager):
 class MachineInfo(models.Model):
     objects = MachineInfoManager()
     # Identifiants
-    volunteer_id = models.UUIDField(unique=True, default=uuid.uuid4, editable=False)
+    volunteer_id = models.UUIDField(unique=True, editable=False)
     adresse_mac = models.JSONField(default=list, help_text="Liste des adresses MAC de la machine")
     
     # Informations sur le système d'exploitation
@@ -77,8 +75,8 @@ class MachineInfo(models.Model):
     def __str__(self):
         return f"{self.hostname} ({self.machine_type})"
 
-
 # Modèle des informations variables de la machine
+
 class EtatMachine(models.Model):
     VOLUNTEER_STATUS_CHOICES = [
         ('available', 'Available'),
@@ -211,6 +209,7 @@ class PreferenceModel(models.Model):
         verbose_name = "Préférence"
         verbose_name_plural = "Préférences"
 
+# Preference Management Model
 
 class JourDisponible(models.Model):
     JOUR_CHOICES = [
@@ -247,7 +246,7 @@ class PlageHoraire(models.Model):
     def __str__(self):
         return f"{self.heure_debut} - {self.heure_fin} ({self.jour.jour})"
 
-
+# End Preference
 
 
 #  -------------- Workflow And Task Model 

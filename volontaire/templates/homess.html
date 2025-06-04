@@ -475,7 +475,6 @@
       </form>
     </div>
   </div>
-      <!-- end first section for preference  -->
 
   <div class="container">
     <div class="left-panel" id="animated-bg">
@@ -491,7 +490,7 @@
         
         
       </div>
-      <!-- Start Second section for preference  -->
+      
       <div class="section">
         <h2><i class="fas fa-sliders-h"></i> Préférences</h2>
         <button class="btn" onclick="openModal()">
@@ -502,31 +501,9 @@
         <div class="table-container">
           <table id="prefsTable" class="prefs-table"></table>
         </div>
-        <button id="btnDeletePreferences" class="btn btn-danger" onclick="deletePreferencesFromDjango()" >
-          Supprimer toutes les préférences
-        </button>
-        <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
-        <!--actionCell.innerHTML = >
-        <button-- class="btn btn-sm btn-danger" onclick="deletePreference(${pref.id})">
-          <i class="fas fa-trash-alt"></i>
-        </button-->`;
-
-        
       </div>
-   
     </div>
 
-
-
-  
-
-
-
-
-
-
-
-   <!-- ENd Affichage de preferences -->
     <div class="right-panel">
       <div class="section">
         <h2><i class="fas fa-tasks"></i> Gestion des Tâches</h2>
@@ -647,13 +624,6 @@
   </div>
 
   <script>
-    function getCSRFToken() {
-      return document.querySelector('[name=csrfmiddlewaretoken]').value;
-    }
-  </script>
-  
-
-  <script>
 
     // Gestion de django pannel
 
@@ -761,7 +731,7 @@
       });
 
 
-      // Gestion des action sur un conteneur 
+      // Gest des action sur un conteneur 
 
       function handleAction(action, taskId) {
         fetch(`/task/${action}/${taskId}/`, {
@@ -797,7 +767,7 @@
       }
       
 
-    // End gestion des taches
+
 
     // Gestion du curseur personnalisé
     const aura = document.getElementById('cursorAura');
@@ -817,23 +787,6 @@
       aura.style.height = '30px';
       aura.style.background = 'rgba(52, 152, 219, 0.3)';
     });
-
-
-
-
-    // Start Manage Preference
-
-
-
-    //récupérer le CSRF token
-
-    function getCSRFToken() {
-      return document.cookie.split('; ')
-        .find(row => row.startsWith('csrftoken='))
-        ?.split('=')[1];
-    }
-    
-
 
     // Variables globales
     let currentPreferences = [];
@@ -881,7 +834,7 @@
     }
     
     // Sauvegarder les préférences dans localStorage et dans un fichier
-    {% comment %} function savePreferencesToFile() {
+    function savePreferencesToFile() {
       try {
         localStorage.setItem('preferences', JSON.stringify(currentPreferences));
         
@@ -900,178 +853,7 @@
       } catch (e) {
         console.error('Erreur lors de la sauvegarde des préférences:', e);
       }
-    } {% endcomment %}
-
-
-
-
-
-
-// Sauvegarde et mise a jour d'une preference 
-
-    function savePreferencesToServer() {
-      const payload = {
-        preferences: currentPreferences  // tableau complet de préférences à enregistrer
-      };
-    
-      fetch('/enregistrer_preferences/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRFToken': getCSRFToken()  // à ajouter pour Django
-        },
-        body: JSON.stringify(payload)
-      })
-      .then(response => {
-        if (!response.ok) throw new Error("Erreur lors de l'enregistrement");
-        return response.json();
-      })
-      .then(data => {
-        alert("Préférences enregistrées !");
-        closeModal();
-      })
-      .catch(error => {
-        console.error("Erreur : ", error);
-        alert("Échec de l'enregistrement.");
-      });
     }
-    
-
-    function savePreferencesToDjango() {
-      const selectedDays = Array.from(document.querySelectorAll('.day-checkbox:checked')).map(cb => cb.value);
-    
-      if (selectedDays.length === 0 || tempTimeSlots.length === 0) {
-        alert("Veuillez sélectionner au moins un jour et ajouter un créneau.");
-        return;
-      }
-    
-      // Construire la liste des préférences
-      const allPrefs = [];
-      selectedDays.forEach(day => {
-        tempTimeSlots.forEach(slot => {
-          allPrefs.push({
-            day,
-            startTime: slot.startTime,
-            endTime: slot.endTime,
-            cpu: slot.cpu,
-            ram: slot.ram,
-            maxTime: slot.maxTime
-          });
-        });
-      });
-    
-      // Créer l'objet à envoyer
-      const payload = {
-        cpu_max_utilisation: parseInt(document.getElementById('cpu').value) || 80,
-        ram_max_utilisation: parseInt(document.getElementById('ram').value) || 80,
-        duree_max_execution: parseInt(document.getElementById('maxTime').value) || 0,
-        notification_email: document.getElementById('notifyEmail')?.checked || false,
-        preferences: allPrefs
-      };
-    
-      fetch('/save_preferences/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRFToken': getCSRFToken()  // utile si tu réactives CSRF
-        },
-        body: JSON.stringify(payload)
-      })
-      .then(response => response.json())
-      .then(data => {
-        if (data.success) {
-          alert('Préférences enregistrées.');
-          currentPreferences = allPrefs;
-          renderPrefs();
-          closeModal();
-        } else {
-          alert('Erreur: ' + data.error);
-        }
-      })
-      .catch(error => console.error('Erreur réseau:', error));
-    }
-    
-    // Utilitaire pour récupérer le token CSRF (si activé)
-    function getCSRFToken() {
-      const name = 'csrftoken';
-      const cookies = document.cookie.split(';');
-      for (let i = 0; i < cookies.length; i++) {
-        const cookie = cookies[i].trim();
-        if (cookie.startsWith(name + '=')) {
-          return decodeURIComponent(cookie.substring(name.length + 1));
-        }
-      }
-      return '';
-    }
-    
-
-
-    // Suppretion de tous les preferences
-
-    function deletePreferencesFromDjango() {
-      if (!confirm("Êtes-vous sûr de vouloir supprimer toutes les préférences ?")) return;
-    
-      fetch('/preferences/delete/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRFToken': getCSRFToken()
-        },
-        body: JSON.stringify({ action: 'delete_all' })
-      })
-      .then(response => {
-        if (response.ok) {
-          alert('Préférences supprimées avec succès.');
-          currentPreferences = [];
-          localStorage.removeItem('preferences');
-          renderPrefs();
-        } else {
-          alert('Échec de la suppression des préférences.');
-        }
-      })
-      .catch(error => {
-        console.error("Erreur lors de la suppression :", error);
-      });
-    }
-    
-
-     // Suppression d'une preference en particulier
-
-
-    function deletePreference(id) {
-      if (!confirm("Voulez-vous vraiment supprimer cette préférence ?")) return;
-    
-      fetch(`/preferences/delete/${id}/`, {
-        method: 'POST',
-        headers: {
-          'X-CSRFToken': getCSRFToken(),
-          'Content-Type': 'application/json',
-        }
-      })
-      .then(response => {
-        if (response.ok) {
-          // Supprimer localement dans currentPreferences
-          currentPreferences = currentPreferences.filter(pref => pref.id !== id);
-          renderPrefs();
-        } else {
-          alert("Erreur lors de la suppression");
-        }
-      })
-      .catch(() => alert("Erreur lors de la suppression"));
-    }
-    
-    
-// fonction utilitaire
-
-    function getCSRFToken() {
-      return document.querySelector('[name=csrfmiddlewaretoken]').value;
-    }
-    
-
-
-
-
-
     
     // Ajouter un créneau horaire temporaire
     function addTimeSlot() {
@@ -1163,9 +945,7 @@
       });
       
       // Sauvegarder et mettre à jour l'affichage
-      //savePreferencesToFile();
-      //savePreferencesToServer()
-      savePreferencesToDjango()
+      savePreferencesToFile();
       renderPrefs();
       closeModal();
     }
@@ -1227,7 +1007,7 @@
           
           // Cellule pour l'action (supprimer)
           const actionCell = document.createElement('td');
-          actionCell.innerHTML = `<button class="btn btn-sm btn-danger" onclick="deletePreference(${pref.id}) onclicks="removePref(${pref.index})"><i class="fas fa-trash-alt"></i></button>`;
+          actionCell.innerHTML = `<button class="btn btn-sm btn-danger" onclick="removePref(${pref.index})"><i class="fas fa-trash-alt"></i></button>`;
           row.appendChild(actionCell);
           
           table.appendChild(row);
@@ -1238,56 +1018,12 @@
     // Supprimer une préférence
     function removePref(index) {
       currentPreferences.splice(index, 1);
-      savePreferencesToFile();
+      //savePreferencesToFile();
       renderPrefs();
     }
     
     // Initialiser l'application
-    loadPreferences(); 
-
-      let creneaux = [];
-    
-      function ajouterCreneau() {
-        const debut = document.getElementById("heure_debut").value;
-        const fin = document.getElementById("heure_fin").value;
-        const jours = Array.from(document.querySelectorAll("input[name='jours_disponibles']:checked")).map(j => j.value);
-    
-        if (!debut || !fin || jours.length === 0) {
-          alert("Veuillez sélectionner au moins un jour et entrer une plage horaire.");
-          return;
-        }
-    
-        jours.forEach(jour => {
-          creneaux.push({ jour, heure_debut: debut, heure_fin: fin });
-          document.getElementById("liste_creneaux").innerHTML +=
-            `<li class="list-group-item">${jour} : ${debut} - ${fin}</li>`;
-        });
-    
-        // Réinitialise les inputs de la plage horaire
-        document.getElementById("heure_debut").value = '';
-        document.getElementById("heure_fin").value = '';
-    
-        // Mise à jour du champ JSON caché
-        document.getElementById("creneaux_json").value = JSON.stringify(creneaux);
-      }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// End Preference 
-
+    loadPreferences();
 
     async function loadSystemInfo() {
     try {

@@ -41,7 +41,23 @@ INSTALLED_APPS = [
     # "communication",
     'redis_communication',
     'rest_framework',
+    'channels',
 ]
+
+# Configuration de Django Channels
+# Utiliser Channels comme serveur ASGI
+ASGI_APPLICATION = 'voontaire.asgi.application'
+
+# Redis comme backend pour les WebSockets
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [("127.0.0.1", 6379)],
+        },
+    },
+}
+
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',

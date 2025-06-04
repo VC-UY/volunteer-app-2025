@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import TaskProgress
+from .models import TaskProgress, MachineInfo, EtatMachine, PreferenceModel
 
 # Déjà enregistré automatiquement par Django
 # @admin.register(Task)
@@ -19,3 +19,9 @@ class TaskProgressAdmin(admin.ModelAdmin):
             return f"{obj.message[:50]}..."
         return obj.message
     message_preview.short_description = 'Message'
+
+admin.site.register(MachineInfo)
+admin.site.register(EtatMachine)
+admin.site.register(PreferenceModel)
+
+

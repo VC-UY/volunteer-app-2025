@@ -19,7 +19,8 @@ def get_volunteer_auth_token():
             data = json.load(f)
             return data['token']
     except FileNotFoundError:
-        raise NoLoginError("Le fichier .volunteer/volunteer_auth_info.json n'a pas été trouvé")
+        logger.error("Le fichier .volunteer/volunteer_auth_info.json n'a pas été trouvé")
+        return None
 
 def extract_machine_info(static_data: Dict[str, Any], name: str = '', ip_address: str = '', 
                         cpu_cores: int = 0, ram_mb: int = 0, disk_gb: int = 0, 
