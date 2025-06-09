@@ -19,10 +19,9 @@ import importlib.util
 import subprocess
 from datetime import datetime, timedelta
 from django.utils import timezone
-from typing import Dict, Any, Optional
 
 # Import des fonctions d'authentification
-from .auth_client import save_volunteer_info
+from .auth_client import save_volunteer_info, get_volunteer_info
 
 # Configuration du logging pour afficher les messages dans la console
 logger = logging.getLogger('redis_communication')
@@ -729,54 +728,6 @@ def publish_availability(volunteer_id):
         logger.error(traceback.format_exc())
         return False
 
-def get_volunteer_info() -> Optional[Dict[str, Any]]:
-    """
-    Récupère les informations du volontaire depuis le fichier de configuration.
-    
-    Returns:
-        Dict ou None: Informations du volontaire ou None si le fichier n'existe pas
-    """
-    # Utiliser le même nom de fichier que dans auth_client.py
-    config_file = os.path.join(VOLUNTEER_DIR, 'config.json')
-    
-    if not os.path.exists(config_file):
-        logger.warning(f"Fichier de configuration du volontaire introuvable: {config_file}")
-        return None
-    
-    try:
-        with open(config_file, 'r') as f:
-            info = json.load(f)
-            logger.info(f"Informations du volontaire chargées depuis {config_file}")
-            return info
-    except Exception as e:
-        logger.error(f"Erreur lors de la lecture des informations du volontaire: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
-        return None
-
-def save_volunteer_info(info: Dict[str, Any]) -> bool:
-    """
-    Enregistre les informations du volontaire dans le fichier de configuration.
-    
-    Args:
-        info: Informations du volontaire
-        
-    Returns:
-        bool: True si enregistré avec succès, False sinon
-    """
-    # Utiliser le même nom de fichier que dans auth_client.py
-    config_file = os.path.join(VOLUNTEER_DIR, 'config.json')
-    
-    try:
-        with open(config_file, 'w') as f:
-            json.dump(info, f, indent=4)
-        logger.info(f"Informations du volontaire enregistrées dans {config_file}")
-        return True
-    except Exception as e:
-        logger.error(f"Erreur lors de l'enregistrement des informations du volontaire: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
-        return False
 
 class RedisAppConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
@@ -802,9 +753,10 @@ class RedisAppConfig(AppConfig):
         """
         Initialise la connexion Redis et les threads de communication lorsque l'application démarre.
         """
-        # Éviter d'exécuter le code en double lors du rechargement du serveur Django
-        if os.environ.get('RUN_MAIN') != 'true':
+        # Ne pas exécuter en mode commande (sauf pour runserver)
+        if 'runserver' not in sys.argv and 'daphne' not in sys.argv[0]:
             return
+        
         
         logger.info("===== Initialisation du service de communication Redis pour le volontaire =====")
         
@@ -824,285 +776,193 @@ class RedisAppConfig(AppConfig):
             if not self.redis_client.running:
                 self.redis_client.start()
             
-            # Vérifier si le volontaire est déjà enregistré
-            logger.info("Vérification de l'enregistrement du volontaire...")
+            # ========== Unification de la collecte et de l'enregistrement volontaire ==========
             from volontaire.models import MachineInfo
+            def collect_full_volunteer_info(existing_info=None):
+                static_data = get_machine_info()
+                hostname = static_data.get('hostname') or (existing_info.hostname if existing_info and hasattr(existing_info, 'hostname') else socket.gethostname())
+                try:
+                    ip_address = socket.gethostbyname(socket.gethostname())
+                except:
+                    ip_address = "127.0.0.1"
+                cpu_cores = int(static_data.get('cpu', {}).get('coeurs_logiques', 1))
+                total_memory = static_data.get('memoire', {}).get('ram', {}).get('total', 0)
+                if isinstance(total_memory, str):
+                    try:
+                        total_memory = int(total_memory)
+                    except:
+                        total_memory = 1024 * 1024 * 1024
+                ram_mb = int(total_memory / (1024 * 1024))
+                total_disk = static_data.get('disque', {}).get('total', 0)
+                if isinstance(total_disk, str):
+                    try:
+                        total_disk = int(total_disk)
+                    except:
+                        total_disk = 10 * 1024 * 1024 * 1024
+                disk_gb = int(total_disk / (1024 * 1024 * 1024))
+                username = (existing_info.username if existing_info and hasattr(existing_info, 'username') and existing_info.username else f"volunteer_{uuid.uuid4().hex[:8]}")
+                password = (existing_info.password if existing_info and hasattr(existing_info, 'password') and existing_info.password else uuid.uuid4().hex)
+                return {
+                    'hostname': hostname,
+                    'ip_address': ip_address,
+                    'cpu_cores': cpu_cores,
+                    'ram_mb': ram_mb,
+                    'disk_gb': disk_gb,
+                    'username': username,
+                    'password': password,
+                    'machine_info': static_data
+                }
+
+            logger.info("Vérification de l'enregistrement du volontaire...")
             volunteer_info = MachineInfo.objects.get_last_inserted()
             logger.info(f"Informations du volontaire: {volunteer_info}")
-            
+
+            # Cas 1 : Volontaire déjà enregistré (avec volunteer_id)
             if volunteer_info and volunteer_info.volunteer_id:
-                # Le volontaire est déjà enregistré, se connecter
-                logger.info(f"Volontaire déjà enregistré avec l'ID {volunteer_info.volunteer_id}")
-
-                self.load_volunteer_credentials()
-                if self.username and self.password:
-                    success, data = login_volunteer(
-                        username=self.username,
-                        password=self.password
-                    )
-                
-                    if success:
-                        logger.info("Volontaire authentifié avec succès")
-                        
-                        # Mettre à jour les identifiants
-                        self.volunteer_id = data.get('volunteer_id')
-                        self.volunteer_token = data.get('token')
-                        
-                        # Ecrire les informations dans .volunteer/volunteer_info.json
-                        if not os.path.exists('.volunteer'):
-                            os.makedirs('.volunteer')
-                        # Vérifier si le token est un JWT valide (contient au moins un point)
-                        token = data.get('token')
-                        if token and (not isinstance(token, str) or '.' not in token):
-                            # Si ce n'est pas un JWT, le convertir
-                            logger.warning(f"Token non-JWT détecté lors de l'authentification: {token}. Conversion en JWT.")
-                        else:
-                            with open('.volunteer/volunteer_auth_info.json', 'w') as f:
-                                json.dump({
-                                    'volunteer_id': str(volunteer_info.volunteer_id),
-                                    'token': token,
-                                    'refresh_token': data.get('refresh_token'),
-                                    'last_login': time.time()
-                                }, f)
-                        logger.debug("Volontaire authentifié avec succès")
-
-                        # lancer le processus de tâche
-                        from .task_handlers import TaskManager
-                        task_manager = TaskManager.get_instance()
-                        task_manager.start(self.volunteer_id)
-                    else:
-                        logger.error(f"Échec de l'authentification du volontaire: {data}")
-                else:
-                    logger.error("Aucun identifiant de volontaire trouvé")
-            elif volunteer_info:
-                # Le volontaire est créé, mais pas enregistré aupres du coordinateur
-                logger.info(f"Volontaire enregistré avec l'ID {volunteer_info.id}, mais pas authentifié")
-                
-                # Générer un nom d'utilisateur et mot de passe aléatoires
-                username = f"volunteer_{uuid.uuid4().hex[:8]}"
-                password = uuid.uuid4().hex
-                
-                # preparer les données d'enregistrement:
-                success, data = register_volunteer(
-                    name=volunteer_info.name,
-                    ip_address=volunteer_info.ip_address,
-                    cpu_cores=volunteer_info.cpu_cores,
-                    ram_mb=volunteer_info.ram_mb,
-                    disk_gb=volunteer_info.disk_gb,
-                    username=username,
-                    password=password,
-                    machine_info=volunteer_info.machine_info,
-                    callback=volunteer_info.callback,
-                )
-                
-                if success:
-                    logger.info("Volontaire enregistré aupres du coordinateur avec succès")
-                    
-                    # Mettre à jour les identifiants
-                    self.volunteer_id = data.get('volunteer_id')
-
-                    volunteer_info.volunteer_id = data.get('volunteer_id')
-                    volunteer_info.registration_date = datetime.now()
+                # Toujours enrichir les données locales si besoin
+                full_info = collect_full_volunteer_info(volunteer_info)
+                # Mettre à jour la BD locale si des champs sont incomplets
+                updated = False
+                for k, v in full_info.items():
+                    if hasattr(volunteer_info, k) and (getattr(volunteer_info, k) in [None, '', 0]):
+                        setattr(volunteer_info, k, v)
+                        updated = True
+                if updated:
                     volunteer_info.save()
-                    
-                    
-                    
-                    # Ecrire les informations dans .volunteer/volunteer_auth_info.json
+                self.load_volunteer_credentials()
+                logger.info(f"Connexion volontaire avec username={full_info['username']}")
+                success, data = login_volunteer(
+                    username=full_info['username'],
+                    password=full_info['password']
+                )
+                if success:
+                    logger.info("Volontaire authentifié avec succès")
+                    self.volunteer_token = data.get('token')
                     if not os.path.exists('.volunteer'):
                         os.makedirs('.volunteer')
                     with open('.volunteer/volunteer_auth_info.json', 'w') as f:
                         json.dump({
-                            'volunteer_id': volunteer_info.volunteer_id,
+                            'token': data.get('token'),
+                            'refresh_token': data.get('refresh_token'),
                             'last_login': time.time()
                         }, f)
                     logger.debug("Volontaire authentifié avec succès")
+                    from .task_handlers import TaskManager
+                    task_manager = TaskManager.get_instance()
+                    task_manager.start(volunteer_info.volunteer_id)
+                else:
+                    logger.error(f"Échec de l'authentification du volontaire: {data}")
+            else:
+                # Cas 2 ou 3 : Volontaire non enregistré ou sans volunteer_id
+                full_info = collect_full_volunteer_info(volunteer_info)
+                logger.info(f"[ENREGISTREMENT] Données envoyées au coordinateur : name={full_info['hostname']}, ip_address={full_info['ip_address']}, cpu_cores={full_info['cpu_cores']}, ram_mb={full_info['ram_mb']}, disk_gb={full_info['disk_gb']}, username={full_info['username']}, password={full_info['password']}, machine_info={json.dumps(full_info['machine_info'], indent=2, ensure_ascii=False)}")
+                success, data = register_volunteer(
+                    name=full_info['hostname'],
+                    ip_address=full_info['ip_address'],
+                    cpu_cores=full_info['cpu_cores'],
+                    ram_mb=full_info['ram_mb'],
+                    disk_gb=full_info['disk_gb'],
+                    username=full_info['username'],
+                    password=full_info['password'],
+                    machine_info=full_info['machine_info'],
+                )
+                if success:
+                    logger.info("Volontaire enregistré aupres du coordinateur avec succès")
+                    # Mettre à jour la BD locale (création ou update)
+                    def machine_info_from_raw(raw, username, password, volunteer_id=None):
+                        # Extraction et mapping de tous les champs du modèle
+                        return {
+                            'volunteer_id': volunteer_id,
+                            'adresse_mac': raw.get('reseau', {}).get('mac', []),
+                            'username': username,
+                            'password': password,
+                            'os_name': raw.get('os', {}).get('nom', ''),
+                            'os_version': raw.get('os', {}).get('version', ''),
+                            'os_release': raw.get('os', {}).get('release', ''),
+                            'os_architecture': raw.get('os', {}).get('architecture', ''),
+                            'hostname': raw.get('hostname', ''),
+                            'machine_type': raw.get('machine_type', ''),
+                            'cpu_type': raw.get('cpu', {}).get('type', ''),
+                            'cpu_architecture': raw.get('cpu', {}).get('architecture', ''),
+                            'cpu_bits': raw.get('cpu', {}).get('bits', ''),
+                            'cpu_cores_physical': raw.get('cpu', {}).get('coeurs_physiques', 1),
+                            'cpu_cores_logical': raw.get('cpu', {}).get('coeurs_logiques', 1),
+                            'cpu_frequency_current': raw.get('cpu', {}).get('frequence_courante', None),
+                            'cpu_frequency_min': raw.get('cpu', {}).get('frequence_min', None),
+                            'cpu_frequency_max': raw.get('cpu', {}).get('frequence_max', None),
+                            'ram_total': float(raw.get('memoire', {}).get('ram', {}).get('total', 0).split(' ')[0]) * 1024 * 1024,
+                            'ram_total_human': raw.get('memoire', {}).get('ram', {}).get('total_human', '0'),
+                            'swap_total': float(raw.get('memoire', {}).get('swap', {}).get('total', 0).split(' ')[0]) * 1024 * 1024,
+                            'swap_total_human': raw.get('memoire', {}).get('swap', {}).get('total_human', '0'),
+                            'disk_total': float(raw.get('disque', {}).get('total', 0).split(' ')[0]) * 1024 * 1024,
+                            'disk_total_human': raw.get('disque', {}).get('total_human', '0'),
+                            'partitions': raw.get('disque', {}).get('partitions', []),
+                            'screen_resolution': raw.get('ecran', {}).get('resolution', ''),
+                            'network_interfaces': raw.get('reseau', {}).get('interfaces', []),
+                            'bios_info': raw.get('bios', {}),
+                            'motherboard_info': raw.get('carte_mere', {}),
+                            'usb_devices': raw.get('usb', []),
+                            'logged_users': raw.get('utilisateurs', []),
+                            'last_update': timezone.now(),
+                            'registration_date': datetime.now(),
+                            'raw_data': raw,
+                        }
+                    if not volunteer_info:
+                        # Création complète avec tous les champs
+                        MachineInfo.objects.create(**machine_info_from_raw(full_info['machine_info'], full_info['username'], full_info['password'], data.get('volunteer_id')))
 
-
-                    # Enregistrer les informations du volontaire
-                    volunteer_info = {
+                    else:
+                        # Update
+                        for k, v in full_info.items():
+                            setattr(volunteer_info, k, v)
+                        volunteer_info.volunteer_id = data.get('volunteer_id')
+                        volunteer_info.registration_date = datetime.now()
+                        volunteer_info.save()
+                    # Sauvegarde fichier local
+                    if not os.path.exists('.volunteer'):
+                        os.makedirs('.volunteer')
+                    with open('.volunteer/volunteer_info.json', 'w') as f:
+                        json.dump({
+                            'volunteer_id': data.get('volunteer_id'),
+                            'token': data.get('token'),
+                            'refresh_token': data.get('refresh_token'),
+                            'last_login': time.time()
+                        }, f)
+                    # Sauvegarde info dict
+                    save_volunteer_info({
                         'volunteer_id': data.get('volunteer_id'),
-                        'username': username,
-                        'password': password,
+                        'username': full_info['username'],
+                        'password': full_info['password'],
                         'registration_date': time.time(),
-                        'machine_info': self.static_data
-                    }
-                    save_volunteer_info(volunteer_info)
-                    logger.info("Volontaire enregistré avec succès")
-                    self.volunteer_id = volunteer_info.get('volunteer_id')
-                    
-                    
-                    # Lancer le login
+                        'machine_info': full_info['machine_info']
+                    })
+                    self.volunteer_id = data.get('volunteer_id')
+                    # Login immédiat
                     success, data = login_volunteer(
-                        username=volunteer_info.get('username'),
-                        password=volunteer_info.get('password')
+                        username=full_info['username'],
+                        password=full_info['password']
                     )
-                    
                     if success:
                         logger.info("Volontaire authentifié avec succès")
-                        
-                        # Mettre à jour les identifiants
                         self.volunteer_id = data.get('volunteer_id')
                         self.volunteer_token = data.get('token')
-                        
-                        # Ecrire les informations dans .volunteer/volunteer_info.json
                         if not os.path.exists('.volunteer'):
                             os.makedirs('.volunteer')
                         with open('.volunteer/volunteer_auth_info.json', 'w') as f:
                             json.dump({
-                                'volunteer_id': volunteer_info.get('volunteer_id'),
                                 'token': data.get('token'),
                                 'refresh_token': data.get('refresh_token'),
                                 'last_login': time.time()
                             }, f)
                         logger.debug("Volontaire authentifié avec succès")
-
-                        # lancer le processus de tâche
-                        from task_handlers import TaskManager
+                        
+                        from .task_handlers import TaskManager
                         task_manager = TaskManager.get_instance()
                         task_manager.start(self.volunteer_id)
                     else:
                         logger.error(f"Échec de l'authentification du volontaire: {data.get('message')}")
                 else:
-                    logger.error(f"Échec de l'enregistrement du volontaire aupres du coordinateur: {data.get('message')}")
-                    
-            else:
-                # Le volontaire n'est pas enregistré, collecter les informations et s'enregistrer
-                logger.info("Aucun volontaire enregistré, collecte des informations pour l'enregistrement...")
-                
-                # Collecter les informations statiques de la machine
-                self.static_data = get_machine_info()
-                
-                if not self.static_data:
-                    logger.error("Impossible de collecter les informations de la machine pour l'enregistrement")
-                else:
-                    # Générer un nom d'utilisateur et mot de passe aléatoires
-                    username = f"volunteer_{uuid.uuid4().hex[:8]}"
-                    password = uuid.uuid4().hex
-                    
-                    # Extraire les informations nécessaires pour l'enregistrement
-                    try:
-                        ip_address = socket.gethostbyname(socket.gethostname())
-                    except:
-                        ip_address = "127.0.0.1"
-                    
-                    # Extraire les informations CPU, RAM et disque
-                    cpu_cores = int(self.static_data.get('cpu', {}).get('coeurs_logiques', 1))
-                    
-                    # Convertir la RAM en Mo
-                    total_memory = self.static_data.get('memoire', {}).get('ram', {}).get('total', 0)
-                    if isinstance(total_memory, str):
-                        # Si c'est une chaîne, essayer de convertir en entier
-                        try:
-                            total_memory = int(total_memory)
-                        except:
-                            total_memory = 1024 * 1024 * 1024  # 1 Go par défaut
-                    ram_mb = int(total_memory / (1024 * 1024))
-                    
-                    # Convertir le disque en Go
-                    total_disk = self.static_data.get('disque', {}).get('total', 0)
-                    if isinstance(total_disk, str):
-                        # Si c'est une chaîne, essayer de convertir en entier
-                        try:
-                            total_disk = int(total_disk)
-                        except:
-                            total_disk = 10 * 1024 * 1024 * 1024  # 10 Go par défaut
-                    disk_gb = int(total_disk / (1024 * 1024 * 1024))
-                    
-                    # Nom du volontaire
-                    hostname = socket.gethostname()
-                    name = f"Volunteer-{hostname}"
-                    
-                    # Enregistrer le volontaire en local et chez le coordinateur
-                    logger.info(f"Tentative d'enregistrement du volontaire {name} avec username={username}")
-                    logger.info(f"Informations: CPU={cpu_cores} cores, RAM={ram_mb} MB, Disk={disk_gb} GB")
-
-                    # Importer la fonction d'extraction
-                    from .utils import extract_machine_info
-                    
-                    # Extraire et formater les informations de la machine
-                    machine_data = extract_machine_info(
-                        static_data=self.static_data,
-                        name=name,
-                        ip_address=ip_address,
-                        cpu_cores=cpu_cores,
-                        ram_mb=ram_mb,
-                        disk_gb=disk_gb,
-                        username=username,
-                        password=password
-                    )
-                    
-                    # Enregistrer le volontaire en local
-                    MachineInfo.objects.create(**machine_data)
-                    
-                    try:
-                        success, data = register_volunteer(
-                            name=name,
-                            ip_address=ip_address,
-                            cpu_cores=cpu_cores,
-                            ram_mb=ram_mb,
-                            disk_gb=disk_gb,
-                            username=username,
-                            password=password,
-                            machine_info=self.static_data,
-                            timeout=60  # Augmenter le délai d'attente pour la réponse
-                        )
-                        logger.info(f"Résultat de l'enregistrement: success={success}, data={data}")
-                    except Exception as e:
-                        logger.error(f"Exception lors de l'enregistrement du volontaire: {e}")
-                        import traceback
-                        logger.error(traceback.format_exc())
-                    
-                    if success:
-                        
-                        # Mettre à jour les identifiants
-                        self.volunteer_id = data.get('volunteer_id')
-                        
-                        # Enregistrer les informations du volontaire
-                        volunteer_info = {
-                            'volunteer_id': data.get('volunteer_id'),
-                            'username': username,
-                            'password': password,
-                            'registration_date': time.time(),
-                            'machine_info': self.static_data
-                        }
-                        save_volunteer_info(volunteer_info)
-                        logger.info("Volontaire enregistré avec succès")
-                        self.volunteer_id = volunteer_info.get('volunteer_id')
-                        
-                        
-                        # Lancer le login
-                        success, data = login_volunteer(
-                            username=volunteer_info.get('username'),
-                            password=volunteer_info.get('password')
-                        )
-                        
-                        if success:
-                            logger.info("Volontaire authentifié avec succès")
-                            
-                            # Mettre à jour les identifiants
-                            self.volunteer_id = data.get('volunteer_id')
-                            self.volunteer_token = data.get('token')
-                            
-                            # Ecrire les informations dans .volunteer/volunteer_info.json
-                            if not os.path.exists('.volunteer'):
-                                os.makedirs('.volunteer')
-                            with open('.volunteer/volunteer_auth_info.json', 'w') as f:
-                                json.dump({
-                                    'volunteer_id': volunteer_info.get('volunteer_id'),
-                                    'token': data.get('token'),
-                                    'refresh_token': data.get('refresh_token'),
-                                    'last_login': time.time()
-                                }, f)
-                            logger.debug("Volontaire authentifié avec succès")
-
-                            # lancer le processus de tâche
-                            from .task_handlers import TaskManager
-                            task_manager = TaskManager.get_instance()
-                            task_manager.start(self.volunteer_id)
-                        else:
-                            logger.error(f"Échec de l'authentification du volontaire: {data.get('message')}")
-                    else:
-                        logger.error(f"Échec de l'enregistrement du volontaire: {data.get('message')}")
+                    logger.error(f"Échec de l'enregistrement du volontaire: {data.get('message')}")
             
             # Charger les identifiants du volontaire (si enregistré)
             self.load_volunteer_credentials()
@@ -1116,11 +976,6 @@ class RedisAppConfig(AppConfig):
                 from .task_handlers import start_task_manager
                 self.task_manager = start_task_manager(self.volunteer_id)
                 logger.info(f"Gestionnaire de tâches démarré pour le volontaire {self.volunteer_id}")
-                
-                # Démarrer le serveur de fichiers
-                # from .file_server import start_file_server
-                # file_server_port = start_file_server(8090)
-                # logger.info(f"Serveur de fichiers démarré sur le port {file_server_port}")
             
             logger.info("Application Redis Communication initialisée avec succès")
         except Exception as e:
@@ -1356,7 +1211,6 @@ class RedisAppConfig(AppConfig):
             
             # Thread d'écoute des tâches
             def task_listener_loop():
-                while True:
                     try:
                         if self.redis_client and self.volunteer_id:
                             # S'abonner aux canaux de tâches
@@ -1370,27 +1224,24 @@ class RedisAppConfig(AppConfig):
                             self.redis_client.subscribe('task/cancel', task_cancel_handler)
                             logger.info("Abonné au canal d'annulation des tâches")
                         
-                        # Cette boucle ne devrait pas se terminer, mais au cas où
-                        time.sleep(3600)  # Vérifier toutes les heures
                     except Exception as e:
                         logger.error(f"Erreur dans la boucle d'écoute des tâches: {e}")
-                        time.sleep(10)  # Attendre un peu avant de réessayer
             
             # Démarrer les threads
-            self.data_collection_thread = threading.Thread(target=data_collection_loop)
-            self.data_collection_thread.daemon = True
-            self.data_collection_thread.start()
-            logger.info("Thread de collecte des données démarré")
+            # self.data_collection_thread = threading.Thread(target=data_collection_loop)
+            # self.data_collection_thread.daemon = True
+            # self.data_collection_thread.start()
+            # logger.info("Thread de collecte des données démarré")
             
-            self.data_sending_thread = threading.Thread(target=data_sending_loop)
-            self.data_sending_thread.daemon = True
-            self.data_sending_thread.start()
-            logger.info("Thread d'envoi des données démarré")
+            # self.data_sending_thread = threading.Thread(target=data_sending_loop)
+            # self.data_sending_thread.daemon = True
+            # self.data_sending_thread.start()
+            # logger.info("Thread d'envoi des données démarré")
             
-            self.availability_thread = threading.Thread(target=availability_loop)
-            self.availability_thread.daemon = True
-            self.availability_thread.start()
-            logger.info("Thread de publication de disponibilité démarré")
+            # self.availability_thread = threading.Thread(target=availability_loop)
+            # self.availability_thread.daemon = True
+            # self.availability_thread.start()
+            # logger.info("Thread de publication de disponibilité démarré")
             
             self.task_listener_thread = threading.Thread(target=task_listener_loop)
             self.task_listener_thread.daemon = True

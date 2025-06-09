@@ -1,4 +1,4 @@
-# import os
+import os
 import docker
 from docker.errors import NotFound, APIError
 from threading import Lock
@@ -9,7 +9,7 @@ class DockerManager:
 
     def __init__(self):
 
-        # os.environ["DOCKER_HOST"] = "unix:///run/user/1000/docker.sock"
+        os.environ["DOCKER_HOST"] = "unix:///run/user/1000/docker.sock"
         self.client = docker.from_env()
         self.tasks = {}  # task_id: container_id
 
@@ -44,6 +44,7 @@ class DockerManager:
             container = self.client.containers.run(
                 image=image_name,
                 detach=True,
+                name=task_id,
                 cpu_quota=int(cpu_limit * 100000) if cpu_limit else None,
                 mem_limit=mem_limit,
                 **kwargs
@@ -97,6 +98,25 @@ class DockerManager:
             container.stop()
             print(f"Task {task_id} stopped.")
 
+    def update_task_limits(self, task_id, cpu_limit=None, mem_limit=None):
+        container = self.get_container_by_task(task_id)
+        if container:
+            try:
+                container.update(
+                    cpu_quota=int(cpu_limit * 100000) if cpu_limit else None,
+                    mem_limit=mem_limit
+                )
+                print(f"Limits updated for task {task_id}.")
+            except APIError as e:
+                import traceback
+                traceback.print_exc()
+                print(f"Error updating limits for task {task_id}: {e}")
+                return False
+            return True
+        else:
+            print(f"No container found for task {task_id}.")
+            return False
+
     def remove_task(self, task_id):
         container = self.get_container_by_task(task_id)
         if container:
@@ -120,6 +140,7 @@ class DockerManager:
                 container = self.client.containers.get(container_id)
                 result.append({
                     "task_id": task_id,
+                    "name": task_id,
                     "container_id": container.id,
                     "status": container.status,
                     "image": container.image.tags,
@@ -127,6 +148,7 @@ class DockerManager:
             except NotFound:
                 result.append({
                     "task_id": task_id,
+                    "name": task_id,
                     "container_id": container_id,
                     "status": "not found",
                     "image": [],

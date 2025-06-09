@@ -114,23 +114,30 @@ from .models import Task
 def handle_task_action(request, action, task_id):
     if request.method == 'POST':
         try:
+            from redis_communication.task_handlers import TaskManager
+            task_manager = TaskManager.get_instance()
             task = Task.objects.get(task_id=task_id)
-            
             if action == 'pause':
-                # Logique de pause ici
+                task_manager.pause_task(task_id)
                 task.status = 'paused'
-            elif action == 'resume':
-                # Logique de reprise ici
+            elif action == 'replay':
+                task_manager.resume_task(task_id)
                 task.status = 'running'
             elif action == 'suspend':
-                # Logique de suspension ici
+                task_manager.stop_task(task_id)
                 task.status = 'suspended'
             elif action == 'delete':
-                # Logique de suppression ici
+                task_manager.stop_task(task_id)
                 task.delete()
                 return JsonResponse({'message': 'Tâche supprimée'}, status=200)
-
-            task.save()
+            elif action == 'limit_cpu':
+                cpu_quota = int(request.POST.get('cpu_quota', 50000))  # ex: 50000 = 5% CPU
+                task_manager.update_limits(task_id, cpu_quota=cpu_quota)
+            elif action == 'limit_ram':
+                mem_limit = request.POST.get('mem_limit', '500m')  # ex: "500m", "1g"
+                task_manager.update_limits(task_id, mem_limit=mem_limit)
+            else:
+                return JsonResponse({'error': 'Action inconnue'}, status=400)
             return JsonResponse({'message': f'Action {action} effectuée'}, status=200)
         
         except Task.DoesNotExist:
@@ -172,58 +179,40 @@ class MachineInfoView(APIView):
         return Response(infos, status=status.HTTP_200_OK)
 
 
+from django.shortcuts import render
+from .models import MachineInfo, EtatMachine, PreferenceModel, Task, TaskProgress
+from django.db.models import Prefetch
+
+
 def home(request):
-    # Récupérer les informations statics de la machine
-    infos_raw = get_statics_infos()
-    
-    if not infos_raw:
-        infos_raw = {"error": "Failed to retrieve machine information."}
+    # Dernière info machine
+    machine = MachineInfo.objects.order_by('-last_update').first()
+    etat = EtatMachine.objects.filter(machine=machine).order_by('-timestamp').first() if machine else None
+    preferences = PreferenceModel.objects.filter(machine=machine).first() if machine else None
 
-    # Récupérer la liste des conteneurs
-    containers = manager.list_tasks()  # assure-toi que `manager` est bien importé
-    result = [
-        {
-            "id": c['id'],
-            "name": c['name'],
-            "status": c['status'],
-            "image": c['image']
-        } for c in containers
-    ]
+    # Toutes les tâches, avec progression la plus récente
+    tasks = Task.objects.all().order_by('-start_date')
+    for task in tasks:
+        last_progress = task.progress_events.order_by('-timestamp').first()
+        task.progress = last_progress.percentage if last_progress else 0
 
-    # dictionnaire des icônes
-    icon_map = {
-        "volunteer_id": "fa-id-badge",
-        "adresse_mac": "fa-network-wired",
-        "machine_type": "fa-desktop",
-        "system": "fa-cogs",
-        "node_name": "fa-server",
-        "host_name": "fa-server",
-        "os_release": "fa-code-branch",
-        "os_version": "fa-info",
-        "machine_arch": "fa-microchip",
-        "processor_name": "fa-microchip",
-        "cpu_type": "fa-microchip",
-        "cpu_cores": "fa-microchip",
-        "cpu_logical_cores": "fa-microchip",
-        "cpu_frequency": "fa-tachometer-alt",
-        "total_memory": "fa-memory",
-        "screen_resolution": "fa-tv",
-        "total_disk": "fa-hdd"
+    context = {
+        'machine': machine,
+        'etat': etat,
+        'preferences': preferences,
+        'tasks': tasks,
     }
+    return render(request, 'home.html', context)
 
-    # Structurer les infos avec icônes
-    infos = [
-        {
-            "label": key.replace("_", " ").capitalize(),
-            "value": ", ".join(value) if isinstance(value, list) else value,
-            "icon": icon_map.get(key, "fa-info-circle")
-        }
-        for key, value in infos_raw.items()
-    ]
 
-    return render(request, 'home.html', {'infos': infos, 'containers': result})
 
- 
+def tasks(request):
+    tasks = Task.objects.all().order_by('-start_date')
+    
+    for task in tasks:
+        last_progress = task.progress_events.order_by('-timestamp').first()
+        task.progress = last_progress.percentage if last_progress else 0
+    return JsonResponse([{ "id": task.task_id, "progress": task.progress, "name": task.name, "status": task.status } for task in tasks], safe=False)
 
 
 # ---------------------------  Gestion des preferences -----------------  
@@ -319,11 +308,30 @@ def delete_preferences(request):
 
 @csrf_exempt  # Pour tests rapides, sinon gérer le CSRF token côté JS
 def delete_preference(request, id):
-    if request.method == "POST":
+    if request.method == "DELETE":
         pref = get_object_or_404(PreferenceModel, id=id)
         pref.delete()
         return JsonResponse({'status': 'ok'})
     return JsonResponse({'error': 'Méthode non autorisée'}, status=405)
 
+
+
+def preferences_list(request):
+    # Ici, filtrage par machine ou utilisateur si besoin
+    prefs = []
+    for pref in PreferenceModel.objects.all():
+        for jour in pref.jours.all():
+            for plage in jour.plages.all():
+                prefs.append({
+                    "id": plage.id,  # L'id utilisé pour la suppression
+                    "day": jour.jour,
+                    "startTime": plage.heure_debut.strftime('%H:%M'),
+                    "endTime": plage.heure_fin.strftime('%H:%M'),
+                    # Ajoute ici cpu/ram/maxTime si tu les stockes dans PlageHoraire ou ailleurs
+                    "cpu": getattr(plage, "cpu", 100),  # à adapter
+                    "ram": getattr(plage, "ram", 16),   # à adapter
+                    "maxTime": getattr(plage, "max_time", 60)  # à adapter
+                })
+    return JsonResponse(prefs, safe=False)
 
 

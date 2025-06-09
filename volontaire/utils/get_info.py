@@ -247,7 +247,6 @@ def get_static_infos():
         cpu_freq = psutil.cpu_freq()
 
         infos = {
-            "volunteer_id": str(uuid.uuid4()),
             "adresse_mac": get_mac_addresses(),
             "hostname": hostname,
             "os_name": platform.system(),

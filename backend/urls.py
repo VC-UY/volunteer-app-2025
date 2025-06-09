@@ -17,10 +17,7 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path , include
 
-from communication.views import publier_message
-
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path("pubsub/", publier_message),
     path("", include("volontaire.urls"))
 ]

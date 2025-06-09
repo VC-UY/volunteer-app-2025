@@ -17,8 +17,6 @@ from .message import Message
 
 logger = logging.getLogger(__name__)
 
-from channels.layers import get_channel_layer
-from asgiref.sync import async_to_sync
 
 
 # Import des modèles à l'intérieur des fonctions pour éviter les importations circulaires
@@ -66,7 +64,7 @@ class TaskManager:
             logger.warning("Le gestionnaire de tâches est déjà en cours d'exécution")
             return
         
-        self.volunteer_id = volunteer_id
+        self.volunteer_id = str(volunteer_id)
         self.running = True
         
         # S'abonner aux canaux de tâches
@@ -93,7 +91,7 @@ class TaskManager:
         self.redis_client.unsubscribe('task/cancel')
         
         logger.info("Gestionnaire de tâches arrêté")
-    
+
     def handle_task_assignment(self, channel: str, message: Message):
         """
         Gère l'assignation d'une tâche.
@@ -142,9 +140,6 @@ class TaskManager:
             if existing_task:
                 logger.warning(f"Tâche {task_id} déjà reçue, statut actuel: {existing_task.status}")
                 
-                # Si la tâche est déjà terminée ou a échoué, envoyer une mise à jour au manager
-                if existing_task.status in ['completed', 'failed']:
-                    self._send_task_status_update(existing_task)
                 continue
             # for task_data in volunteer_tasks
             # 
@@ -170,11 +165,13 @@ class TaskManager:
 
 
             # Notifier les clients WebSocket
+            from channels.layers import get_channel_layer
+            from asgiref.sync import async_to_sync
             channel_layer = get_channel_layer()
             async_to_sync(channel_layer.group_send)(
                 "task_updates",
                 {
-                    "type": "send_task_update",
+                    "type": "send_add_task",
                     "data": {
                         "task_id": task.task_id,
                         "name": task.name,
@@ -183,6 +180,8 @@ class TaskManager:
                     }
                 }
             )
+
+            logger.info(f"Envoi de l'événement add_task pour la tâche {task.task_id}")
 
 
 
@@ -204,6 +203,24 @@ class TaskManager:
             
             # Envoyer une réponse d'acceptation
             self._accept_task(task)
+
+            # Notifier le frontend de l'acceptation
+            from channels.layers import get_channel_layer
+            from asgiref.sync import async_to_sync
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                "task_updates",
+                {
+                    "type": "send_task_update",
+                    "data": {
+                        "event": "accepted",
+                        "task_id": task.task_id,
+                        "name": task.name,
+                        "status": task.status,
+                        "estimated_execution_time": task.estimated_execution_time,
+                    }
+                }
+            )
             
             # Télécharger les fichiers d'entrée si nécessaires
             if task.input_data and 'files' in task.input_data:
@@ -253,11 +270,28 @@ class TaskManager:
         task.end_date = timezone.now()
         task.save()
         
+        # Notifier le frontend de l'annulation
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            "task_updates",
+            {
+                "type": "send_task_update",
+                "data": {
+                    "event": "cancelled",
+                    "task_id": task.task_id,
+                    "name": task.name,
+                    "status": task.status,
+                }
+            }
+        )
+        
         # Créer un événement de progression pour l'annulation
         TaskProgress.objects.create(
             task=task,
             progress_type='cancel',
-            percentage=task.progress_events.last().percentage if task.progress_events.exists() else 0,
+            percentage=TaskProgress.objects.filter(task=task).order_by('-timestamp').first().percentage if task.progress_events.exists() else 0,
             message="Tâche annulée",
             details={
                 'reason': data.get('reason', 'Annulée par le manager'),
@@ -299,6 +333,23 @@ class TaskManager:
         task.status = 'progress'
         task.start_date = timezone.now()
         task.save()
+        
+        # Notifier le frontend de l'acceptation
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            "task_updates",
+            {
+                "type": "send_task_update",
+                "data": {
+                    "event": "accepted",
+                    "task_id": task.task_id,
+                    "name": task.name,
+                    "status": task.status,
+                }
+            }
+        )
         
         # Créer un événement de progression pour l'acceptation
         TaskProgress.objects.create(
@@ -356,6 +407,23 @@ class TaskManager:
             # Mettre à jour le statut de la tâche
             task.status = 'paused'
             task.save()
+            
+            # Notifier le frontend de la pause
+            from channels.layers import get_channel_layer
+            from asgiref.sync import async_to_sync
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                "task_updates",
+                {
+                    "type": "send_task_update",
+                    "data": {
+                        "event": "paused",
+                        "task_id": task.task_id,
+                        "name": task.name,
+                        "status": task.status,
+                    }
+                }
+            )
             
             # Créer un événement de progression pour la pause
             TaskProgress.objects.create(
@@ -418,6 +486,23 @@ class TaskManager:
             # Mettre à jour le statut de la tâche
             task.status = 'progress'
             task.save()
+            
+            # Notifier le frontend de la reprise
+            from channels.layers import get_channel_layer
+            from asgiref.sync import async_to_sync
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                "task_updates",
+                {
+                    "type": "send_task_update",
+                    "data": {
+                        "event": "resumed",
+                        "task_id": task.task_id,
+                        "name": task.name,
+                        "status": task.status,
+                    }
+                }
+            )
             
             # Créer un événement de progression pour la reprise
             TaskProgress.objects.create(
@@ -482,6 +567,23 @@ class TaskManager:
             task.end_date = timezone.now()
             task.save()
             
+            # Notifier le frontend de l'arrêt
+            from channels.layers import get_channel_layer
+            from asgiref.sync import async_to_sync
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                "task_updates",
+                {
+                    "type": "send_task_update",
+                    "data": {
+                        "event": "stopped",
+                        "task_id": task.task_id,
+                        "name": task.name,
+                        "status": task.status,
+                    }
+                }
+            )
+            
             # Créer un événement de progression pour l'arrêt
             TaskProgress.objects.create(
                 task=task,
@@ -514,6 +616,97 @@ class TaskManager:
             return False
         except Exception as e:
             logger.error(f"Erreur lors de l'arrêt de la tâche {task_id}: {e}")
+            return False
+        
+
+
+    def update_limits(self, task_id, cpu_limit=None, memory_limit=None):
+        """        Met à jour les limites de ressources d'une tâche en cours d'exécution.
+        Args:
+            task_id: ID de la tâche à mettre à jour
+            cpu_limit: Nouvelle limite CPU (float)
+            memory_limit: Nouvelle limite mémoire (str, ex: '512m', '1g')
+        Returns:
+            bool: True si les limites ont été mises à jour avec succès, False sinon
+        """
+
+        from django.apps import apps
+        Task = apps.get_model('volontaire', 'Task')
+        from volontaire.docker_manager import DockerManager
+        
+        try:
+            # Récupérer la tâche
+            task = Task.objects.get(task_id=task_id)
+            
+            # Vérifier que la tâche est en cours d'exécution
+            if task.status not in ['progress', 'paused']:
+                logger.warning(f"Impossible de mettre à jour les limites de la tâche {task_id} car elle n'est pas en cours d'exécution ou en pause")
+                return False
+            
+            # Mettre à jour les limites de ressources
+            docker_manager = DockerManager.get_instance()
+            success = docker_manager.update_task_limits(task_id, cpu_limit, memory_limit)
+            
+
+            if not success:
+                logger.warning(f"Échec de la mise à jour des limites pour la tâche {task_id}")
+                return False
+            
+            # Mettre à jour les informations Docker de la tâche
+            if cpu_limit is not None:
+                task.docker_information['cpu_limit'] = cpu_limit
+            if memory_limit is not None:
+                task.docker_information['memory_limit'] = memory_limit
+            task.save()
+            
+            # Notifier le frontend de la mise à jour des limites
+            from channels.layers import get_channel_layer
+            from asgiref.sync import async_to_sync
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                "task_updates",
+                {
+                    "type": "send_task_update",
+                    "data": {
+                        "event": "limits_updated",
+                        "task_id": task.task_id,
+                        "name": task.name,
+                        "status": task.status,
+                        "cpu_limit": cpu_limit,
+                        "memory_limit": memory_limit,
+                    }
+                }
+            )
+            
+            logger.info(f"Limites mises à jour pour la tâche {task_id}: CPU={cpu_limit}, Mémoire={memory_limit}")
+
+            # Créer un événement de progression pour la mise à jour des limites
+            from django.apps import apps
+            TaskProgress = apps.get_model('volontaire', 'TaskProgress')
+            TaskProgress.objects.create(
+                task_id=task_id,
+                progress_type='update_limits',
+                percentage=100,
+                message="Limites mises à jour"
+            )
+
+            # Envoyer une pubsub de mise à jour des limites
+            from redis_communication.utils import get_volunteer_auth_token
+            self.redis_client.publish('task/status', {
+                'task_id': task.task_id,
+                'volunteer_id': self.volunteer_id,
+                'workflow_id': task.workflow.workflow_id if hasattr(task, 'workflow') and task.workflow else None,
+                'status': 'limits_updated',
+                'timestamp': datetime.now().isoformat(),
+                'cpu_limit': cpu_limit,
+                'memory_limit': memory_limit
+            }, str(uuid.uuid4()), get_volunteer_auth_token(), 'request')
+            return True
+        except Task.DoesNotExist:
+            logger.error(f"Tâche {task_id} introuvable")
+            return False
+        except Exception as e:
+            logger.error(f"Erreur lors de la mise à jour des limites de la tâche {task_id}: {e}")
             return False
     
     def complete_task(self, task_id):
@@ -567,6 +760,23 @@ class TaskManager:
             str(uuid.uuid4()),
             get_volunteer_auth_token(),
             'request')
+            
+            # Notifier le frontend de la complétion
+            from channels.layers import get_channel_layer
+            from asgiref.sync import async_to_sync
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                "task_updates",
+                {
+                    "type": "send_task_update",
+                    "data": {
+                        "event": "completed",
+                        "task_id": task.task_id,
+                        "name": task.name,
+                        "status": task.status,
+                    }
+                }
+            )
             
             # S'abonner au canal task/terminate pour recevoir la notification de fin de tâche
             self.redis_client.subscribe('task/terminate', self._handle_task_terminate)
@@ -645,6 +855,23 @@ class TaskManager:
         task.status = 'Running'
         task.save()
         self.current_task = task
+        
+        # Notifier le frontend du démarrage
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            "task_updates",
+            {
+                "type": "send_task_update",
+                "data": {
+                    "event": "started",
+                    "task_id": task.task_id,
+                    "name": task.name,
+                    "status": task.status,
+                }
+            }
+        )
         
         # Créer un événement de progression pour le démarrage
         TaskProgress.objects.create(
@@ -739,6 +966,23 @@ class TaskManager:
                 task.actual_execution_time = (task.end_date - task.start_date).total_seconds() if task.start_date else 0
                 task.save()
                 
+                # Notifier le frontend de la complétion
+                from channels.layers import get_channel_layer
+                from asgiref.sync import async_to_sync
+                channel_layer = get_channel_layer()
+                async_to_sync(channel_layer.group_send)(
+                    "task_updates",
+                    {
+                        "type": "send_task_update",
+                        "data": {
+                            "event": "completed",
+                            "task_id": task.task_id,
+                            "name": task.name,
+                            "status": task.status,
+                        }
+                    }
+                )
+                
                 # Créer un événement de progression pour la complétion
                 TaskProgress.objects.create(
                     task=task,
@@ -763,13 +1007,26 @@ class TaskManager:
                 task.error_code = str(exit_code)
                 task.save()
                 
-                # Créer un événement de progression pour l'erreur
-                TaskProgress.objects.create(
-                    task=task,
-                    progress_type='error',
-                    percentage=100,
-                    message="Tâche échouée"
+                # Notifier le frontend de l'échec
+                from channels.layers import get_channel_layer
+                from asgiref.sync import async_to_sync
+                channel_layer = get_channel_layer()
+                async_to_sync(channel_layer.group_send)(
+                    "task_updates",
+                    {
+                        "type": "send_task_update",
+                        "data": {
+                            "event": "error",
+                            "task_id": task.task_id,
+                            "name": task.name,
+                            "status": task.status,
+                            "error_message": error,
+                        }
+                    }
                 )
+                
+                # Créer un événement de progression pour l'erreur
+                
                 
                 # Envoyer une notification d'échec
                 self._send_task_failure(task, error)
@@ -784,13 +1041,22 @@ class TaskManager:
             task.error_message = error
             task.save()
             
-            # Créer un événement de progression pour l'erreur
-            TaskProgress.objects.create(
-                task=task,
-                progress_type='error',
-                percentage=100,
-                message="Erreur lors de l'exécution",
-                details={'error': str(e)}
+            # Notifier le frontend de l'échec
+            from channels.layers import get_channel_layer
+            from asgiref.sync import async_to_sync
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                "task_updates",
+                {
+                    "type": "send_task_update",
+                    "data": {
+                        "event": "error",
+                        "task_id": task.task_id,
+                        "name": task.name,
+                        "status": task.status,
+                        "error_message": error,
+                    }
+                }
             )
             
             # Envoyer une notification d'échec
@@ -849,7 +1115,7 @@ class TaskManager:
                     progress = min(95.0, last_progress_value + 5.0)  # Augmenter de 5% à chaque fois
                 
                 # Mettre à jour la progression seulement si elle a changé significativement
-                if progress - last_progress_value >= 5.0:  # Mise à jour tous les 5%
+                if progress - last_progress_value >= 5.0 and progress < 100:  # Mise à jour tous les 5%
                     # Créer un événement de progression
                     TaskProgress.objects.create(
                         task=task,
@@ -862,6 +1128,24 @@ class TaskManager:
                         }
                     )
                     last_progress_value = progress
+                    
+                    # Notifier le frontend de la progression
+                    from channels.layers import get_channel_layer
+                    from asgiref.sync import async_to_sync
+                    channel_layer = get_channel_layer()
+                    async_to_sync(channel_layer.group_send)(
+                        "task_updates",
+                        {
+                            "type": "send_task_progress",
+                            "data": {
+                                "event": "progress",
+                                "task_id": task.task_id,
+                                "name": task.name,
+                                "status": task.status,
+                                "progress": progress,
+                            }
+                        }
+                    )
                     
                     # Envoyer la progression au manager
                     self._send_task_progress(task, progress)
@@ -931,15 +1215,22 @@ class TaskManager:
         # Mettre à jour le statut de la tâche
         task.status = 'downloading'
         task.save()
-        
-        # Créer un événement de progression pour le téléchargement
-        from django.apps import apps
-        TaskProgress = apps.get_model('volontaire', 'TaskProgress')
-        progress = TaskProgress.objects.create(
-            task=task,
-            progress_type='progress',
-            percentage=0,
-            message="Téléchargement des fichiers d'entrée"
+
+        # Notifier le frontend du téléchargement
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            "task_updates",
+            {
+                "type": "send_task_update",
+                "data": {
+                    "event": "downloading",
+                    "task_id": task.task_id,
+                    "name": task.name,
+                    "status": task.status,
+                }
+            }
         )
         
         # Télécharger chaque fichier
@@ -975,9 +1266,7 @@ class TaskManager:
                     'local_path': str(local_path)
                 })
                 
-                # Mettre à jour la progression
-                progress.percentage = ((i + 1) / total_files) * 100
-                progress.save()
+               
                 
             except Exception as e:
                 logger.error(f"Erreur lors du téléchargement du fichier {file_url}: {e}")
@@ -997,15 +1286,6 @@ class TaskManager:
             task.status = 'ready'
             task.local_input_path = str(input_dir)
             task.save()
-            
-            # Créer un événement de progression pour la fin du téléchargement
-            TaskProgress.objects.create(
-                task=task,
-                progress_type='progress',
-                percentage=100,
-                message="Téléchargement des fichiers d'entrée terminé",
-                details={'downloaded_files': downloaded_files}
-            )
             
             logger.info(f"Téléchargement des fichiers d'entrée terminé pour la tâche {task.task_id}")
             return True
@@ -1164,8 +1444,7 @@ class TaskManager:
             },
             str(uuid.uuid4()),
             get_volunteer_auth_token(),
-            'request',
-            real_sender_id=self.volunteer_id
+            'request'
         )
 
 # Gestionnaire pour les messages d'assignation de tâches

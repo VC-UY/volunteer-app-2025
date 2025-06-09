@@ -15,8 +15,12 @@ class MachineInfoManager(models.Manager):
 class MachineInfo(models.Model):
     objects = MachineInfoManager()
     # Identifiants
-    volunteer_id = models.UUIDField(unique=True, editable=False)
+    volunteer_id = models.UUIDField(unique=True,null=True, blank=True, editable=False)
     adresse_mac = models.JSONField(default=list, help_text="Liste des adresses MAC de la machine")
+
+    # Informations d'authentification
+    username = models.CharField(max_length=255, default="", help_text="Nom d'utilisateur")
+    password = models.CharField(max_length=255, default="", help_text="Mot de passe")
     
     # Informations sur le système d'exploitation
     os_name = models.CharField(max_length=50, default="", help_text="Nom du système d'exploitation")
@@ -316,7 +320,7 @@ class Task(models.Model):
     container_id = models.CharField(max_length=255, null=True, blank=True)
 
     def __str__(self):
-        return self.title
+        return self.name
 
 
 class TaskProgress(models.Model):

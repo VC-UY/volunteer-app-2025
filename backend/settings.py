@@ -37,26 +37,15 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    "volontaire",
-    # "communication",
-    'redis_communication',
-    'rest_framework',
+    # Ajoute ici les apps du projet
+    'volontaire',
     'channels',
+    'socket_service',
+    'redis_communication.apps.RedisAppConfig',
+    'rest_framework',
 ]
 
-# Configuration de Django Channels
-# Utiliser Channels comme serveur ASGI
-ASGI_APPLICATION = 'voontaire.asgi.application'
 
-# Redis comme backend pour les WebSockets
-CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels_redis.core.RedisChannelLayer",
-        "CONFIG": {
-            "hosts": [("127.0.0.1", 6379)],
-        },
-    },
-}
 
 
 MIDDLEWARE = [
@@ -89,6 +78,14 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'backend.wsgi.application'
 
+ASGI_APPLICATION = 'backend.asgi.application'
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer",
+    },
+}
+
 
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
@@ -97,6 +94,10 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
+        'OPTIONS': {
+            'timeout': 30,  # Augmente le délai d'attente pour les connexions à la base de données
+            'check_same_thread': False,  # Permet l'accès à la base de données depuis plusieurs threads   
+        }
     }
 }
 

@@ -1,5 +1,5 @@
 from django.apps import AppConfig
 
-class VolontaireConfig(AppConfig):
+class SocketServiceConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
-    name = 'volontaire'
+    name = 'socket_service'

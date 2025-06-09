@@ -24,7 +24,7 @@ def get_volunteer_auth_token():
 
 def extract_machine_info(static_data: Dict[str, Any], name: str = '', ip_address: str = '', 
                         cpu_cores: int = 0, ram_mb: int = 0, disk_gb: int = 0, 
-                        username: str = '', password: str = '') -> Dict[str, Any]:
+                        ) -> Dict[str, Any]:
     """
     Extrait les informations de static_data et les formate pour correspondre au modèle MachineInfo.
     
@@ -144,3 +144,12 @@ def get_manager_login_token():
             return data['token']
     except FileNotFoundError:
         raise NoLoginError("Le fichier .manager/manager_login_info.json n'a pas été trouvé")
+
+def get_volunteer_id():
+    try:
+        with open('.volunteer/volunteer_info.json', 'r') as f:
+            data = json.load(f)
+            return data['volunteer_id']
+    except FileNotFoundError:
+        logger.error("Le fichier .volunteer/volunteer_info.json n'a pas été trouvé donc pas de volunteer_id")
+        return None
