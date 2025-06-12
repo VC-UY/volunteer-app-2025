@@ -751,7 +751,7 @@ class TaskManager:
                 'status': 'completed',
                 'timestamp': datetime.now().isoformat(),
                 'file_server': {
-                    'host': '127.0.0.1',  # Utiliser l'adresse IP du volontaire en production
+                    'host': '192.168.1.155',  # Utiliser l'adresse IP du volontaire en production
                     'port': port,
                     'path': '/files/',
                     'output_files': [f for f in os.listdir(output_dir) if os.path.isfile(os.path.join(output_dir, f))]
@@ -829,6 +829,9 @@ class TaskManager:
                 task = Task.objects.get(task_id=task_id)
                 task.status = 'terminated'
                 task.save()
+
+                # Notifier le frontend de la fin de la tache
+                
                 logger.info(f"Tâche {task_id} marquée comme terminée")
             except Task.DoesNotExist:
                 logger.error(f"Tâche {task_id} introuvable")
@@ -1272,10 +1275,13 @@ class TaskManager:
                 logger.error(f"Erreur lors du téléchargement du fichier {file_url}: {e}")
                 
                 # Créer un événement d'erreur
+                from django.apps import apps
+                TaskProgress = apps.get_model('volontaire', 'TaskProgress')
+                # Enregistrer l'erreur dans la base de données
                 TaskProgress.objects.create(
                     task=task,
                     progress_type='error',
-                    percentage=progress.percentage,
+                    percentage=0,
                     message=f"Erreur lors du téléchargement du fichier {file_path}",
                     details={'error': str(e)}
                 )
@@ -1295,10 +1301,12 @@ class TaskManager:
             task.save()
             
             # Créer un événement d'erreur
+            from django.apps import apps
+            TaskProgress = apps.get_model('volontaire', 'TaskProgress')
             TaskProgress.objects.create(
                 task=task,
                 progress_type='error',
-                percentage=progress.percentage,
+                percentage=0,
                 message=f"Téléchargement incomplet: {len(downloaded_files)}/{total_files} fichiers téléchargés",
                 details={'downloaded_files': downloaded_files}
             )

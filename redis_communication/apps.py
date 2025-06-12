@@ -768,13 +768,14 @@ class RedisAppConfig(AppConfig):
             
             # Récupérer ou créer l'instance du client
             self.redis_client = RedisClient.get_instance()
+            if not self.redis_client.running:
+                self.redis_client.start()
             
             # Enregistrer les gestionnaires par défaut
             for channel, handler in DEFAULT_HANDLERS.items():
                 self.redis_client.subscribe(channel, handler)
             
-            if not self.redis_client.running:
-                self.redis_client.start()
+            
             
             # ========== Unification de la collecte et de l'enregistrement volontaire ==========
             from volontaire.models import MachineInfo
