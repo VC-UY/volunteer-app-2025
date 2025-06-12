@@ -153,3 +153,20 @@ def get_volunteer_id():
     except FileNotFoundError:
         logger.error("Le fichier .volunteer/volunteer_info.json n'a pas été trouvé donc pas de volunteer_id")
         return None
+    
+
+
+
+
+def get_local_ip():
+    try:
+        # Connexion fictive pour obtenir l'IP utilisée sur le réseau local
+        import socket
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))  
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception as e:
+        logger.error(f"Erreur lors de la récupération de l'IP locale : {e}")
+        return None

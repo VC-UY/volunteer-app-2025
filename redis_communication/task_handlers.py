@@ -744,6 +744,7 @@ class TaskManager:
             
             # Envoyer une notification de complétion avec les informations du serveur de fichiers
             from redis_communication.utils import get_volunteer_auth_token
+            from redis_communication.utils import get_local_ip
             self.redis_client.publish('task/status', {
                 'task_id': task.task_id,
                 'volunteer_id': self.volunteer_id,
@@ -751,7 +752,7 @@ class TaskManager:
                 'status': 'completed',
                 'timestamp': datetime.now().isoformat(),
                 'file_server': {
-                    'host': '192.168.1.155',  # Utiliser l'adresse IP du volontaire en production
+                    'host': get_local_ip(),  # Utiliser l'adresse IP du volontaire en production
                     'port': port,
                     'path': '/files/',
                     'output_files': [f for f in os.listdir(output_dir) if os.path.isfile(os.path.join(output_dir, f))]
@@ -831,7 +832,7 @@ class TaskManager:
                 task.save()
 
                 # Notifier le frontend de la fin de la tache
-                
+
                 logger.info(f"Tâche {task_id} marquée comme terminée")
             except Task.DoesNotExist:
                 logger.error(f"Tâche {task_id} introuvable")
