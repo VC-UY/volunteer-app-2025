@@ -88,11 +88,16 @@ target/
 *.log
 *.pot
 *.pyc
+*.pyo
+*.pyd
+*.sqlite3
+*.log
 __pycache__/
 local_settings.py
 
 .env
 db.sqlite3
 venv/
-
+exp-env
+installers
 

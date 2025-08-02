@@ -781,26 +781,22 @@ class RedisAppConfig(AppConfig):
             from volontaire.models import MachineInfo
             def collect_full_volunteer_info(existing_info=None):
                 static_data = get_machine_info()
-                hostname = static_data.get('hostname') or (existing_info.hostname if existing_info and hasattr(existing_info, 'hostname') else socket.gethostname())
-                try:
-                    ip_address = socket.gethostbyname(socket.gethostname())
-                except:
-                    ip_address = "127.0.0.1"
+                logger.info(f"Données statiques collectées: {static_data['disque']}, {static_data['memoire']}")
+                from .utils import get_local_ip
+                ip_address = get_local_ip()
+                hostname = static_data.get('os', {}).get('hostname', socket.gethostname())
                 cpu_cores = int(static_data.get('cpu', {}).get('coeurs_logiques', 1))
-                total_memory = static_data.get('memoire', {}).get('ram', {}).get('total', 0)
-                if isinstance(total_memory, str):
-                    try:
-                        total_memory = int(total_memory)
-                    except:
-                        total_memory = 1024 * 1024 * 1024
-                ram_mb = int(total_memory / (1024 * 1024))
-                total_disk = static_data.get('disque', {}).get('total', 0)
-                if isinstance(total_disk, str):
-                    try:
-                        total_disk = int(total_disk)
-                    except:
-                        total_disk = 10 * 1024 * 1024 * 1024
-                disk_gb = int(total_disk / (1024 * 1024 * 1024))
+                total_memory = static_data.get('memoire', {}).get('ram', {}).get('total', '0 GB')
+                try:
+                    ram_mb = float(total_memory.split(' ')[0])
+                except:
+                    ram_mb = 1  # Default to 1 GB if parsing fails
+
+                total_disk = static_data.get('disque', {}).get('total', '0 GB')
+                try:
+                    disk_gb = float(total_disk.split(' ')[0])
+                except:
+                    disk_gb = 10  # Default to 10 GB if parsing fails
                 username = (existing_info.username if existing_info and hasattr(existing_info, 'username') and existing_info.username else f"volunteer_{uuid.uuid4().hex[:8]}")
                 password = (existing_info.password if existing_info and hasattr(existing_info, 'password') and existing_info.password else uuid.uuid4().hex)
                 return {
@@ -816,7 +812,6 @@ class RedisAppConfig(AppConfig):
 
             logger.info("Vérification de l'enregistrement du volontaire...")
             volunteer_info = MachineInfo.objects.get_last_inserted()
-            logger.info(f"Informations du volontaire: {volunteer_info}")
 
             # Cas 1 : Volontaire déjà enregistré (avec volunteer_id)
             if volunteer_info and volunteer_info.volunteer_id:
@@ -856,7 +851,8 @@ class RedisAppConfig(AppConfig):
             else:
                 # Cas 2 ou 3 : Volontaire non enregistré ou sans volunteer_id
                 full_info = collect_full_volunteer_info(volunteer_info)
-                logger.info(f"[ENREGISTREMENT] Données envoyées au coordinateur : name={full_info['hostname']}, ip_address={full_info['ip_address']}, cpu_cores={full_info['cpu_cores']}, ram_mb={full_info['ram_mb']}, disk_gb={full_info['disk_gb']}, username={full_info['username']}, password={full_info['password']}, machine_info={json.dumps(full_info['machine_info'], indent=2, ensure_ascii=False)}")
+                logger.info(f"[ENREGISTREMENT] Données envoyées au coordinateur : name={full_info['hostname']}, ip_address={full_info['ip_address']}, cpu_cores={full_info['cpu_cores']}, ram_mb={full_info['ram_mb']}, disk_gb={full_info['disk_gb']}, username={full_info['username']}, password={full_info['password']}")
+                
                 success, data = register_volunteer(
                     name=full_info['hostname'],
                     ip_address=full_info['ip_address'],

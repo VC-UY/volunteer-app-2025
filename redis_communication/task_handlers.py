@@ -141,13 +141,7 @@ class TaskManager:
                 logger.warning(f"Tâche {task_id} déjà reçue, statut actuel: {existing_task.status}")
                 
                 continue
-            # for task_data in volunteer_tasks
-            # 
-            # 
-            #  afficher les informations dans le frontend
-            # 
-            # 
-            # 
+
             # Créer une nouvelle tâche
             task = Task(
                 task_id=str(task_id),
@@ -906,14 +900,14 @@ class TaskManager:
             # Préparer les volumes pour monter les fichiers d'entrée/sortie
             volumes = {}
             if hasattr(task, 'local_input_path') and task.local_input_path:
-                volumes[task.local_input_path] = {'bind': '/app/input', 'mode': 'ro'}
+                volumes[task.local_input_path] = {'bind': '/input', 'mode': 'ro'}
             
             # Créer un répertoire de sortie
             import os
             from pathlib import Path
             output_dir = Path(f"{TASKS_DIR}/{task.task_id}/output")
             output_dir.mkdir(parents=True, exist_ok=True)
-            volumes[str(output_dir)] = {'bind': '/app/output', 'mode': 'rw'}
+            volumes[str(output_dir)] = {'bind': '/output', 'mode': 'rw'}
             
             # Démarrer le conteneur Docker
             logger.error(f"Démarrage du conteneur Docker pour la tâche {task.task_id} avec l'image {image_name}")
@@ -953,6 +947,22 @@ class TaskManager:
             exit_code = container.attrs.get('State', {}).get('ExitCode', -1)
             
             if exit_code == 0:
+                from channels.layers import get_channel_layer
+                from asgiref.sync import async_to_sync
+                channel_layer = get_channel_layer()
+                async_to_sync(channel_layer.group_send)(
+                        "task_updates",
+                        {
+                            "type": "send_task_progress",
+                            "data": {
+                                "event": "progress",
+                                "task_id": task.task_id,
+                                "name": task.name,
+                                "status": task.status,
+                                "progress": 100,
+                            }
+                        }
+                    )
                 # Tâche réussie
                 result = {
                     'stdout': stdout[-1000:],  # Limiter la taille de la sortie
@@ -971,9 +981,7 @@ class TaskManager:
                 task.save()
                 
                 # Notifier le frontend de la complétion
-                from channels.layers import get_channel_layer
-                from asgiref.sync import async_to_sync
-                channel_layer = get_channel_layer()
+                
                 async_to_sync(channel_layer.group_send)(
                     "task_updates",
                     {
@@ -1113,13 +1121,13 @@ class TaskManager:
                 # Calculer la progression basée sur le temps écoulé et le temps estimé
                 elapsed_time = time.time() - start_time
                 if task.estimated_execution_time and task.estimated_execution_time > 0:
-                    progress = min(95.0, (elapsed_time / task.estimated_execution_time) * 100.0)
+                    progress = round(min(98.0, (elapsed_time / task.estimated_execution_time) * 100.0), 2)
                 else:
                     # Si pas de temps estimé, incrémenter progressivement jusqu'à 95%
-                    progress = min(95.0, last_progress_value + 5.0)  # Augmenter de 5% à chaque fois
+                    progress = min(98.0, last_progress_value + 2.0)  # Augmenter de 2% à chaque fois
                 
                 # Mettre à jour la progression seulement si elle a changé significativement
-                if progress - last_progress_value >= 5.0 and progress < 100:  # Mise à jour tous les 5%
+                if progress - last_progress_value >= 2.0 and progress < 100:  # Mise à jour tous les 2%
                     # Créer un événement de progression
                     TaskProgress.objects.create(
                         task=task,
