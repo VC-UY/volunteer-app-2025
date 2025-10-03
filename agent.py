@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Agent de surveillance système - Collecte de données
-Écris par Delibes
+Écrit par Delibes
 Fonctionne sur Kali Linux et Windows
 """
 
@@ -15,12 +15,19 @@ import uuid
 import psutil
 from datetime import datetime, timedelta
 import subprocess
-import requests
-import threading
-import sys
 import shutil
 import logging
-from typing import Dict, Any, List, Optional, Tuple
+import glob
+import gzip
+import backoff
+import traceback
+from typing import Dict, Any, List, Optional
+
+try:
+    import GPUtil
+    GPU_UTIL_AVAILABLE = True
+except ImportError:
+    GPU_UTIL_AVAILABLE = False
 
 # Configuration du logging
 logging.basicConfig(
@@ -29,120 +36,129 @@ logging.basicConfig(
     filename='system_monitor.log'
 )
 
-# Adresse IP et port du serveur
-SERVER_HOST = '192.168.203.12'
+# Configuration
+SERVER_HOST = '192.168.1.100'
 SERVER_PORT = 12345
-
-# Intervalle de collecte et d'envoi (en secondes)
-COLLECTION_INTERVAL = 10  # Collecte chaque 10 secondes
-SEND_INTERVAL = 30  # Envoi toutes les 30 secondes
-
-# Répertoire de stockage des données
+COLLECTION_INTERVAL = 2
+SEND_INTERVAL = 30
 DATA_DIR = "data"
+ID_FILE = "machine_id.txt"
+RESOURCE_THRESHOLD = 80
+STORAGE_LIMIT = 200 * 1024 * 1024  # 200 Mo
+FILES_PER_BATCH = 5
+BATCH_PAUSE = 3  # Pause de 3s toutes les 5 fichiers
 
-# Vérifier si le répertoire existe, sinon le créer
+# Création du répertoire de données
 if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
 
-# Variable globale pour le compteur de fichiers
-file_counter = 0
-
-# Identifiant unique de la machine (utilisé pour le nom du fichier JSON)
-MACHINE_ID = str(uuid.getnode())
-
-# Seuil d'utilisation des ressources (en pourcentage)
-RESOURCE_THRESHOLD = 80  # 80% d'utilisation
-
-# Temps de démarrage du système
+# Variables globales
+file_counter = 1
+initial_data_saved = False
 system_boot_time = datetime.fromtimestamp(psutil.boot_time())
-
-# Heure de démarrage du script
 script_start_time = datetime.now()
-
-# Dernière heure d'arrêt (si disponible)
 last_shutdown_time = None
 
-# Fonction pour obtenir des informations sur les utilisateurs connectés
+def check_dependencies():
+    """Vérifie les dépendances système."""
+    required_commands = ['dmidecode', 'xrandr', 'sensors']
+    missing = [cmd for cmd in required_commands if shutil.which(cmd) is None]
+    if missing:
+        logging.warning(f"Dépendances manquantes: {', '.join(missing)}")
+
+def get_machine_id() -> Optional[str]:
+    """Récupère l'ID machine depuis le fichier."""
+    try:
+        if os.path.exists(ID_FILE):
+            with open(ID_FILE, 'r') as f:
+                return f.read().strip()
+        return None
+    except Exception as e:
+        logging.error(f"Erreur lecture ID machine: {e}\n{traceback.format_exc()}")
+        return None
+
+def save_machine_id(machine_id: str):
+    """Sauvegarde l'ID machine dans un fichier."""
+    try:
+        with open(ID_FILE, 'w') as f:
+            f.write(machine_id)
+        logging.info(f"ID machine {machine_id} sauvegardé dans {ID_FILE}")
+    except Exception as e:
+        logging.error(f"Erreur sauvegarde ID machine: {e}\n{traceback.format_exc()}")
+
+def get_next_filename() -> str:
+    """Trouve le prochain nom de fichier disponible."""
+    global file_counter
+    while os.path.exists(f"{DATA_DIR}/{file_counter}.json.gz"):
+        file_counter += 1
+    return f"{DATA_DIR}/{file_counter}.json.gz"
+
+def reset_file_counter():
+    """Réinitialise le compteur de fichiers."""
+    global file_counter
+    file_counter = 1
+    while os.path.exists(f"{DATA_DIR}/{file_counter}.json.gz"):
+        file_counter += 1
+    logging.info(f"Compteur de fichiers réinitialisé à {file_counter}")
+
 def get_logged_users() -> List[Dict[str, str]]:
-    """Récupère la liste des utilisateurs connectés au système."""
+    """Récupère la liste des utilisateurs connectés."""
     users = []
-    for user in psutil.users():
-        users.append({
-            "username": user.name,
-            "terminal": user.terminal,
-            "host": user.host,
-            "started": datetime.fromtimestamp(user.started).strftime("%Y-%m-%d %H:%M:%S"),
-            "pid": user.pid if hasattr(user, 'pid') else None
-        })
+    try:
+        for user in psutil.users():
+            users.append({
+                "username": user.name,
+                "terminal": user.terminal,
+                "host": user.host,
+                "started": datetime.fromtimestamp(user.started).strftime("%Y-%m-%d %H:%M:%S"),
+                "pid": user.pid if hasattr(user, 'pid') else None
+            })
+    except Exception as e:
+        logging.error(f"Erreur utilisateurs connectés: {e}\n{traceback.format_exc()}")
     return users
 
-# Fonction pour obtenir la résolution d'écran
 def get_screen_resolution() -> Optional[str]:
-    """Récupère la résolution d'écran du système."""
-    resolution = None
+    """Récupère la résolution d'écran."""
     try:
         if platform.system() == "Windows":
             import ctypes
             user32 = ctypes.windll.user32
             width = user32.GetSystemMetrics(0)
             height = user32.GetSystemMetrics(1)
-            resolution = f"{width}x{height}"
+            return f"{width}x{height}"
         elif platform.system() == "Linux":
-            # Tenter d'utiliser xrandr sur Linux
             cmd = "xrandr | grep ' connected' | head -n 1 | awk '{print $3}' | cut -d'+' -f1"
-            try:
-                resolution = subprocess.check_output(cmd, shell=True).decode().strip()
-            except subprocess.SubprocessError:
-                resolution = "Non disponible"
+            return subprocess.check_output(cmd, shell=True).decode().strip()
     except Exception as e:
-        logging.error(f"Erreur lors de la récupération de la résolution d'écran: {e}")
-        resolution = "Non disponible"
-    return resolution
+        logging.error(f"Erreur résolution écran: {e}\n{traceback.format_exc()}")
+        return "Non disponible"
 
-# Fonction pour déterminer le type de machine
-def get_machine_type() -> str:
-    """Détermine si la machine est un ordinateur de bureau, un portable, etc."""
-    system = platform.system()
-    if system == "Windows":
-        try:
-            # Vérifier si c'est un portable sur Windows
-            import ctypes
-            power_status = ctypes.c_int()
-            ctypes.windll.kernel32.GetSystemPowerStatus(ctypes.byref(power_status))
-            if power_status.value & 0x8:  # Un bit spécifique indique une batterie
-                return "Portable"
-            return "PC de bureau"
-        except Exception:
-            # Méthode alternative: vérifier la présence d'une batterie
+def get_machine_type() -> int:
+    """Détermine si la machine est un portable (0) ou un desktop (1)."""
+    try:
+        system = platform.system()
+        if system == "Windows":
             if hasattr(psutil, "sensors_battery") and psutil.sensors_battery():
-                return "Portable"
-            return "PC de bureau"
-    elif system == "Linux":
-        # Vérifier si c'est un portable sur Linux
-        if os.path.exists("/sys/class/power_supply/BAT0") or os.path.exists("/sys/class/power_supply/BAT1"):
-            return "Portable"
-        if "Macbook" in platform.node() or "MacBook" in platform.node():
-            return "MacBook"
-        return "PC de bureau"
-    elif system == "Darwin":
-        model = subprocess.getoutput("sysctl -n hw.model")
-        if "MacBook" in model:
-            return "MacBook"
-        elif "iMac" in model:
-            return "iMac"
-        else:
-            return "Mac"
-    else:
-        return "Indéterminé"
+                return 0
+            return 1
+        elif system == "Linux":
+            if os.path.exists("/sys/class/power_supply/BAT0") or os.path.exists("/sys/class/power_supply/BAT1"):
+                return 0
+            return 1
+        elif system == "Darwin":
+            model = subprocess.getoutput("sysctl -n hw.model")
+            return 0 if "MacBook" in model else 1
+        return 1
+    except Exception as e:
+        logging.error(f"Erreur type machine: {e}\n{traceback.format_exc()}")
+        return 1
 
-# Fonction pour obtenir les informations sur le BIOS et la carte mère
-def get_bios_motherboard_info() -> Dict[str, str]:
-    """Récupère les informations sur le BIOS et la carte mère."""
-    bios_info = {"BIOS": "Non disponible", "Carte mère": "Non disponible"}
-    
-    if platform.system() == "Windows":
-        try:
-            # Utiliser WMI pour obtenir des informations sur le BIOS
+def get_bios_motherboard_info() -> Dict[str, Any]:
+    """Récupère les informations BIOS et carte mère."""
+    bios_info = {"BIOS": {"Fabricant": "Non disponible", "Version": "Non disponible", "Date": "Non disponible"},
+                 "Carte mère": {"Fabricant": "Non disponible", "Modèle": "Non disponible"}}
+    try:
+        if platform.system() == "Windows":
             import wmi
             c = wmi.WMI()
             for bios in c.Win32_BIOS():
@@ -151,346 +167,499 @@ def get_bios_motherboard_info() -> Dict[str, str]:
                     "Version": bios.Version,
                     "Date": bios.ReleaseDate
                 }
-            
             for board in c.Win32_BaseBoard():
                 bios_info["Carte mère"] = {
                     "Fabricant": board.Manufacturer,
-                    "Modèle": board.Product,
-                    "SerialNumber": board.SerialNumber
+                    "Modèle": board.Product
                 }
-        except Exception as e:
-            logging.error(f"Erreur lors de la récupération des informations BIOS/Carte mère sur Windows: {e}")
-    
-    elif platform.system() == "Linux":
-        try:
-            # Essayer d'abord sans sudo
+        elif platform.system() == "Linux":
+            # Utiliser /sys/class/dmi/id/ pour éviter les permissions root
+            if os.path.exists('/sys/class/dmi/id/bios_vendor'):
+                with open('/sys/class/dmi/id/bios_vendor', 'r') as f:
+                    bios_info["BIOS"]["Fabricant"] = f.read().strip()
+            if os.path.exists('/sys/class/dmi/id/bios_version'):
+                with open('/sys/class/dmi/id/bios_version', 'r') as f:
+                    bios_info["BIOS"]["Version"] = f.read().strip()
+            if os.path.exists('/sys/class/dmi/id/bios_date'):
+                with open('/sys/class/dmi/id/bios_date', 'r') as f:
+                    bios_info["BIOS"]["Date"] = f.read().strip()
+            if os.path.exists('/sys/class/dmi/id/board_vendor'):
+                with open('/sys/class/dmi/id/board_vendor', 'r') as f:
+                    bios_info["Carte mère"]["Fabricant"] = f.read().strip()
+            if os.path.exists('/sys/class/dmi/id/board_name'):
+                with open('/sys/class/dmi/id/board_name', 'r') as f:
+                    bios_info["Carte mère"]["Modèle"] = f.read().strip()
+            # Essayer dmidecode en dernier recours
             try:
-                # Utiliser dmidecode pour obtenir des informations sur le BIOS
-                bios_output = subprocess.check_output("dmidecode -t bios", shell=True).decode()
-                vendor = next((line.split("Vendor:")[1].strip() for line in bios_output.splitlines() if "Vendor:" in line), "Non disponible")
-                version = next((line.split("Version:")[1].strip() for line in bios_output.splitlines() if "Version:" in line), "Non disponible")
-                release_date = next((line.split("Release Date:")[1].strip() for line in bios_output.splitlines() if "Release Date:" in line), "Non disponible")
-                bios_info["BIOS"] = {"Fabricant": vendor, "Version": version, "Date de sortie": release_date}
-                
-                # Utiliser dmidecode pour obtenir des informations sur la carte mère
-                board_output = subprocess.check_output("dmidecode -t baseboard", shell=True).decode()
-                manufacturer = next((line.split("Manufacturer:")[1].strip() for line in board_output.splitlines() if "Manufacturer:" in line), "Non disponible")
-                product = next((line.split("Product Name:")[1].strip() for line in board_output.splitlines() if "Product Name:" in line), "Non disponible")
-                bios_info["Carte mère"] = {"Fabricant": manufacturer, "Modèle": product}
-            except (subprocess.CalledProcessError, PermissionError) as e:
-                # Si l'exécution sans sudo échoue, utiliser des méthodes alternatives
-                logging.warning(f"Impossible d'exécuter dmidecode sans privilèges: {e}")
-                
-                # Méthode alternative pour obtenir des informations sur le système
-                # Utiliser /sys/class/dmi/id/ qui est souvent accessible sans privilèges
-                try:
-                    if os.path.exists('/sys/class/dmi/id/bios_vendor'):
-                        with open('/sys/class/dmi/id/bios_vendor', 'r') as f:
-                            vendor = f.read().strip()
-                    if os.path.exists('/sys/class/dmi/id/bios_version'):
-                        with open('/sys/class/dmi/id/bios_version', 'r') as f:
-                            version = f.read().strip()
-                    if os.path.exists('/sys/class/dmi/id/bios_date'):
-                        with open('/sys/class/dmi/id/bios_date', 'r') as f:
-                            release_date = f.read().strip()
-                    
-                    bios_info["BIOS"] = {"Fabricant": vendor if 'vendor' in locals() else "Non disponible", 
-                                      "Version": version if 'version' in locals() else "Non disponible", 
-                                      "Date de sortie": release_date if 'release_date' in locals() else "Non disponible"}
-                    
-                    # Informations sur la carte mère
-                    if os.path.exists('/sys/class/dmi/id/board_vendor'):
-                        with open('/sys/class/dmi/id/board_vendor', 'r') as f:
-                            manufacturer = f.read().strip()
-                    if os.path.exists('/sys/class/dmi/id/board_name'):
-                        with open('/sys/class/dmi/id/board_name', 'r') as f:
-                            product = f.read().strip()
-                    
-                    bios_info["Carte mère"] = {"Fabricant": manufacturer if 'manufacturer' in locals() else "Non disponible", 
-                                           "Modèle": product if 'product' in locals() else "Non disponible"}
-                except Exception as e2:
-                    logging.warning(f"Méthode alternative pour obtenir les informations BIOS/Carte mère a échoué: {e2}")
-                    # Laisser les valeurs par défaut
-            except:
-                pass
-        except Exception as e:
-            logging.error(f"Erreur lors de la récupération des informations BIOS/Carte mère sur Linux: {e}")
-    
+                bios_output = subprocess.check_output("dmidecode -t bios", shell=True, stderr=subprocess.DEVNULL).decode()
+                bios_info["BIOS"] = {
+                    "Fabricant": next((line.split("Vendor:")[1].strip() for line in bios_output.splitlines() if "Vendor:" in line), bios_info["BIOS"]["Fabricant"]),
+                    "Version": next((line.split("Version:")[1].strip() for line in bios_output.splitlines() if "Version:" in line), bios_info["BIOS"]["Version"]),
+                    "Date": next((line.split("Release Date:")[1].strip() for line in bios_output.splitlines() if "Release Date:" in line), bios_info["BIOS"]["Date"])
+                }
+                board_output = subprocess.check_output("dmidecode -t baseboard", shell=True, stderr=subprocess.DEVNULL).decode()
+                bios_info["Carte mère"] = {
+                    "Fabricant": next((line.split("Manufacturer:")[1].strip() for line in board_output.splitlines() if "Manufacturer:" in line), bios_info["Carte mère"]["Fabricant"]),
+                    "Modèle": next((line.split("Product Name:")[1].strip() for line in board_output.splitlines() if "Product Name:" in line), bios_info["Carte mère"]["Modèle"])
+                }
+            except (subprocess.CalledProcessError, PermissionError):
+                logging.warning("dmidecode non accessible, utilisant valeurs par défaut")
+    except Exception as e:
+        logging.error(f"Erreur BIOS: {e}\n{traceback.format_exc()}")
     return bios_info
 
-# Fonction pour obtenir les informations sur les périphériques USB
 def get_usb_devices() -> List[Dict[str, str]]:
-    """Récupère les informations sur les périphériques USB connectés."""
+    """Récupère les périphériques USB."""
     usb_devices = []
-    
-    if platform.system() == "Windows":
-        try:
+    try:
+        if platform.system() == "Windows":
             import wmi
             c = wmi.WMI()
             for device in c.Win32_USBControllerDevice():
-                try:
-                    dependent = device.Dependent
-                    if dependent:
-                        dev_info = {}
-                        if hasattr(dependent, 'DeviceID'):
-                            dev_info["ID"] = dependent.DeviceID
-                        if hasattr(dependent, 'Description'):
-                            dev_info["Description"] = dependent.Description
-                        if dev_info:
-                            usb_devices.append(dev_info)
-                except:
-                    pass
-        except Exception as e:
-            logging.error(f"Erreur lors de la récupération des périphériques USB sur Windows: {e}")
-    
-    elif platform.system() == "Linux":
-        try:
+                dependent = device.Dependent
+                if dependent and hasattr(dependent, 'Description'):
+                    usb_devices.append({"Description": dependent.Description})
+        elif platform.system() == "Linux":
             usb_output = subprocess.check_output("lsusb", shell=True).decode()
             for line in usb_output.strip().split('\n'):
                 if line:
                     usb_devices.append({"Description": line})
-        except Exception as e:
-            logging.error(f"Erreur lors de la récupération des périphériques USB sur Linux: {e}")
-    
+    except Exception as e:
+        logging.error(f"Erreur USB: {e}\n{traceback.format_exc()}")
     return usb_devices
 
-# Fonction pour obtenir les informations sur le GPU NVIDIA
 def get_gpu_info() -> Dict[str, Any]:
-    """Récupère les informations sur le GPU (NVIDIA)."""
+    """Récupère les informations GPU."""
     gpu_info = {"Disponible": False}
-    
-    try:
-        if platform.system() == "Windows":
-            try:
-                import wmi
-                nvidia_query = "SELECT * FROM Win32_VideoController WHERE Name LIKE '%NVIDIA%'"
-                c = wmi.WMI()
-                for gpu in c.query(nvidia_query):
-                    gpu_info = {
-                        "Disponible": True,
-                        "Nom": gpu.Name,
-                        "RAM": f"{int(int(gpu.AdapterRAM) / (1024**2))} MB" if hasattr(gpu, 'AdapterRAM') else "Non disponible",
-                        "DriverVersion": gpu.DriverVersion if hasattr(gpu, 'DriverVersion') else "Non disponible"
-                    }
-                    break
-            except Exception as e:
-                logging.error(f"Erreur lors de la récupération des infos GPU via WMI: {e}")
-        
-        # Essayer nvidia-smi sur les deux plateformes
+    if GPU_UTIL_AVAILABLE:
         try:
-            nvidia_output = subprocess.check_output("nvidia-smi --query-gpu=name,memory.total,utilization.gpu,temperature.gpu --format=csv,noheader", shell=True).decode().strip()
-            if nvidia_output:
-                parts = nvidia_output.split(', ')
-                if len(parts) >= 4:
-                    gpu_info = {
-                        "Disponible": True,
-                        "Nom": parts[0],
-                        "RAM": parts[1],
-                        "Utilisation": parts[2],
-                        "Température": parts[3]
-                    }
-        except Exception:
-            # Si nvidia-smi n'est pas disponible, on conserve les informations déjà récupérées
-            pass
-            
-    except Exception as e:
-        logging.error(f"Erreur lors de la récupération des informations GPU: {e}")
-    
+            gpus = GPUtil.getGPUs()
+            if gpus:
+                gpu = gpus[0]
+                gpu_info = {
+                    "Disponible": True,
+                    "Nom": gpu.name,
+                    "RAM": f"{gpu.memoryTotal} MB",
+                    "Utilisation": f"{gpu.load * 100:.1f}%",
+                    "Température": f"{gpu.temperature}°C"
+                }
+        except Exception as e:
+            logging.error(f"Erreur GPUtil: {e}\n{traceback.format_exc()}")
     return gpu_info
 
-# Fonction pour obtenir les informations sur les interfaces réseau
 def get_network_interfaces() -> List[Dict[str, Any]]:
-    """Récupère les informations sur les interfaces réseau."""
+    """Récupère les interfaces réseau."""
     network_interfaces = []
-    
     try:
-        for interface_name, interface_addresses in psutil.net_if_addrs().items():
-            interface_info = {"nom": interface_name, "adresses": []}
-            
-            for addr in interface_addresses:
+        for name, addrs in psutil.net_if_addrs().items():
+            interface_info = {"nom": name, "adresses": []}
+            for addr in addrs:
                 address_info = {}
-                if addr.family == socket.AF_INET:  # IPv4
+                if addr.family == socket.AF_INET:
                     address_info["type"] = "IPv4"
                     address_info["adresse"] = addr.address
-                    address_info["netmask"] = addr.netmask
-                    address_info["broadcast"] = addr.broadcast
-                elif addr.family == socket.AF_INET6:  # IPv6
+                elif addr.family == socket.AF_INET6:
                     address_info["type"] = "IPv6"
                     address_info["adresse"] = addr.address
-                    address_info["netmask"] = addr.netmask
-                    address_info["broadcast"] = addr.broadcast
-                elif addr.family == psutil.AF_LINK:  # MAC address
+                elif addr.family == psutil.AF_LINK:
                     address_info["type"] = "MAC"
                     address_info["adresse"] = addr.address
-                
                 if address_info:
                     interface_info["adresses"].append(address_info)
-            
-            # Ajouter des statistiques si disponibles
-            if interface_name in psutil.net_if_stats():
-                stats = psutil.net_if_stats()[interface_name]
+            if name in psutil.net_if_stats():
+                stats = psutil.net_if_stats()[name]
                 interface_info["statut"] = "Up" if stats.isup else "Down"
-                interface_info["vitesse"] = f"{stats.speed} Mbps" if stats.speed > 0 else "Inconnue"
-                interface_info["duplex"] = stats.duplex
-                interface_info["mtu"] = stats.mtu
-            
+                interface_info["vitesse"] = f"{stats.speed} Mbps"
             network_interfaces.append(interface_info)
     except Exception as e:
-        logging.error(f"Erreur lors de la récupération des interfaces réseau: {e}")
-    
+        logging.error(f"Erreur interfaces réseau: {e}\n{traceback.format_exc()}")
     return network_interfaces
 
-# Fonction pour vérifier la connexion Internet
 def is_internet_connected() -> bool:
-    """Vérifie si l'ordinateur est connecté à Internet."""
+    """Vérifie la connexion Internet."""
     try:
-        # Tentative de connexion à Google DNS
         socket.create_connection(("8.8.8.8", 53), timeout=3)
         return True
-    except OSError:
-        pass
-    return False
+    except OSError as e:
+        logging.error(f"Erreur connexion Internet: {e}\n{traceback.format_exc()}")
+        return False
 
-# Fonction pour obtenir les informations sur les partitions de disque
 def get_disk_partitions() -> List[Dict[str, Any]]:
-    """Récupère les informations sur les partitions de disque."""
+    """Récupère les partitions de disque."""
     partitions = []
-    
     try:
         for part in psutil.disk_partitions(all=True):
             partition_info = {
                 "device": part.device,
                 "mountpoint": part.mountpoint,
-                "fstype": part.fstype,
-                "opts": part.opts
+                "fstype": part.fstype
             }
-            
             try:
                 usage = psutil.disk_usage(part.mountpoint)
                 partition_info.update({
                     "total": bytes_to_human_readable(usage.total),
                     "used": bytes_to_human_readable(usage.used),
                     "free": bytes_to_human_readable(usage.free),
-                    "percent_used": usage.percent,
-                    "percent_free": 100 - usage.percent
+                    "percent_used": usage.percent
                 })
-            except (PermissionError, FileNotFoundError):
-                # Certaines partitions peuvent ne pas être accessibles
+            except:
                 partition_info.update({
                     "total": "Non disponible",
                     "used": "Non disponible",
                     "free": "Non disponible",
-                    "percent_used": "Non disponible",
-                    "percent_free": "Non disponible"
+                    "percent_used": "Non disponible"
                 })
-            
             partitions.append(partition_info)
     except Exception as e:
-        logging.error(f"Erreur lors de la récupération des partitions de disque: {e}")
-    
+        logging.error(f"Erreur partitions disque: {e}\n{traceback.format_exc()}")
     return partitions
 
-# Fonction pour convertir des octets en format lisible
 def bytes_to_human_readable(bytes_value: int) -> str:
-    """Convertit un nombre d'octets en format lisible par un humain."""
-    for unit in ['B', 'KB', 'MB', 'GB', 'TB', 'PB']:
-        if bytes_value < 1024.0 or unit == 'PB':
-            return f"{bytes_value:.2f} {unit}"
-        bytes_value /= 1024.0
+    """Convertit les octets en format lisible."""
+    try:
+        for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+            if bytes_value < 1024.0 or unit == 'TB':
+                return f"{bytes_value:.2f} {unit}"
+            bytes_value /= 1024.0
+    except Exception as e:
+        logging.error(f"Erreur conversion octets: {e}\n{traceback.format_exc()}")
+        return "Non disponible"
 
-# Fonction pour obtenir la température du CPU
 def get_cpu_temperature() -> Optional[float]:
-    """Récupère la température du CPU si disponible."""
-    temperature = None
-    
+    """Récupère la température CPU."""
     try:
         if platform.system() == "Linux":
             try:
-                # Essayer avec sensors
                 output = subprocess.check_output(["sensors"], universal_newlines=True)
                 for line in output.split("\n"):
                     if "Core" in line and "°C" in line:
-                        temperature = float(line.split("+")[1].split("°C")[0].strip())
-                        break
-            except (subprocess.SubprocessError, FileNotFoundError):
-                try:
-                    # Essayer avec la lecture directe des fichiers système
-                    with open("/sys/class/thermal/thermal_zone0/temp", "r") as f:
-                        temperature = float(f.read().strip()) / 1000.0
-                except (FileNotFoundError, IOError, ValueError):
-                    pass
-        
+                        return float(line.split("+")[1].split("°C")[0].strip())
+            except:
+                with open("/sys/class/thermal/thermal_zone0/temp", "r") as f:
+                    return float(f.read().strip()) / 1000.0
         elif platform.system() == "Windows":
-            try:
-                import wmi
-                w = wmi.WMI(namespace="root\\wmi")
-                temperature_info = w.MSAcpi_ThermalZoneTemperature()[0]
-                # Convertir la température de Kelvin en Celsius
-                temperature = (temperature_info.CurrentTemperature / 10.0) - 273.15
-            except Exception:
-                pass
+            import wmi
+            w = wmi.WMI(namespace="root\\wmi")
+            return (w.MSAcpi_ThermalZoneTemperature()[0].CurrentTemperature / 10.0) - 273.15
     except Exception as e:
-        logging.error(f"Erreur lors de la récupération de la température CPU: {e}")
-    
-    return temperature
+        logging.error(f"Erreur température CPU: {e}\n{traceback.format_exc()}")
+    return None
 
-# Fonction pour obtenir le pourcentage de batterie
-def get_battery_percentage() -> Optional[Dict[str, Any]]:
-    """Récupère le pourcentage de batterie si disponible."""
-    battery_info = None
-    
+def get_battery_info() -> Dict[str, Any]:
+    """Récupère les informations batterie."""
+    battery_info = {
+        "has_battery": 1,
+        "percent": "Non disponible",
+        "power_plugged": "Non disponible",
+        "autonomy": "Non disponible"
+    }
     try:
         battery = psutil.sensors_battery()
         if battery:
-            battery_info = {
-                "percent": battery.percent,
-                "power_plugged": battery.power_plugged,
-                "secsleft": battery.secsleft if battery.secsleft != psutil.POWER_TIME_UNLIMITED else "Illimité"
-            }
+            battery_info["has_battery"] = 0
+            battery_info["percent"] = battery.percent
+            battery_info["power_plugged"] = battery.power_plugged
+            if battery.secsleft > 0 and battery.secsleft != psutil.POWER_TIME_UNLIMITED:
+                hours = battery.secsleft // 3600
+                minutes = (battery.secsleft % 3600) // 60
+                battery_info["autonomy"] = f"{hours}h {minutes}min"
+            elif battery.power_plugged:
+                battery_info["autonomy"] = "Branché secteur"
+        else:
+            logging.info("Aucune batterie détectée")
     except Exception as e:
-        logging.error(f"Erreur lors de la récupération des informations de batterie: {e}")
-    
+        logging.error(f"Erreur batterie: {e}\n{traceback.format_exc()}")
     return battery_info
 
-# Fonction pour vérifier si le seuil d'utilisation des ressources est atteint
-def check_resource_threshold() -> Dict[str, bool]:
-    """Vérifie si le seuil d'utilisation des ressources est atteint."""
-    threshold_reached = {
-        "cpu": False,
-        "memory": False,
-        "disk": False,
-        "timestamp": None
-    }
-    
+def get_cache_memory_total() -> str:
+    """Récupère la mémoire cache totale du système."""
     try:
-        # Vérifier l'utilisation du CPU
-        cpu_percent = psutil.cpu_percent(interval=0.1)
-        if cpu_percent > RESOURCE_THRESHOLD:
-            threshold_reached["cpu"] = True
+        if platform.system() == "Linux":
+            # Lire /proc/meminfo pour obtenir la mémoire cache
+            with open('/proc/meminfo', 'r') as f:
+                meminfo = f.read()
+            
+            # Extraire les valeurs de cache
+            cached = 0
+            buffers = 0
+            slab = 0
+            
+            for line in meminfo.splitlines():
+                if line.startswith('Cached:'):
+                    cached = int(line.split()[1]) * 1024  # Convert kB to bytes
+                elif line.startswith('Buffers:'):
+                    buffers = int(line.split()[1]) * 1024
+                elif line.startswith('Slab:'):
+                    slab = int(line.split()[1]) * 1024
+            
+            total_cache = cached + buffers + slab
+            return bytes_to_human_readable(total_cache)
+            
+        elif platform.system() == "Windows":
+            # Sur Windows, utiliser la mémoire virtuelle disponible comme approximation
+            memory = psutil.virtual_memory()
+            return bytes_to_human_readable(memory.cached if hasattr(memory, 'cached') else 0)
         
-        # Vérifier l'utilisation de la mémoire
+        return "Non disponible"
+    except Exception as e:
+        logging.error(f"Erreur mémoire cache: {e}\n{traceback.format_exc()}")
+        return "Non disponible"
+
+def get_memory_cache_dynamic() -> Dict[str, Any]:
+    """Récupère les informations de cache mémoire dynamiques."""
+    try:
+        if platform.system() == "Linux":
+            with open('/proc/meminfo', 'r') as f:
+                meminfo = f.read()
+            
+            cache_info = {}
+            for line in meminfo.splitlines():
+                if line.startswith('Cached:'):
+                    cache_info['cached'] = bytes_to_human_readable(int(line.split()[1]) * 1024)
+                elif line.startswith('Buffers:'):
+                    cache_info['buffers'] = bytes_to_human_readable(int(line.split()[1]) * 1024)
+                elif line.startswith('Slab:'):
+                    cache_info['slab'] = bytes_to_human_readable(int(line.split()[1]) * 1024)
+                elif line.startswith('SReclaimable:'):
+                    cache_info['sreclaimable'] = bytes_to_human_readable(int(line.split()[1]) * 1024)
+            
+            return cache_info
+            
+        elif platform.system() == "Windows":
+            memory = psutil.virtual_memory()
+            return {
+                'cached': bytes_to_human_readable(getattr(memory, 'cached', 0)),
+                'buffers': "Non disponible",
+                'slab': "Non disponible",
+                'sreclaimable': "Non disponible"
+            }
+        
+        return {
+            'cached': "Non disponible",
+            'buffers': "Non disponible", 
+            'slab': "Non disponible",
+            'sreclaimable': "Non disponible"
+        }
+    except Exception as e:
+        logging.error(f"Erreur cache mémoire dynamique: {e}\n{traceback.format_exc()}")
+        return {
+            'cached': "Non disponible",
+            'buffers': "Non disponible",
+            'slab': "Non disponible", 
+            'sreclaimable': "Non disponible"
+        }
+
+def get_internet_speed() -> Dict[str, Any]:
+    """Teste et mesure le débit internet."""
+    try:
+        import requests
+        import time
+        
+        # URL de test pour mesurer le débit (petit fichier)
+        test_url = "http://speedtest.ftp.otenet.gr/files/test100k.db"
+        
+        # Test de ping
+        start_ping = time.time()
+        try:
+            response = requests.head("http://www.google.com", timeout=5)
+            ping_time = (time.time() - start_ping) * 1000
+        except:
+            ping_time = None
+        
+        # Test de débit descendant (download)
+        try:
+            start_time = time.time()
+            response = requests.get(test_url, timeout=10, stream=True)
+            data_size = 0
+            for chunk in response.iter_content(chunk_size=1024):
+                data_size += len(chunk)
+                if time.time() - start_time > 3:  # Limite à 3 secondes
+                    break
+            
+            duration = time.time() - start_time
+            download_speed = (data_size * 8) / (duration * 1024 * 1024)  # Mbps
+        except:
+            download_speed = None
+        
+        return {
+            "ping_ms": round(ping_time, 2) if ping_time else "Non disponible",
+            "download_mbps": round(download_speed, 2) if download_speed else "Non disponible",
+            "test_timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+        
+    except ImportError:
+        return {
+            "ping_ms": "Module requests manquant",
+            "download_mbps": "Module requests manquant", 
+            "test_timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+    except Exception as e:
+        logging.error(f"Erreur test débit internet: {e}\n{traceback.format_exc()}")
+        return {
+            "ping_ms": "Erreur de mesure",
+            "download_mbps": "Erreur de mesure",
+            "test_timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+
+def get_cpu_frequencies_per_core() -> Dict[str, Any]:
+    """Récupère les fréquences CPU par cœur et globale."""
+    try:
+        frequencies = {
+            "frequences_par_coeur": [],
+            "frequence_globale": {
+                "actuelle": "Non disponible",
+                "min": "Non disponible", 
+                "max": "Non disponible"
+            }
+        }
+        
+        # Fréquence globale
+        cpu_freq = psutil.cpu_freq()
+        if cpu_freq:
+            frequencies["frequence_globale"] = {
+                "actuelle": f"{cpu_freq.current:.0f} MHz",
+                "min": f"{cpu_freq.min:.0f} MHz" if cpu_freq.min else "Non disponible",
+                "max": f"{cpu_freq.max:.0f} MHz" if cpu_freq.max else "Non disponible"
+            }
+        
+        # Fréquences par cœur (si disponible)
+        try:
+            cpu_freqs = psutil.cpu_freq(percpu=True)
+            if cpu_freqs:
+                for i, freq in enumerate(cpu_freqs):
+                    frequencies["frequences_par_coeur"].append({
+                        "core": i,
+                        "actuelle": f"{freq.current:.0f} MHz" if freq.current else "Non disponible",
+                        "min": f"{freq.min:.0f} MHz" if freq.min else "Non disponible",
+                        "max": f"{freq.max:.0f} MHz" if freq.max else "Non disponible"
+                    })
+            else:
+                # Fallback: utiliser la fréquence globale pour tous les cœurs
+                core_count = psutil.cpu_count(logical=True)
+                for i in range(core_count):
+                    frequencies["frequences_par_coeur"].append({
+                        "core": i,
+                        "actuelle": frequencies["frequence_globale"]["actuelle"],
+                        "min": frequencies["frequence_globale"]["min"],
+                        "max": frequencies["frequence_globale"]["max"]
+                    })
+        except:
+            # Si psutil.cpu_freq(percpu=True) n'est pas supporté
+            core_count = psutil.cpu_count(logical=True)
+            for i in range(core_count):
+                frequencies["frequences_par_coeur"].append({
+                    "core": i,
+                    "actuelle": frequencies["frequence_globale"]["actuelle"],
+                    "min": frequencies["frequence_globale"]["min"],
+                    "max": frequencies["frequence_globale"]["max"]
+                })
+        
+        return frequencies
+        
+    except Exception as e:
+        logging.error(f"Erreur fréquences CPU: {e}\n{traceback.format_exc()}")
+        return {
+            "frequences_par_coeur": [],
+            "frequence_globale": {
+                "actuelle": "Erreur",
+                "min": "Erreur",
+                "max": "Erreur"
+            }
+        }
+
+def get_last_shutdown_time() -> str:
+    """Récupère l'heure de la dernière mise hors tension du système."""
+    try:
+        if platform.system() == "Linux":
+            # Essayer de lire les logs système pour trouver la dernière extinction
+            try:
+                # Chercher dans journalctl pour la dernière extinction
+                result = subprocess.run(['journalctl', '--boot=-1', '--reverse', '--no-pager', '--output=short-iso'], 
+                                      capture_output=True, text=True, timeout=10)
+                if result.returncode == 0:
+                    lines = result.stdout.splitlines()
+                    for line in lines:
+                        if 'shutdown' in line.lower() or 'power off' in line.lower():
+                            # Extraire la date de la ligne
+                            parts = line.split()
+                            if len(parts) >= 2:
+                                return f"{parts[0]} {parts[1]}"
+            except subprocess.TimeoutExpired:
+                logging.warning("Timeout lors de la lecture des logs de shutdown")
+            except FileNotFoundError:
+                logging.warning("journalctl non disponible")
+            
+            # Fallback: utiliser l'uptime pour estimer
+            boot_time = psutil.boot_time()
+            last_shutdown_estimate = datetime.fromtimestamp(boot_time) - timedelta(minutes=1)
+            return last_shutdown_estimate.strftime("%Y-%m-%d %H:%M:%S") + " (estimé)"
+            
+        elif platform.system() == "Windows":
+            try:
+                # Utiliser wmic pour obtenir les événements de shutdown
+                result = subprocess.run(['wmic', 'os', 'get', 'LastBootUpTime', '/value'], 
+                                      capture_output=True, text=True, timeout=10)
+                if result.returncode == 0:
+                    for line in result.stdout.splitlines():
+                        if 'LastBootUpTime=' in line:
+                            boot_time_str = line.split('=')[1].strip()
+                            if boot_time_str:
+                                # Format WMI: 20240629141522.123456+120
+                                boot_time = datetime.strptime(boot_time_str[:14], '%Y%m%d%H%M%S')
+                                last_shutdown_estimate = boot_time - timedelta(minutes=1)
+                                return last_shutdown_estimate.strftime("%Y-%m-%d %H:%M:%S") + " (estimé)"
+            except (subprocess.TimeoutExpired, ValueError):
+                logging.warning("Erreur lors de la lecture des événements Windows")
+        
+        return "Non disponible"
+    except Exception as e:
+        logging.error(f"Erreur dernière extinction: {e}\n{traceback.format_exc()}")
+        return "Non disponible"
+
+def get_network_packets_info() -> Dict[str, Any]:
+    """Récupère les informations sur les paquets réseau envoyés/reçus."""
+    try:
+        net_io = psutil.net_io_counters()
+        return {
+            "paquets_envoyes": net_io.packets_sent if hasattr(net_io, 'packets_sent') else 0,
+            "paquets_recus": net_io.packets_recv if hasattr(net_io, 'packets_recv') else 0,
+            "erreurs_entree": net_io.errin if hasattr(net_io, 'errin') else 0,
+            "erreurs_sortie": net_io.errout if hasattr(net_io, 'errout') else 0,
+            "paquets_abandonnes_entree": net_io.dropin if hasattr(net_io, 'dropin') else 0,
+            "paquets_abandonnes_sortie": net_io.dropout if hasattr(net_io, 'dropout') else 0
+        }
+    except Exception as e:
+        logging.error(f"Erreur paquets réseau: {e}\n{traceback.format_exc()}")
+        return {
+            "paquets_envoyes": 0,
+            "paquets_recus": 0,
+            "erreurs_entree": 0,
+            "erreurs_sortie": 0,
+            "paquets_abandonnes_entree": 0,
+            "paquets_abandonnes_sortie": 0
+        }
+
+def check_resource_threshold() -> Dict[str, Any]:
+    """Vérifie si le seuil d'utilisation est atteint."""
+    threshold_reached = {"cpu": False, "memory": False, "disk": False, "timestamp": None}
+    try:
+        if psutil.cpu_percent(interval=0.1) > RESOURCE_THRESHOLD:
+            threshold_reached["cpu"] = True
         memory = psutil.virtual_memory()
         if memory.percent > RESOURCE_THRESHOLD:
             threshold_reached["memory"] = True
-        
-        # Vérifier l'utilisation du disque
         disk = psutil.disk_usage('/')
         if disk.percent > RESOURCE_THRESHOLD:
             threshold_reached["disk"] = True
-        
-        # Si un seuil est atteint, enregistrer l'horodatage
-        if threshold_reached["cpu"] or threshold_reached["memory"] or threshold_reached["disk"]:
+        if any(threshold_reached.values()):
             threshold_reached["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     except Exception as e:
-        logging.error(f"Erreur lors de la vérification des seuils d'utilisation: {e}")
-    
+        logging.error(f"Erreur seuils: {e}\n{traceback.format_exc()}")
     return threshold_reached
 
-# Fonction pour collecter les données initiales (une fois au démarrage)
 def collect_initial_data() -> Dict[str, Any]:
-    """Collecte les données initiales sur le système."""
+    """Collecte les données initiales."""
     try:
-        # Informations sur le système d'exploitation
         os_info = {
             "nom": platform.system(),
             "version": platform.version(),
@@ -498,392 +667,289 @@ def collect_initial_data() -> Dict[str, Any]:
             "architecture": platform.machine(),
             "hostname": platform.node()
         }
-        
-        # Informations sur le processeur
         cpu_info = {
             "type": platform.processor(),
-            "architecture": platform.machine(),
-            "bits": "64-bit" if platform.machine().endswith('64') else "32-bit",
             "coeurs_physiques": psutil.cpu_count(logical=False),
             "coeurs_logiques": psutil.cpu_count(logical=True),
             "frequence": {
                 "actuelle": psutil.cpu_freq().current if psutil.cpu_freq() else "Non disponible",
-                "min": psutil.cpu_freq().min if psutil.cpu_freq() and hasattr(psutil.cpu_freq(), 'min') else "Non disponible",
-                "max": psutil.cpu_freq().max if psutil.cpu_freq() and hasattr(psutil.cpu_freq(), 'max') else "Non disponible"
+                "min": psutil.cpu_freq().min if psutil.cpu_freq() else "Non disponible",
+                "max": psutil.cpu_freq().max if psutil.cpu_freq() else "Non disponible"
             }
         }
-        
-        # Informations sur la mémoire
         memory = psutil.virtual_memory()
-        swap = psutil.swap_memory()
         memory_info = {
             "ram": {
                 "total": bytes_to_human_readable(memory.total),
                 "disponible": bytes_to_human_readable(memory.available),
                 "utilisee": bytes_to_human_readable(memory.used),
-                "pourcentage_utilise": memory.percent,
-                "pourcentage_libre": 100 - memory.percent
+                "pourcentage_utilise": memory.percent
             },
             "swap": {
-                "total": bytes_to_human_readable(swap.total),
-                "disponible": bytes_to_human_readable(swap.free),
-                "utilisee": bytes_to_human_readable(swap.used),
-                "pourcentage_utilise": swap.percent,
-                "pourcentage_libre": 100 - swap.percent
+                "total": bytes_to_human_readable(psutil.swap_memory().total)
             },
-            "cache": {
-                "total": bytes_to_human_readable(memory.cached) if hasattr(memory, 'cached') else "Non disponible",
-                "pourcentage": (memory.cached / memory.total * 100) if hasattr(memory, 'cached') and memory.total > 0 else "Non disponible"
-            }
+            "cache_total": get_cache_memory_total()
         }
-        
-        # Informations sur le disque
         disk = psutil.disk_usage('/')
         disk_info = {
             "total": bytes_to_human_readable(disk.total),
             "disponible": bytes_to_human_readable(disk.free),
             "utilise": bytes_to_human_readable(disk.used),
-            "pourcentage_utilise": disk.percent,
-            "pourcentage_libre": 100 - disk.percent
+            "pourcentage_utilise": disk.percent
         }
-        
-        # Type de machine
-        machine_type = get_machine_type()
-        
-        # Adresse MAC
-        mac_address = ':'.join(['{:02x}'.format((uuid.getnode() >> elements) & 0xff) for elements in range(0, 8*6, 8)][::-1])
-        
-        # Résolution d'écran
-        screen_resolution = get_screen_resolution()
-        
-        # Information GPU (NVIDIA)
-        gpu_info = get_gpu_info()
-        
-        # Interfaces réseau
-        network_interfaces = get_network_interfaces()
-        
-        # BIOS et carte mère
-        bios_motherboard_info = get_bios_motherboard_info()
-        
-        # Utilisateurs connectés
-        logged_users = get_logged_users()
-        
-        # Partitions de disque
-        disk_partitions = get_disk_partitions()
-        
-        # Périphériques USB
-        usb_devices = get_usb_devices()
-        
-        # Assembler toutes les données
-        system_data = {
+        return {
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "os": os_info,
-            "type_machine": machine_type,
+            "type_machine": get_machine_type(),
             "cpu": cpu_info,
             "memoire": memory_info,
             "disque": disk_info,
-            "adresse_mac": mac_address,
-            "resolution_ecran": screen_resolution,
-            "gpu": gpu_info,
-            "interfaces_reseau": network_interfaces,
-            "bios_carte_mere": bios_motherboard_info,
-            "utilisateurs_connectes": logged_users,
-            "partitions_disque": disk_partitions,
-            "peripheriques_usb": usb_devices,
+            "adresse_mac": ':'.join(['{:02x}'.format((uuid.getnode() >> i) & 0xff) for i in range(0, 8*6, 8)][::-1]),
+            "resolution_ecran": get_screen_resolution(),
+            "gpu": get_gpu_info(),
+            "interfaces_reseau": get_network_interfaces(),
+            "bios_carte_mere": get_bios_motherboard_info(),
+            "utilisateurs_connectes": get_logged_users(),
+            "partitions_disque": get_disk_partitions(),
+            "peripheriques_usb": get_usb_devices(),
+            "battery_initial": get_battery_info(),
             "heure_demarrage_systeme": system_boot_time.strftime("%Y-%m-%d %H:%M:%S"),
-            "heure_demarrage_script": script_start_time.strftime("%Y-%m-%d %H:%M:%S"),
-            "heure_arret_precedent": last_shutdown_time.strftime("%Y-%m-%d %H:%M:%S") if last_shutdown_time else "Non disponible"
+            "heure_demarrage_script": script_start_time.strftime("%Y-%m-%d %H:%M:%S")
         }
-        
-        return system_data
     except Exception as e:
-        logging.error(f"Erreur lors de la collecte des données initiales: {e}")
+        logging.error(f"Erreur collecte initiale: {e}\n{traceback.format_exc()}")
         return {"error": str(e)}
 
-# Fonction pour collecter les données variables (toutes les X secondes)
 def collect_variable_data() -> Dict[str, Any]:
-    """Collecte les données variables du système."""
+    """Collecte les données variables."""
     try:
-        # CPU par cœur
         cpu_per_core = psutil.cpu_percent(interval=0.1, percpu=True)
-        cpu_cores_data = [{"core": i, "utilisation": percent, "libre": 100 - percent} for i, percent in enumerate(cpu_per_core)]
-        
-        # Utilisation mémoire
+        cpu_cores_data = [{"core": i, "utilisation": p} for i, p in enumerate(cpu_per_core)]
         memory = psutil.virtual_memory()
         swap = psutil.swap_memory()
-        
-        # Utilisation disque
         disk = psutil.disk_usage('/')
-        
-        # Température CPU
-        cpu_temp = get_cpu_temperature()
-        
-        # Utilisation GPU
         gpu_usage = None
-        try:
-            if platform.system() == "Windows" or platform.system() == "Linux":
-                try:
-                    nvidia_output = subprocess.check_output("nvidia-smi --query-gpu=utilization.gpu,utilization.memory --format=csv,noheader", shell=True).decode().strip()
-                    if nvidia_output:
-                        parts = nvidia_output.split(', ')
-                        if len(parts) >= 2:
-                            gpu_usage = {
-                                "gpu": parts[0],
-                                "memory": parts[1]
-                            }
-                except Exception:
-                    pass
-        except Exception as e:
-            logging.error(f"Erreur lors de la récupération de l'utilisation GPU: {e}")
-        
-        # Bande passante réseau
-        net_io_counters = psutil.net_io_counters()
-        
-        # Vérifier la connexion Internet
-        internet_connected = is_internet_connected()
-        
-        # Nombre de processus actifs
-        process_count = len(psutil.pids())
-        
-        # Pourcentage de batterie
-        battery_info = get_battery_percentage()
-        
-        # Temps de fonctionnement (uptime)
-        uptime_seconds = time.time() - psutil.boot_time()
-        uptime_str = str(timedelta(seconds=uptime_seconds))
-        
-        # Vérifier si le seuil d'utilisation des ressources est atteint
-        threshold_check = check_resource_threshold()
-        
-        # Assembler les données variables
-        variable_data = {
+        if GPU_UTIL_AVAILABLE:
+            try:
+                gpus = GPUtil.getGPUs()
+                if gpus:
+                    gpu = gpus[0]
+                    gpu_usage = {
+                        "gpu": f"{gpu.load * 100:.1f}%",
+                        "memory": f"{(gpu.memoryUsed / gpu.memoryTotal) * 100:.1f}%"
+                    }
+            except Exception as e:
+                logging.error(f"Erreur GPU: {e}\n{traceback.format_exc()}")
+        net_io = psutil.net_io_counters()
+        return {
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "cpu": {
-                "global": sum(cpu_per_core) / len(cpu_per_core) if cpu_per_core else 0,
+                "global_utilise": sum(cpu_per_core) / len(cpu_per_core) if cpu_per_core else 0,
                 "par_coeur": cpu_cores_data,
-                "temperature": cpu_temp
+                "temperature": get_cpu_temperature(),
+                "frequences": get_cpu_frequencies_per_core()
             },
             "memoire": {
                 "ram": {
                     "pourcentage_utilise": memory.percent,
-                    "pourcentage_libre": 100 - memory.percent,
                     "utilisee": bytes_to_human_readable(memory.used),
                     "disponible": bytes_to_human_readable(memory.available)
                 },
                 "swap": {
                     "pourcentage_utilise": swap.percent,
-                    "pourcentage_libre": 100 - swap.percent,
                     "utilisee": bytes_to_human_readable(swap.used),
                     "disponible": bytes_to_human_readable(swap.free)
                 },
-                "cache": {
-                    "utilisee": bytes_to_human_readable(memory.cached) if hasattr(memory, 'cached') else "Non disponible"
-                }
+                "cache_dynamique": get_memory_cache_dynamic()
             },
             "disque": {
-                "pourcentage_utilise": disk.percent,
-                "pourcentage_libre": 100 - disk.percent
+                "pourcentage_utilise": disk.percent
             },
             "gpu_utilisation": gpu_usage,
             "reseau": {
-                "octets_envoyes": bytes_to_human_readable(net_io_counters.bytes_sent),
-                "octets_recus": bytes_to_human_readable(net_io_counters.bytes_recv),
-                "paquets_envoyes": net_io_counters.packets_sent,
-                "paquets_recus": net_io_counters.packets_recv,
-                "erreurs_reception": net_io_counters.errin,
-                "erreurs_envoi": net_io_counters.errout,
-                "paquets_supprimes_reception": net_io_counters.dropin,
-                "paquets_supprimes_envoi": net_io_counters.dropout
+                "octets_envoyes": bytes_to_human_readable(net_io.bytes_sent),
+                "octets_recus": bytes_to_human_readable(net_io.bytes_recv),
+                "paquets_info": get_network_packets_info(),
+                "debit_internet": get_internet_speed()
             },
-            "connexion_internet": internet_connected,
-            "nombre_processus": process_count,
-            "batterie": battery_info if battery_info else "Non disponible",
-            "uptime": uptime_str,
-            "seuil_atteint": threshold_check
+            "connexion_internet": is_internet_connected(),
+            "nombre_processus": len(psutil.pids()),
+            "battery": get_battery_info(),
+            "uptime": str(timedelta(seconds=time.time() - psutil.boot_time())),
+            "derniere_extinction": get_last_shutdown_time(),
+            "seuil_atteint": check_resource_threshold()
         }
-        
-        return variable_data
     except Exception as e:
-        logging.error(f"Erreur lors de la collecte des données variables: {e}")
+        logging.error(f"Erreur collecte variable: {e}\n{traceback.format_exc()}")
         return {"error": str(e)}
 
-# Fonction pour sauvegarder les données dans un fichier JSON
-def save_data_to_file(data: Dict[str, Any]) -> str:
-    """Sauvegarde les données dans un fichier JSON."""
-    global file_counter
-    
-    # Créer un nom de fichier avec un compteur
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"{DATA_DIR}/data_{MACHINE_ID}_{timestamp}_{file_counter}.json"
-    file_counter += 1
-    
-    # Sauvegarder les données dans un fichier JSON
+def save_initial_data():
+    """Sauvegarde les données initiales dans 1.json.gz."""
+    global initial_data_saved
+    if initial_data_saved or os.path.exists(f"{DATA_DIR}/1.json.gz"):
+        logging.info("Données initiales déjà sauvegardées")
+        return
     try:
-        with open(filename, 'w', encoding='utf-8') as f:
+        initial_data = collect_initial_data()
+        with gzip.open(f"{DATA_DIR}/1.json.gz", 'wt', encoding='utf-8') as f:
+            json.dump(initial_data, f, ensure_ascii=False, indent=2)
+        initial_data_saved = True
+        logging.info("Données initiales sauvegardées")
+    except Exception as e:
+        logging.error(f"Erreur sauvegarde initiale: {e}\n{traceback.format_exc()}")
+
+def save_variable_data_to_file(data: Dict[str, Any]) -> Optional[str]:
+    """Sauvegarde les données variables dans un fichier compressé."""
+    try:
+        filename = get_next_filename()
+        with gzip.open(filename, 'wt', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-        logging.info(f"Données sauvegardées dans {filename}")
+        logging.info(f"Données variables sauvegardées dans {filename}")
         return filename
     except Exception as e:
-        logging.error(f"Erreur lors de la sauvegarde des données: {e}")
+        logging.error(f"Erreur sauvegarde variable: {e}\n{traceback.format_exc()}")
         return None
 
-# Fonction pour envoyer les fichiers JSON au serveur
-def send_files_to_server() -> None:
-    """Envoie tous les fichiers JSON au serveur distant."""
-    logging.info(f"Tentative d'envoi des fichiers au serveur {SERVER_HOST}:{SERVER_PORT}")
-    
-    # Liste tous les fichiers JSON dans le répertoire DATA_DIR
-    json_files = [f for f in os.listdir(DATA_DIR) if f.endswith('.json')]
-    
-    if not json_files:
-        logging.info("Aucun fichier à envoyer.")
-        return
-    
-    # Tenter de se connecter au serveur
+def initialize_data_collection():
+    """Initialise la collecte de données."""
+    global initial_data_saved, file_counter
     try:
-        client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        client_socket.settimeout(5)  # Timeout de 5 secondes
-        client_socket.connect((SERVER_HOST, SERVER_PORT))
-        logging.info(f"Connecté au serveur {SERVER_HOST}:{SERVER_PORT}")
-        
-        # Envoyer chaque fichier
-        for json_file in json_files:
-            file_path = os.path.join(DATA_DIR, json_file)
-            try:
-                # Lire le contenu du fichier
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    file_data = f.read()
-                
-                # Préparer les données à envoyer
-                data_to_send = {
-                    "filename": json_file,
-                    "content": file_data,
-                    "machine_id": MACHINE_ID,
-                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                }
-                
-                # Convertir en JSON et envoyer
-                data_json = json.dumps(data_to_send)
-                client_socket.sendall(f"{data_json}\n".encode('utf-8'))
-                
-                # Attendre la confirmation du serveur
-                response = client_socket.recv(1024).decode('utf-8').strip()
-                
-                if response == "OK":
-                    logging.info(f"Fichier {json_file} envoyé avec succès, suppression du fichier local")
-                    # Supprimer le fichier après un envoi réussi
-                    os.remove(file_path)
-                else:
-                    logging.warning(f"Problème lors de l'envoi du fichier {json_file}: {response}")
-            except Exception as e:
-                logging.error(f"Erreur lors de l'envoi du fichier {json_file}: {e}")
-        
-        # Fermer la connexion
-        client_socket.close()
-        logging.info("Connexion au serveur fermée")
-        
-    except (socket.timeout, ConnectionRefusedError) as e:
-        logging.warning(f"Impossible de se connecter au serveur: {e}")
-    except Exception as e:
-        logging.error(f"Erreur lors de la connexion au serveur: {e}")
-
-# Fonction alternative pour envoyer les données via HTTP (au cas où le serveur TCP ne fonctionne pas)
-def send_data_via_http(data: Dict[str, Any]) -> bool:
-    """Envoie les données via une requête HTTP POST."""
-    try:
-        url = f"http://{SERVER_HOST}:{SERVER_PORT}/submit"
-        headers = {"Content-Type": "application/json"}
-        
-        response = requests.post(url, json=data, headers=headers, timeout=5)
-        
-        if response.status_code == 200:
-            logging.info("Données envoyées avec succès via HTTP")
-            return True
+        if not os.path.exists(DATA_DIR):
+            os.makedirs(DATA_DIR)
+        if os.path.exists(f"{DATA_DIR}/1.json.gz"):
+            initial_data_saved = True
         else:
-            logging.warning(f"Échec de l'envoi des données via HTTP: {response.status_code}")
-            return False
+            initial_data_saved = False
+        reset_file_counter()
     except Exception as e:
-        logging.error(f"Erreur lors de l'envoi des données via HTTP: {e}")
+        logging.error(f"Erreur initialisation collecte: {e}\n{traceback.format_exc()}")
+
+@backoff.on_exception(backoff.expo, (socket.timeout, ConnectionRefusedError, ConnectionResetError, BrokenPipeError), max_tries=5)
+def send_files_to_server() -> Optional[str]:
+    """Envoie les fichiers JSON au serveur."""
+    machine_id = get_machine_id()
+    json_files = sorted([f for f in os.listdir(DATA_DIR) if f.endswith('.json.gz')])
+    if not json_files:
+        logging.info("Aucun fichier à envoyer")
+        return machine_id
+
+    # Prioritize sending 1.json.gz first
+    if "1.json.gz" in json_files and not machine_id:
+        json_files = ["1.json.gz"] + [f for f in json_files if f != "1.json.gz"]
+
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
+            client_socket.settimeout(5)
+            client_socket.connect((SERVER_HOST, SERVER_PORT))
+            logging.info(f"Connecté au serveur {SERVER_HOST}:{SERVER_PORT}")
+
+            for i, json_file in enumerate(json_files):
+                file_path = os.path.join(DATA_DIR, json_file)
+                try:
+                    with gzip.open(file_path, 'rt', encoding='utf-8') as f:
+                        file_data = f.read()
+                    json_data = json.loads(file_data)
+                    data_to_send = {
+                        "version": "1.0",
+                        "filename": json_file,
+                        "content": json_data,
+                        "machine_id": machine_id,
+                        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    }
+                    client_socket.sendall(f"{json.dumps(data_to_send)}\n".encode('utf-8'))
+                    response = client_socket.recv(1024).decode('utf-8').strip()
+                    response_data = json.loads(response)
+
+                    if response_data.get("status") == "success":
+                        if json_file == "1.json.gz" and response_data.get("machine_id"):
+                            machine_id = response_data["machine_id"]
+                            save_machine_id(machine_id)
+                        logging.info(f"Fichier {json_file} envoyé, suppression")
+                        os.remove(file_path)
+                    elif response_data.get("message") == "RESEND_STATIC_DATA":
+                        logging.warning(f"Machine non identifiée pour {json_file}, envoi de 1.json.gz requis")
+                        if json_file != "1.json.gz" and os.path.exists(f"{DATA_DIR}/1.json.gz"):
+                            json_files.insert(0, "1.json.gz")  # Retry with static data
+                            continue
+                    else:
+                        logging.warning(f"Erreur envoi {json_file}: {response_data.get('message')}")
+
+                    if (i + 1) % FILES_PER_BATCH == 0:
+                        logging.info(f"Pause de {BATCH_PAUSE}s après {FILES_PER_BATCH} fichiers")
+                        time.sleep(BATCH_PAUSE)
+                except (ConnectionResetError, BrokenPipeError) as e:
+                    logging.error(f"Erreur réseau lors de l'envoi de {json_file}: {e}\n{traceback.format_exc()}")
+                    break
+                except Exception as e:
+                    logging.error(f"Erreur envoi {json_file}: {e}\n{traceback.format_exc()}")
+
+            return machine_id
+    except Exception as e:
+        logging.error(f"Erreur connexion serveur: {e}\n{traceback.format_exc()}")
+        return machine_id
+
+def get_data_directory_size() -> int:
+    """Calcule la taille du répertoire de données."""
+    total_size = 0
+    try:
+        for filename in os.listdir(DATA_DIR):
+            if filename.endswith('.json.gz'):
+                total_size += os.path.getsize(os.path.join(DATA_DIR, filename))
+    except Exception as e:
+        logging.error(f"Erreur calcul taille répertoire: {e}\n{traceback.format_exc()}")
+    return total_size
+
+def is_storage_limit_reached() -> bool:
+    """Vérifie si la limite de stockage est atteinte."""
+    try:
+        if get_data_directory_size() >= STORAGE_LIMIT:
+            logging.warning(f"Limite de stockage atteinte: {bytes_to_human_readable(get_data_directory_size())}")
+            return True
+        return False
+    except Exception as e:
+        logging.error(f"Erreur vérification stockage: {e}\n{traceback.format_exc()}")
         return False
 
-# Fonction principale de collecte de données
-def collect_and_save_data() -> None:
-    """Collecte et sauvegarde les données système."""
+def continuous_collection():
+    """Collecte continue des données."""
     try:
-        # Collecter les données initiales (une seule fois)
-        initial_data = collect_initial_data()
-        initial_file = save_data_to_file(initial_data)
-        logging.info(f"Données initiales collectées et sauvegardées dans {initial_file}")
-        
-        # Timestamp du dernier envoi
+        check_dependencies()
+        initialize_data_collection()
+        machine_id = get_machine_id()
         last_send_time = time.time()
-        
-        # Boucle principale de collecte
+
+        if not machine_id:
+            save_initial_data()
+            machine_id = send_files_to_server()
+
         while True:
-            try:
-                # Collecter les données variables
-                variable_data = collect_variable_data()
-                variable_file = save_data_to_file(variable_data)
-                
-                # Vérifier s'il est temps d'envoyer les données
-                current_time = time.time()
-                if current_time - last_send_time >= SEND_INTERVAL:
-                    # Tenter d'envoyer les fichiers au serveur
-                    send_files_to_server()
-                    last_send_time = current_time
-                
-                # Attendre jusqu'à la prochaine collecte
-                time.sleep(COLLECTION_INTERVAL)
-                
-            except KeyboardInterrupt:
-                logging.info("Interruption par l'utilisateur, arrêt de la collecte")
-                # Tenter d'envoyer tous les fichiers restants avant de quitter
-                send_files_to_server()
+            if is_storage_limit_reached():
+                logging.warning("Limite de stockage atteinte, arrêt")
                 break
-            except Exception as e:
-                logging.error(f"Erreur lors de la collecte de données: {e}")
-                # Continuer malgré l'erreur
-                time.sleep(COLLECTION_INTERVAL)
+            if not initial_data_saved:
+                save_initial_data()
+            if machine_id:
+                variable_data = collect_variable_data()
+                if variable_data and "error" not in variable_data:
+                    save_variable_data_to_file(variable_data)
+            current_time = time.time()
+            if current_time - last_send_time >= SEND_INTERVAL:
+                machine_id = send_files_to_server()
+                last_send_time = current_time
+            time.sleep(COLLECTION_INTERVAL)
     except Exception as e:
-        logging.error(f"Erreur critique dans la boucle principale: {e}")
+        logging.error(f"Erreur collecte continue: {e}\n{traceback.format_exc()}")
 
-# Fonction pour gérer l'arrêt propre du script
-def handle_exit(signum, frame) -> None:
-    """Gère l'arrêt propre du script."""
-    logging.info("Signal d'arrêt reçu, arrêt du script...")
-    # Tenter d'envoyer tous les fichiers restants avant de quitter
-    send_files_to_server()
-    sys.exit(0)
-
-# Point d'entrée principal
 if __name__ == "__main__":
     try:
-        # Enregistrer les gestionnaires de signaux pour un arrêt propre
-        import signal
-        signal.signal(signal.SIGINT, handle_exit)
-        signal.signal(signal.SIGTERM, handle_exit)
-        
-        # Démarrer la collecte de données
-        logging.info("Démarrage de l'agent de surveillance système...")
-        print(f"Agent de surveillance système démarré. Les données sont collectées toutes les {COLLECTION_INTERVAL} secondes.")
-        print(f"Les données sont envoyées au serveur {SERVER_HOST}:{SERVER_PORT} toutes les {SEND_INTERVAL} secondes.")
-        print("Appuyez sur Ctrl+C pour arrêter.")
-        
-        # Lancer la collecte de données dans un thread séparé
-        collection_thread = threading.Thread(target=collect_and_save_data)
-        collection_thread.daemon = True
-        collection_thread.start()
-        
-        # Boucle principale du programme
-        while True:
-            time.sleep(1)
-            
+        continuous_collection()
     except KeyboardInterrupt:
         logging.info("Script arrêté par l'utilisateur")
-        print("\nArrêt du script...")
-        # Tenter d'envoyer tous les fichiers restants avant de quitter
-        send_files_to_server()
+        try:
+            send_files_to_server()
+        except Exception as e:
+            logging.error(f"Erreur envoi final: {e}\n{traceback.format_exc()}")
     except Exception as e:
-        logging.error(f"Erreur non gérée: {e}")
-        sys.exit(1)#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+        logging.error(f"Erreur fatale: {e}\n{traceback.format_exc()}")
+        import sys
+        sys.exit(1)

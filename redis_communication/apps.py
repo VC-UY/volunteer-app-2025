@@ -77,118 +77,16 @@ def get_machine_info():
     """
     logger.info("Collecte des informations statiques de la machine via l'agent...")
     try:
-        # Essayer de charger et utiliser l'agent
+        # Charger et utiliser l'agent
         agent_module = load_agent_module()
-        if agent_module and hasattr(agent_module, 'collect_initial_data'):
+        if (agent_module and hasattr(agent_module, 'collect_initial_data')):
             logger.info("Utilisation de l'agent pour collecter les données statiques")
             static_data = agent_module.collect_initial_data()
             logger.info("Données statiques collectées avec succès via l'agent")
             return static_data
-        
-        # Fallback: collecter les informations manuellement
-        logger.warning("Impossible d'utiliser l'agent, collecte manuelle des informations statiques")
-        
-        # Récupérer les adresses MAC
-        macs = []
-        for interface, snics in psutil.net_if_addrs().items():
-            for snic in snics:
-                if snic.family.name == 'AF_LINK' or snic.family == psutil.AF_LINK:
-                    macs.append(snic.address)
-        
-        # Récupérer la résolution d'écran
-        resolution = "unknown"
-        try:
-            import subprocess
-            output = subprocess.check_output(['xrandr']).decode()
-            for line in output.splitlines():
-                if '*' in line:
-                    resolution = line.split()[0]  # ex: '1920x1080'
-        except Exception as e:
-            logger.warning(f"Impossible de récupérer la résolution d'écran: {e}")
-        
-        # Informations sur le système d'exploitation
-        os_info = {
-            "nom": platform.system(),
-            "version": platform.version(),
-            "release": platform.release(),
-            "architecture": platform.machine(),
-            "hostname": platform.node()
-        }
-        
-        # Informations sur le processeur
-        cpu_info = {
-            "type": platform.processor(),
-            "architecture": platform.machine(),
-            "bits": "64-bit" if platform.machine().endswith('64') else "32-bit",
-            "coeurs_physiques": psutil.cpu_count(logical=False) or 1,
-            "coeurs_logiques": psutil.cpu_count(logical=True) or 1,
-            "frequence": {
-                "actuelle": psutil.cpu_freq().current if psutil.cpu_freq() else None,
-                "min": psutil.cpu_freq().min if psutil.cpu_freq() and hasattr(psutil.cpu_freq(), 'min') else None,
-                "max": psutil.cpu_freq().max if psutil.cpu_freq() and hasattr(psutil.cpu_freq(), 'max') else None
-            }
-        }
-        
-        # Informations sur la mémoire
-        memory = psutil.virtual_memory()
-        swap = psutil.swap_memory()
-        memory_info = {
-            "ram": {
-                "total": memory.total,
-                "total_human": bytes_to_human_readable(memory.total),
-                "disponible": memory.available,
-                "disponible_human": bytes_to_human_readable(memory.available),
-                "utilisee": memory.used,
-                "utilisee_human": bytes_to_human_readable(memory.used),
-                "pourcentage_utilise": memory.percent,
-                "pourcentage_libre": 100 - memory.percent
-            },
-            "swap": {
-                "total": swap.total,
-                "total_human": bytes_to_human_readable(swap.total),
-                "disponible": swap.free,
-                "disponible_human": bytes_to_human_readable(swap.free),
-                "utilisee": swap.used,
-                "utilisee_human": bytes_to_human_readable(swap.used),
-                "pourcentage_utilise": swap.percent,
-                "pourcentage_libre": 100 - swap.percent
-            },
-            "cache": {
-                "total": memory.cached if hasattr(memory, 'cached') else 0,
-                "total_human": bytes_to_human_readable(memory.cached) if hasattr(memory, 'cached') else "Non disponible",
-                "pourcentage": (memory.cached / memory.total * 100) if hasattr(memory, 'cached') and memory.total > 0 else 0
-            }
-        }
-        
-        # Informations sur le disque
-        disk = psutil.disk_usage('/')
-        disk_info = {
-            "total": disk.total,
-            "total_human": bytes_to_human_readable(disk.total),
-            "disponible": disk.free,
-            "disponible_human": bytes_to_human_readable(disk.free),
-            "utilise": disk.used,
-            "utilise_human": bytes_to_human_readable(disk.used),
-            "pourcentage_utilise": disk.percent,
-            "pourcentage_libre": 100 - disk.percent
-        }
-        
-        # Construire le dictionnaire final
-        static_data = {
-            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "os": os_info,
-            "type_machine": get_machine_type(),
-            "cpu": cpu_info,
-            "memoire": memory_info,
-            "disque": disk_info,
-            "adresse_mac": macs[0] if macs else "00:00:00:00:00:00",
-            "resolution_ecran": resolution,
-            "interfaces_reseau": get_network_interfaces(),
-            "partitions_disque": get_disk_partitions()
-        }
-        
-        logger.info("Informations statiques collectées manuellement avec succès")
-        return static_data
+        else:
+            logger.error("Impossible de charger l'agent ou fonction collect_initial_data manquante")
+            return {}
     except Exception as e:
         logger.error(f"Erreur lors de la collecte des informations statiques: {e}")
         import traceback
@@ -204,386 +102,74 @@ def get_machine_state():
     """
     logger.info("Collecte de l'état actuel de la machine via l'agent...")
     try:
-        # Essayer de charger et utiliser l'agent
+        # Charger et utiliser l'agent
         agent_module = load_agent_module()
-        if agent_module and hasattr(agent_module, 'collect_variable_data'):
+        if (agent_module and hasattr(agent_module, 'collect_variable_data')):
             logger.info("Utilisation de l'agent pour collecter les données variables")
             variable_data = agent_module.collect_variable_data()
             logger.info("Données variables collectées avec succès via l'agent")
             return variable_data
-        
-        # Fallback: collecter les informations manuellement
-        logger.warning("Impossible d'utiliser l'agent, collecte manuelle des informations variables")
-        
-        # CPU
-        cpu_per_core = psutil.cpu_percent(interval=0.5, percpu=True)
-        cpu_cores_data = []
-        for i, usage in enumerate(cpu_per_core):
-            cpu_cores_data.append({
-                "core": i,
-                "utilisation": usage,
-                "libre": 100 - usage
-            })
-        
-        # Température CPU
-        cpu_temp = get_cpu_temperature()
-        
-        # Mémoire
-        memory = psutil.virtual_memory()
-        swap = psutil.swap_memory()
-        
-        # Disque
-        disk = psutil.disk_usage('/')
-        
-        # GPU (si disponible)
-        gpu_usage = get_gpu_usage()
-        
-        # Réseau
-        net_io_counters = psutil.net_io_counters()
-        
-        # Connexion Internet
-        internet_connected = is_internet_connected()
-        
-        # Nombre de processus
-        process_count = len(psutil.pids())
-        
-        # Batterie
-        battery_info = get_battery_percentage()
-        
-        # Uptime
-        uptime_seconds = time.time() - psutil.boot_time()
-        uptime_str = str(timedelta(seconds=uptime_seconds))
-        
-        # Assembler les données variables
-        variable_data = {
-            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "cpu": {
-                "global": sum(cpu_per_core) / len(cpu_per_core) if cpu_per_core else 0,
-                "par_coeur": cpu_cores_data,
-                "temperature": cpu_temp
-            },
-            "memoire": {
-                "ram": {
-                    "pourcentage_utilise": memory.percent,
-                    "pourcentage_libre": 100 - memory.percent,
-                    "utilisee": bytes_to_human_readable(memory.used),
-                    "disponible": bytes_to_human_readable(memory.available)
-                },
-                "swap": {
-                    "pourcentage_utilise": swap.percent,
-                    "pourcentage_libre": 100 - swap.percent,
-                    "utilisee": bytes_to_human_readable(swap.used),
-                    "disponible": bytes_to_human_readable(swap.free)
-                },
-                "cache": {
-                    "utilisee": bytes_to_human_readable(memory.cached) if hasattr(memory, 'cached') else "Non disponible"
-                }
-            },
-            "disque": {
-                "pourcentage_utilise": disk.percent,
-                "pourcentage_libre": 100 - disk.percent
-            },
-            "gpu_utilisation": gpu_usage,
-            "reseau": {
-                "octets_envoyes": bytes_to_human_readable(net_io_counters.bytes_sent),
-                "octets_recus": bytes_to_human_readable(net_io_counters.bytes_recv),
-                "paquets_envoyes": net_io_counters.packets_sent,
-                "paquets_recus": net_io_counters.packets_recv,
-                "erreurs_reception": net_io_counters.errin,
-                "erreurs_envoi": net_io_counters.errout,
-                "paquets_supprimes_reception": net_io_counters.dropin,
-                "paquets_supprimes_envoi": net_io_counters.dropout
-            },
-            "connexion_internet": internet_connected,
-            "nombre_processus": process_count,
-            "batterie": battery_info if battery_info else "Non disponible",
-            "uptime": uptime_str,
-            "uptime_seconds": int(uptime_seconds)
-        }
-        
-        logger.info("Informations variables collectées manuellement avec succès")
-        return variable_data
+        else:
+            logger.error("Impossible de charger l'agent ou fonction collect_variable_data manquante")
+            return {}
     except Exception as e:
         logger.error(f"Erreur lors de la collecte des informations variables: {e}")
         import traceback
         logger.error(traceback.format_exc())
         return {}
 
-# Fonctions utilitaires pour la collecte manuelle des données
-def bytes_to_human_readable(bytes_value):
+def convert_agent_data_to_legacy_format(agent_data):
     """
-    Convertit un nombre d'octets en format lisible par un humain.
-    """
-    if bytes_value is None:
-        return "Non disponible"
+    Convertit les données de l'agent au format attendu par l'application legacy.
     
-    for unit in ['B', 'KB', 'MB', 'GB', 'TB', 'PB']:
-        if bytes_value < 1024.0 or unit == 'PB':
-            return f"{bytes_value:.2f} {unit}"
-        bytes_value /= 1024.0
-
-def get_machine_type():
-    """
-    Détermine si la machine est un ordinateur de bureau, un portable, etc.
-    """
-    system = platform.system()
-    if system == "Linux":
-        # Vérifier si c'est un portable sur Linux
-        if os.path.exists("/sys/class/power_supply/BAT0") or os.path.exists("/sys/class/power_supply/BAT1"):
-            return "Portable"
-        if "Macbook" in platform.node() or "MacBook" in platform.node():
-            return "MacBook"
-        return "PC de bureau"
-    elif system == "Windows":
-        # Vérifier si c'est un portable sur Windows
-        if hasattr(psutil, "sensors_battery") and psutil.sensors_battery():
-            return "Portable"
-        return "PC de bureau"
-    elif system == "Darwin":
-        try:
-            import subprocess
-            model = subprocess.getoutput("sysctl -n hw.model")
-            if "MacBook" in model:
-                return "MacBook"
-            elif "iMac" in model:
-                return "iMac"
-            else:
-                return "Mac"
-        except:
-            return "Mac"
-    else:
-        return "Indéterminé"
-
-def get_cpu_temperature():
-    """
-    Récupère la température du CPU si disponible.
-    """
-    try:
-        if platform.system() == "Linux":
-            try:
-                # Essayer avec sensors
-                output = subprocess.check_output(["sensors"], universal_newlines=True)
-                for line in output.split("\n"):
-                    if "Core" in line and "°C" in line:
-                        return float(line.split("+")[1].split("°C")[0].strip())
-            except:
-                try:
-                    # Essayer avec la lecture directe des fichiers système
-                    with open("/sys/class/thermal/thermal_zone0/temp", "r") as f:
-                        return float(f.read().strip()) / 1000.0
-                except:
-                    pass
-    except Exception as e:
-        logger.error(f"Erreur lors de la récupération de la température CPU: {e}")
-    return None
-
-def get_battery_percentage():
-    """
-    Récupère le pourcentage de batterie si disponible.
-    """
-    try:
-        battery = psutil.sensors_battery()
-        if battery:
-            return {
-                "percent": battery.percent,
-                "power_plugged": battery.power_plugged,
-                "secsleft": str(timedelta(seconds=battery.secsleft)) if battery.secsleft != psutil.POWER_TIME_UNLIMITED else "Illimité"
-            }
-    except Exception as e:
-        logger.error(f"Erreur lors de la récupération des informations de batterie: {e}")
-    return None
-
-def get_gpu_usage():
-    """
-    Récupère l'utilisation du GPU si disponible.
-    """
-    try:
-        if platform.system() == "Windows":
-            try:
-                import GPUtil
-                gpus = GPUtil.getGPUs()
-                if gpus:
-                    return [{
-                        "id": gpu.id,
-                        "name": gpu.name,
-                        "load": gpu.load * 100,
-                        "memory_total": gpu.memoryTotal,
-                        "memory_used": gpu.memoryUsed,
-                        "temperature": gpu.temperature
-                    } for gpu in gpus]
-            except ImportError:
-                pass
-        elif platform.system() == "Linux":
-            try:
-                # Essayer avec nvidia-smi pour les GPU NVIDIA
-                output = subprocess.check_output(["nvidia-smi", "--query-gpu=utilization.gpu,memory.used,memory.total,temperature.gpu", "--format=csv,noheader,nounits"], universal_newlines=True)
-                gpus = []
-                for i, line in enumerate(output.strip().split("\n")):
-                    values = line.split(", ")
-                    if len(values) >= 4:
-                        gpus.append({
-                            "id": i,
-                            "name": f"GPU {i}",
-                            "load": float(values[0]),
-                            "memory_used": float(values[1]),
-                            "memory_total": float(values[2]),
-                            "temperature": float(values[3])
-                        })
-                if gpus:
-                    return gpus
-            except:
-                pass
-    except Exception as e:
-        logger.error(f"Erreur lors de la récupération de l'utilisation GPU: {e}")
-    return None
-
-def is_internet_connected():
-    """
-    Vérifie si l'ordinateur est connecté à Internet.
-    """
-    try:
-        # Tentative de connexion à Google DNS
-        socket.create_connection(("8.8.8.8", 53), timeout=3)
-        return True
-    except OSError:
-        pass
-    return False
-
-def get_network_interfaces():
-    """
-    Récupère les informations sur les interfaces réseau.
-    """
-    network_interfaces = []
-    try:
-        for interface_name, interface_addresses in psutil.net_if_addrs().items():
-            interface_info = {
-                "name": interface_name,
-                "addresses": []
-            }
-            
-            for addr in interface_addresses:
-                address_info = {
-                    "family": str(addr.family),
-                    "address": addr.address,
-                    "netmask": addr.netmask,
-                    "broadcast": addr.broadcast
-                }
-                interface_info["addresses"].append(address_info)
-            
-            # Ajouter les statistiques de l'interface si disponibles
-            if interface_name in psutil.net_if_stats():
-                stats = psutil.net_if_stats()[interface_name]
-                interface_info["isup"] = stats.isup
-                interface_info["speed"] = stats.speed
-                interface_info["duplex"] = stats.duplex
-                interface_info["mtu"] = stats.mtu
-            
-            network_interfaces.append(interface_info)
-    except Exception as e:
-        logger.error(f"Erreur lors de la récupération des interfaces réseau: {e}")
-    
-    return network_interfaces
-
-def get_disk_partitions():
-    """
-    Récupère les informations sur les partitions de disque.
-    """
-    partitions = []
-    
-    try:
-        for part in psutil.disk_partitions(all=True):
-            partition_info = {
-                "device": part.device,
-                "mountpoint": part.mountpoint,
-                "fstype": part.fstype,
-                "opts": part.opts
-            }
-            
-            try:
-                usage = psutil.disk_usage(part.mountpoint)
-                partition_info.update({
-                    "total": bytes_to_human_readable(usage.total),
-                    "used": bytes_to_human_readable(usage.used),
-                    "free": bytes_to_human_readable(usage.free),
-                    "percent_used": usage.percent,
-                    "percent_free": 100 - usage.percent
-                })
-            except (PermissionError, FileNotFoundError):
-                # Certaines partitions peuvent ne pas être accessibles
-                partition_info.update({
-                    "total": "0.00 B",
-                    "used": "0.00 B",
-                    "free": "0.00 B",
-                    "percent_used": 0.0,
-                    "percent_free": 100.0
-                })
-            
-            partitions.append(partition_info)
-    except Exception as e:
-        logger.error(f"Erreur lors de la récupération des partitions de disque: {e}")
-    
-    return partitions
-
-def get_machine_state():
-    """
-    Récupère l'état actuel de la machine du volontaire.
-    
+    Args:
+        agent_data: Données provenant de l'agent
+        
     Returns:
-        dict: État actuel de la machine
+        dict: Données converties au format legacy
     """
-    logger.info("Collecte de l'état actuel de la machine...")
     try:
-        # Mémoire
-        mem = psutil.virtual_memory()
-        swap = psutil.swap_memory()
-        
-        # Disque
-        disk = psutil.disk_usage("/")
-        
-        # CPU
-        cpu_usage_per_core = psutil.cpu_percent(interval=0.5, percpu=True)
-        
-        # Réseau
-        net_io = psutil.net_io_counters()
-        
-        # Batterie
-        battery_percentage = 0
-        try:
-            battery = psutil.sensors_battery()
-            if battery:
-                battery_percentage = battery.percent
-        except:
-            pass
-        
-        # Construire le dictionnaire d'état
-        state = {
-            "used_memory": mem.used,
-            "memory_usage": mem.percent,
-            "cache": mem.cached,
-            "swap_total": swap.total,
-            "swap_used": swap.used,
-            "swap_percentage": swap.percent,
-            "used_disk": disk.used,
-            "disk_percentage": disk.percent,
-            "cpu_usage_per_core": cpu_usage_per_core,
-            "cpu_usage_average": sum(cpu_usage_per_core) / len(cpu_usage_per_core),
-            "gpu_usage_percentage": 0,  # À implémenter si nécessaire
-            "cpu_temperature": 0,  # À implémenter si nécessaire
-            "net_bytes_sent": net_io.bytes_sent,
-            "net_bytes_received": net_io.bytes_recv,
-            "battery_percentage": battery_percentage,
-            "uptime": int(time.time() - psutil.boot_time()),
-            "boot_time": psutil.boot_time(),
-            "internet_enabled": True,  # Supposé vrai si on peut communiquer
-            "timestamp": time.time()
-        }
-        
-        logger.info("État de la machine collecté avec succès")
-        return state
+        if not agent_data:
+            return {}
+            
+        # Conversion des données statiques
+        if 'cpu' in agent_data and 'memoire' in agent_data:
+            # Format statique de l'agent -> format legacy
+            return {
+                'cpu_cores': agent_data.get('cpu', {}).get('coeurs_logiques', 1),
+                'total_memory': agent_data.get('memoire', {}).get('ram', {}).get('total', '1 GB'),
+                'total_disk': agent_data.get('disque', {}).get('total', '10 GB'),
+                'hostname': agent_data.get('os', {}).get('hostname', socket.gethostname()),
+                'os_name': agent_data.get('os', {}).get('nom', platform.system()),
+                'machine_type': agent_data.get('type_machine', 'Indéterminé'),
+                'raw_data': agent_data
+            }
+        else:
+            # Format variable de l'agent -> format legacy
+            return {
+                'used_memory': 0,  # À calculer depuis le pourcentage
+                'memory_usage': agent_data.get('memoire', {}).get('ram', {}).get('pourcentage_utilise', 0),
+                'cache': 0,
+                'swap_total': 0,
+                'swap_used': 0,
+                'swap_percentage': agent_data.get('memoire', {}).get('swap', {}).get('pourcentage_utilise', 0),
+                'used_disk': 0,
+                'disk_percentage': agent_data.get('disque', {}).get('pourcentage_utilise', 0),
+                'cpu_usage_per_core': [core.get('utilisation', 0) for core in agent_data.get('cpu', {}).get('par_coeur', [])],
+                'cpu_usage_average': agent_data.get('cpu', {}).get('global', 0),
+                'gpu_usage_percentage': 0,
+                'cpu_temperature': agent_data.get('cpu', {}).get('temperature', 0) or 0,
+                'net_bytes_sent': 0,
+                'net_bytes_received': 0,
+                'battery_percentage': agent_data.get('batterie', {}).get('percent', 0) if isinstance(agent_data.get('batterie'), dict) else 0,
+                'uptime': 0,
+                'boot_time': time.time(),
+                'internet_enabled': agent_data.get('connexion_internet', True),
+                'timestamp': time.time(),
+                'raw_data': agent_data
+            }
     except Exception as e:
-        logger.error(f"Erreur lors de la collecte de l'état de la machine: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
+        logger.error(f"Erreur lors de la conversion des données: {e}")
         return {}
 
 def handle_task_assignment(channel, message):
@@ -679,7 +265,6 @@ def publish_availability(volunteer_id):
     
     Args:
         volunteer_id: ID du volontaire
-        token: Token du volontaire
     """
     logger.info(f"Publication de la disponibilité du volontaire {volunteer_id}...")
     
@@ -687,9 +272,36 @@ def publish_availability(volunteer_id):
         from .client import RedisClient
         client = RedisClient.get_instance()
         
-        # Récupérer les informations de la machine
+        # Récupérer les informations de la machine via l'agent
         machine_info = get_machine_info()
         machine_state = get_machine_state()
+        
+        # Extraire les informations nécessaires
+        cpu_cores = machine_info.get('cpu', {}).get('coeurs_logiques', 1)
+        
+        # Convertir la mémoire totale en MB
+        ram_total_str = machine_info.get('memoire', {}).get('ram', {}).get('total', '1 GB')
+        try:
+            if 'GB' in ram_total_str:
+                ram_mb = int(float(ram_total_str.split()[0]) * 1024)
+            elif 'MB' in ram_total_str:
+                ram_mb = int(float(ram_total_str.split()[0]))
+            else:
+                ram_mb = 1024  # Default 1GB
+        except:
+            ram_mb = 1024
+        
+        # Convertir le disque total en GB
+        disk_total_str = machine_info.get('disque', {}).get('total', '10 GB')
+        try:
+            if 'GB' in disk_total_str:
+                disk_gb = int(float(disk_total_str.split()[0]))
+            elif 'TB' in disk_total_str:
+                disk_gb = int(float(disk_total_str.split()[0]) * 1024)
+            else:
+                disk_gb = 10  # Default 10GB
+        except:
+            disk_gb = 10
         
         # Construire le message de disponibilité
         availability_message = {
@@ -697,15 +309,15 @@ def publish_availability(volunteer_id):
             'status': 'available',
             'timestamp': time.time(),
             'resources': {
-                'cpu_cores': machine_info.get('cpu_cores', 1),
-                'ram_mb': machine_info.get('total_memory', 1024) // (1024 * 1024),
-                'disk_gb': machine_info.get('total_disk', 10 * 1024 * 1024 * 1024) // (1024 * 1024 * 1024),
+                'cpu_cores': cpu_cores,
+                'ram_mb': ram_mb,
+                'disk_gb': disk_gb,
                 'gpu': False  # À modifier si nécessaire
             },
             'usage': {
-                'cpu': machine_state.get('cpu_usage_average', 0),
-                'ram': machine_state.get('memory_usage', 0),
-                'disk': machine_state.get('disk_percentage', 0)
+                'cpu': machine_state.get('cpu', {}).get('global', 0),
+                'ram': machine_state.get('memoire', {}).get('ram', {}).get('pourcentage_utilise', 0),
+                'disk': machine_state.get('disque', {}).get('pourcentage_utilise', 0)
             }
         }
         
@@ -713,12 +325,12 @@ def publish_availability(volunteer_id):
         from .utils import get_volunteer_auth_token
         token = get_volunteer_auth_token()
         client.publish( 
-                        'volunteer/available',
-                        availability_message, 
-                        str(uuid.uuid4()),
-                        token,
-                        'request'
-                    )
+            'volunteer/available',
+            availability_message, 
+            str(uuid.uuid4()),
+            token,
+            'request'
+        )
                     
         logger.info(f"Disponibilité publiée pour le volontaire {volunteer_id}")
         return True
@@ -757,7 +369,6 @@ class RedisAppConfig(AppConfig):
         if 'runserver' not in sys.argv and 'daphne' not in sys.argv[0]:
             return
         
-        
         logger.info("===== Initialisation du service de communication Redis pour le volontaire =====")
         
         try:
@@ -775,30 +386,46 @@ class RedisAppConfig(AppConfig):
             for channel, handler in DEFAULT_HANDLERS.items():
                 self.redis_client.subscribe(channel, handler)
             
-            
-            
             # ========== Unification de la collecte et de l'enregistrement volontaire ==========
             from volontaire.models import MachineInfo
+            
             def collect_full_volunteer_info(existing_info=None):
+                """Collecte toutes les informations du volontaire via l'agent"""
                 static_data = get_machine_info()
-                logger.info(f"Données statiques collectées: {static_data['disque']}, {static_data['memoire']}")
+                logger.info(f"Données statiques collectées via l'agent: OS={static_data.get('os', {}).get('nom')}, CPU={static_data.get('cpu', {}).get('coeurs_logiques')} cores")
+                
                 from .utils import get_local_ip
                 ip_address = get_local_ip()
                 hostname = static_data.get('os', {}).get('hostname', socket.gethostname())
                 cpu_cores = int(static_data.get('cpu', {}).get('coeurs_logiques', 1))
-                total_memory = static_data.get('memoire', {}).get('ram', {}).get('total', '0 GB')
+                
+                # Conversion mémoire RAM
+                total_memory_str = static_data.get('memoire', {}).get('ram', {}).get('total', '1 GB')
                 try:
-                    ram_mb = float(total_memory.split(' ')[0])
+                    if 'GB' in total_memory_str:
+                        ram_mb = float(total_memory_str.split(' ')[0]) * 1024
+                    elif 'MB' in total_memory_str:
+                        ram_mb = float(total_memory_str.split(' ')[0])
+                    else:
+                        ram_mb = 1024  # Default 1GB
                 except:
-                    ram_mb = 1  # Default to 1 GB if parsing fails
+                    ram_mb = 1024
 
-                total_disk = static_data.get('disque', {}).get('total', '0 GB')
+                # Conversion disque
+                total_disk_str = static_data.get('disque', {}).get('total', '10 GB')
                 try:
-                    disk_gb = float(total_disk.split(' ')[0])
+                    if 'GB' in total_disk_str:
+                        disk_gb = float(total_disk_str.split(' ')[0])
+                    elif 'TB' in total_disk_str:
+                        disk_gb = float(total_disk_str.split(' ')[0]) * 1024
+                    else:
+                        disk_gb = 10  # Default 10GB
                 except:
-                    disk_gb = 10  # Default to 10 GB if parsing fails
+                    disk_gb = 10
+                
                 username = (existing_info.username if existing_info and hasattr(existing_info, 'username') and existing_info.username else f"volunteer_{uuid.uuid4().hex[:8]}")
                 password = (existing_info.password if existing_info and hasattr(existing_info, 'password') and existing_info.password else uuid.uuid4().hex)
+                
                 return {
                     'hostname': hostname,
                     'ip_address': ip_address,
@@ -815,7 +442,7 @@ class RedisAppConfig(AppConfig):
 
             # Cas 1 : Volontaire déjà enregistré (avec volunteer_id)
             if volunteer_info and volunteer_info.volunteer_id:
-                # Toujours enrichir les données locales si besoin
+                # Enrichir les données locales avec l'agent
                 full_info = collect_full_volunteer_info(volunteer_info)
                 # Mettre à jour la BD locale si des champs sont incomplets
                 updated = False
@@ -851,7 +478,7 @@ class RedisAppConfig(AppConfig):
             else:
                 # Cas 2 ou 3 : Volontaire non enregistré ou sans volunteer_id
                 full_info = collect_full_volunteer_info(volunteer_info)
-                logger.info(f"[ENREGISTREMENT] Données envoyées au coordinateur : name={full_info['hostname']}, ip_address={full_info['ip_address']}, cpu_cores={full_info['cpu_cores']}, ram_mb={full_info['ram_mb']}, disk_gb={full_info['disk_gb']}, username={full_info['username']}, password={full_info['password']}")
+                logger.info(f"[ENREGISTREMENT] Données envoyées au coordinateur via l'agent : name={full_info['hostname']}, ip_address={full_info['ip_address']}, cpu_cores={full_info['cpu_cores']}, ram_mb={full_info['ram_mb']}, disk_gb={full_info['disk_gb']}, username={full_info['username']}, password={full_info['password']}")
                 
                 success, data = register_volunteer(
                     name=full_info['hostname'],
@@ -864,46 +491,47 @@ class RedisAppConfig(AppConfig):
                     machine_info=full_info['machine_info'],
                 )
                 if success:
-                    logger.info("Volontaire enregistré aupres du coordinateur avec succès")
+                    logger.info("Volontaire enregistré auprès du coordinateur avec succès")
                     # Mettre à jour la BD locale (création ou update)
                     def machine_info_from_raw(raw, username, password, volunteer_id=None):
                         # Extraction et mapping de tous les champs du modèle
                         return {
                             'volunteer_id': volunteer_id,
-                            'adresse_mac': raw.get('reseau', {}).get('mac', []),
+                            'adresse_mac': raw.get('adresse_mac', ''),
                             'username': username,
                             'password': password,
                             'os_name': raw.get('os', {}).get('nom', ''),
                             'os_version': raw.get('os', {}).get('version', ''),
                             'os_release': raw.get('os', {}).get('release', ''),
                             'os_architecture': raw.get('os', {}).get('architecture', ''),
-                            'hostname': raw.get('hostname', ''),
-                            'machine_type': raw.get('machine_type', ''),
+                            'hostname': raw.get('os', {}).get('hostname', ''),
+                            'machine_type': raw.get('type_machine', ''),
                             'cpu_type': raw.get('cpu', {}).get('type', ''),
                             'cpu_architecture': raw.get('cpu', {}).get('architecture', ''),
                             'cpu_bits': raw.get('cpu', {}).get('bits', ''),
                             'cpu_cores_physical': raw.get('cpu', {}).get('coeurs_physiques', 1),
                             'cpu_cores_logical': raw.get('cpu', {}).get('coeurs_logiques', 1),
-                            'cpu_frequency_current': raw.get('cpu', {}).get('frequence_courante', None),
-                            'cpu_frequency_min': raw.get('cpu', {}).get('frequence_min', None),
-                            'cpu_frequency_max': raw.get('cpu', {}).get('frequence_max', None),
-                            'ram_total': float(raw.get('memoire', {}).get('ram', {}).get('total', 0).split(' ')[0]) * 1024 * 1024,
-                            'ram_total_human': raw.get('memoire', {}).get('ram', {}).get('total_human', '0'),
-                            'swap_total': float(raw.get('memoire', {}).get('swap', {}).get('total', 0).split(' ')[0]) * 1024 * 1024,
-                            'swap_total_human': raw.get('memoire', {}).get('swap', {}).get('total_human', '0'),
-                            'disk_total': float(raw.get('disque', {}).get('total', 0).split(' ')[0]) * 1024 * 1024,
-                            'disk_total_human': raw.get('disque', {}).get('total_human', '0'),
-                            'partitions': raw.get('disque', {}).get('partitions', []),
-                            'screen_resolution': raw.get('ecran', {}).get('resolution', ''),
-                            'network_interfaces': raw.get('reseau', {}).get('interfaces', []),
-                            'bios_info': raw.get('bios', {}),
-                            'motherboard_info': raw.get('carte_mere', {}),
-                            'usb_devices': raw.get('usb', []),
-                            'logged_users': raw.get('utilisateurs', []),
+                            'cpu_frequency_current': raw.get('cpu', {}).get('frequence', {}).get('actuelle', None),
+                            'cpu_frequency_min': raw.get('cpu', {}).get('frequence', {}).get('min', None),
+                            'cpu_frequency_max': raw.get('cpu', {}).get('frequence', {}).get('max', None),
+                            'ram_total': self._parse_size_to_bytes(raw.get('memoire', {}).get('ram', {}).get('total', '0 GB')),
+                            'ram_total_human': raw.get('memoire', {}).get('ram', {}).get('total', '0 GB'),
+                            'swap_total': self._parse_size_to_bytes(raw.get('memoire', {}).get('swap', {}).get('total', '0 GB')),
+                            'swap_total_human': raw.get('memoire', {}).get('swap', {}).get('total', '0 GB'),
+                            'disk_total': self._parse_size_to_bytes(raw.get('disque', {}).get('total', '0 GB')),
+                            'disk_total_human': raw.get('disque', {}).get('total', '0 GB'),
+                            'partitions': raw.get('partitions_disque', []),
+                            'screen_resolution': raw.get('resolution_ecran', ''),
+                            'network_interfaces': raw.get('interfaces_reseau', []),
+                            'bios_info': raw.get('bios_carte_mere', {}).get('BIOS', {}),
+                            'motherboard_info': raw.get('bios_carte_mere', {}).get('Carte mère', {}),
+                            'usb_devices': raw.get('peripheriques_usb', []),
+                            'logged_users': raw.get('utilisateurs_connectes', []),
                             'last_update': timezone.now(),
                             'registration_date': datetime.now(),
                             'raw_data': raw,
                         }
+                        
                     if not volunteer_info:
                         # Création complète avec tous les champs
                         MachineInfo.objects.create(**machine_info_from_raw(full_info['machine_info'], full_info['username'], full_info['password'], data.get('volunteer_id')))
@@ -964,7 +592,6 @@ class RedisAppConfig(AppConfig):
             # Charger les identifiants du volontaire (si enregistré)
             self.load_volunteer_credentials()
             
-            
             # Démarrer les threads de communication
             self.start_communication_threads()
             
@@ -974,11 +601,34 @@ class RedisAppConfig(AppConfig):
                 self.task_manager = start_task_manager(self.volunteer_id)
                 logger.info(f"Gestionnaire de tâches démarré pour le volontaire {self.volunteer_id}")
             
-            logger.info("Application Redis Communication initialisée avec succès")
+            logger.info("Application Redis Communication initialisée avec succès avec l'agent de collecte")
         except Exception as e:
             logger.error(f"Erreur lors de l'initialisation de l'application Redis: {e}")
             import traceback
             logger.error(traceback.format_exc())
+    
+    def _parse_size_to_bytes(self, size_str):
+        """
+        Convertit une chaîne de taille (ex: '8.00 GB') en octets.
+        """
+        try:
+            parts = size_str.strip().split()
+            if len(parts) >= 2:
+                value = float(parts[0])
+                unit = parts[1].upper()
+                
+                multipliers = {
+                    'B': 1,
+                    'KB': 1024,
+                    'MB': 1024 ** 2,
+                    'GB': 1024 ** 3,
+                    'TB': 1024 ** 4
+                }
+                
+                return int(value * multipliers.get(unit, 1))
+        except:
+            pass
+        return 0
     
     def load_volunteer_credentials(self):
         """
@@ -1002,14 +652,14 @@ class RedisAppConfig(AppConfig):
             
     def collect_static_data(self):
         """
-        Collecte les informations statiques de la machine et les stocke dans la base de données.
+        Collecte les informations statiques de la machine via l'agent et les stocke dans la base de données.
         """
         try:
-            logger.info("Collecte des informations statiques de la machine...")
+            logger.info("Collecte des informations statiques de la machine via l'agent...")
             self.static_data = get_machine_info()
             
             if not self.static_data:
-                logger.error("Échec de la collecte des informations statiques")
+                logger.error("Échec de la collecte des informations statiques via l'agent")
                 return
             
             logger.info("Sauvegarde des informations statiques dans la base de données...")
@@ -1022,7 +672,7 @@ class RedisAppConfig(AppConfig):
                 machine_info, created = MachineInfo.objects.get_or_create(
                     volunteer_id=self.volunteer_id,
                     defaults={
-                        'adresse_mac': self.static_data.get('adresse_mac', []),
+                        'adresse_mac': self.static_data.get('adresse_mac', ''),
                         'machine_type': self.static_data.get('type_machine', 'Indéterminé'),
                         'system': self.static_data.get('os', {}).get('nom', ''),
                         'node_name': self.static_data.get('os', {}).get('hostname', ''),
@@ -1035,17 +685,16 @@ class RedisAppConfig(AppConfig):
                         'cpu_cores': self.static_data.get('cpu', {}).get('coeurs_physiques', 1),
                         'cpu_logical_cores': self.static_data.get('cpu', {}).get('coeurs_logiques', 1),
                         'cpu_frequency': self.static_data.get('cpu', {}).get('frequence', {}).get('max', 0),
-                        'total_memory': self.static_data.get('memoire', {}).get('ram', {}).get('total', 0),
+                        'total_memory': self._parse_size_to_bytes(self.static_data.get('memoire', {}).get('ram', {}).get('total', '0 GB')),
                         'screen_resolution': self.static_data.get('resolution_ecran', 'unknown'),
-                        'total_disk': self.static_data.get('disque', {}).get('total', 0),
+                        'total_disk': self._parse_size_to_bytes(self.static_data.get('disque', {}).get('total', '0 GB')),
                         'name': f"Volunteer-{self.static_data.get('os', {}).get('hostname', 'unknown')}",
                         'raw_data': self.static_data
                     }
                 )
                 
                 if not created:
-                    # Ne pas mettre à jour les caractéristiques statiques qui ne devraient pas changer
-                    # Mais mettre à jour les caractéristiques qui pourraient changer (comme le nom d'hôte)
+                    # Mettre à jour quelques champs qui peuvent changer
                     machine_info.host_name = self.static_data.get('os', {}).get('hostname', '')
                     machine_info.name = f"Volunteer-{self.static_data.get('os', {}).get('hostname', 'unknown')}"
                     machine_info.save(update_fields=['host_name', 'name'])
@@ -1060,14 +709,14 @@ class RedisAppConfig(AppConfig):
     
     def collect_dynamic_data(self):
         """
-        Collecte les données dynamiques de la machine et les stocke dans la base de données.
+        Collecte les données dynamiques de la machine via l'agent et les stocke dans la base de données.
         """
         try:
-            logger.info("Collecte des données dynamiques de la machine...")
+            logger.info("Collecte des données dynamiques de la machine via l'agent...")
             dynamic_data = get_machine_state()
             
             if not dynamic_data:
-                logger.error("Échec de la collecte des données dynamiques")
+                logger.error("Échec de la collecte des données dynamiques via l'agent")
                 return
             
             # Ajouter les données à l'historique
@@ -1095,15 +744,15 @@ class RedisAppConfig(AppConfig):
                         machine=machine_info,
                         timestamp=timezone.now(),
                         cpu_usage=dynamic_data.get('cpu', {}).get('global', 0),
-                        used_memory=dynamic_data.get('memoire', {}).get('ram', {}).get('utilisee', 0),
+                        used_memory=0,  # À calculer si nécessaire
                         memory_usage=dynamic_data.get('memoire', {}).get('ram', {}).get('pourcentage_utilise', 0),
                         used_disk=dynamic_data.get('disque', {}).get('pourcentage_utilise', 0),
-                        temperature=dynamic_data.get('cpu', {}).get('temperature', 0),
+                        temperature=dynamic_data.get('cpu', {}).get('temperature', 0) or 0,
                         network_sent=dynamic_data.get('reseau', {}).get('octets_envoyes', '0 B'),
                         network_received=dynamic_data.get('reseau', {}).get('octets_recus', '0 B'),
                         is_online=dynamic_data.get('connexion_internet', False),
                         battery_level=dynamic_data.get('batterie', {}).get('percent', 0) if isinstance(dynamic_data.get('batterie'), dict) else 0,
-                        uptime=dynamic_data.get('uptime_seconds', 0)
+                        uptime=0  # À calculer si nécessaire
                     )
                     
                     logger.info(f"Données dynamiques sauvegardées dans la base de données avec ID {etat.id}")
@@ -1167,79 +816,25 @@ class RedisAppConfig(AppConfig):
         Démarre les threads de communication pour la collecte et l'envoi des données.
         """
         try:
-            # Thread de collecte des données
-            def data_collection_loop():
-                while True:
-                    try:
-                        # Collecter les données dynamiques
-                        self.collect_dynamic_data()
-                        
-                        # Attendre l'intervalle de collecte
-                        time.sleep(COLLECTION_INTERVAL)
-                    except Exception as e:
-                        logger.error(f"Erreur dans la boucle de collecte des données: {e}")
-                        time.sleep(10)  # Attendre un peu avant de réessayer
-            
-            # Thread d'envoi des données
-            def data_sending_loop():
-                while True:
-                    try:
-                        # Envoyer les données au coordinateur
-                        self.send_data_to_coordinator()
-                        
-                        # Attendre l'intervalle d'envoi
-                        time.sleep(SEND_INTERVAL)
-                    except Exception as e:
-                        logger.error(f"Erreur dans la boucle d'envoi des données: {e}")
-                        time.sleep(10)  # Attendre un peu avant de réessayer
-            
-            # Thread de publication de disponibilité
-            def availability_loop():
-                while True:
-                    try:
-                        if self.volunteer_id:
-                            publish_availability(self.volunteer_id)
-                        
-                        # Attendre avant la prochaine publication
-                        time.sleep(60)  # Publier toutes les minutes
-                    except Exception as e:
-                        logger.error(f"Erreur dans la boucle de publication de disponibilité: {e}")
-                        time.sleep(10)  # Attendre un peu avant de réessayer
-            
             # Thread d'écoute des tâches
             def task_listener_loop():
-                    try:
-                        if self.redis_client and self.volunteer_id:
-                            # S'abonner aux canaux de tâches
-                            from .task_handlers import task_assignment_handler, task_cancel_handler
-                            
-                            # Canal général d'assignation des tâches
-                            self.redis_client.subscribe('task/assignment', task_assignment_handler)
-                            logger.info("Abonné au canal d'assignation des tâches")
-                            
-                            # Canal d'annulation des tâches
-                            self.redis_client.subscribe('task/cancel', task_cancel_handler)
-                            logger.info("Abonné au canal d'annulation des tâches")
+                try:
+                    if self.redis_client and self.volunteer_id:
+                        # S'abonner aux canaux de tâches
+                        from .task_handlers import task_assignment_handler, task_cancel_handler
                         
-                    except Exception as e:
-                        logger.error(f"Erreur dans la boucle d'écoute des tâches: {e}")
+                        # Canal général d'assignation des tâches
+                        self.redis_client.subscribe('task/assignment', task_assignment_handler)
+                        logger.info("Abonné au canal d'assignation des tâches")
+                        
+                        # Canal d'annulation des tâches
+                        self.redis_client.subscribe('task/cancel', task_cancel_handler)
+                        logger.info("Abonné au canal d'annulation des tâches")
+                    
+                except Exception as e:
+                    logger.error(f"Erreur dans la boucle d'écoute des tâches: {e}")
             
-            # Démarrer les threads
-            # self.data_collection_thread = threading.Thread(target=data_collection_loop)
-            # self.data_collection_thread.daemon = True
-            # self.data_collection_thread.start()
-            # logger.info("Thread de collecte des données démarré")
-            
-            # self.data_sending_thread = threading.Thread(target=data_sending_loop)
-            # self.data_sending_thread.daemon = True
-            # self.data_sending_thread.start()
-            # logger.info("Thread d'envoi des données démarré")
-            
-            # self.availability_thread = threading.Thread(target=availability_loop)
-            # self.availability_thread.daemon = True
-            # self.availability_thread.start()
-            # logger.info("Thread de publication de disponibilité démarré")
-            
+            # Démarrer le thread d'écoute des tâches
             self.task_listener_thread = threading.Thread(target=task_listener_loop)
             self.task_listener_thread.daemon = True
             self.task_listener_thread.start()
