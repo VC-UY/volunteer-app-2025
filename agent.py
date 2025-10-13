@@ -37,16 +37,16 @@ logging.basicConfig(
 )
 
 # Configuration
-SERVER_HOST = '192.168.1.100'
-SERVER_PORT = 12345
-COLLECTION_INTERVAL = 2
-SEND_INTERVAL = 30
+SERVER_HOST = os.getenv('COORDINATOR_HOST', 'localhost')
+SERVER_PORT = os.getenv('COORDINATOR_PORT', 12345)
+COLLECTION_INTERVAL = os.getenv('COLLECTION_INTERVAL', 2)
+SEND_INTERVAL = os.getenv('SEND_INTERVAL', 30)
 DATA_DIR = "data"
 ID_FILE = "machine_id.txt"
 RESOURCE_THRESHOLD = 80
 STORAGE_LIMIT = 200 * 1024 * 1024  # 200 Mo
-FILES_PER_BATCH = 5
-BATCH_PAUSE = 3  # Pause de 3s toutes les 5 fichiers
+FILES_PER_BATCH = int(os.getenv('FILES_PER_BATCH', 5))
+BATCH_PAUSE = int(os.getenv('BATCH_PAUSE', 3))  # Pause de 3s toutes les 5 fichiers
 
 # Création du répertoire de données
 if not os.path.exists(DATA_DIR):
@@ -824,7 +824,18 @@ def initialize_data_collection():
     except Exception as e:
         logging.error(f"Erreur initialisation collecte: {e}\n{traceback.format_exc()}")
 
-@backoff.on_exception(backoff.expo, (socket.timeout, ConnectionRefusedError, ConnectionResetError, BrokenPipeError), max_tries=5)
+def log_backoff(details):
+    logging.warning(
+        f"Tentative {details['tries']} échouée, nouvelle tentative dans {details['wait']}s..."
+    )
+
+
+@backoff.on_exception(
+    backoff.expo,
+    (socket.timeout, ConnectionRefusedError, ConnectionResetError, BrokenPipeError),
+    max_tries=5,
+    on_backoff=log_backoff
+)
 def send_files_to_server() -> Optional[str]:
     """Envoie les fichiers JSON au serveur."""
     machine_id = get_machine_id()
@@ -921,6 +932,8 @@ def continuous_collection():
         if not machine_id:
             save_initial_data()
             machine_id = send_files_to_server()
+        
+        logging.info(f"Demarrage de la boucle de collecte continue avec machine_id: {machine_id}")
 
         while True:
             if is_storage_limit_reached():
@@ -928,10 +941,10 @@ def continuous_collection():
                 break
             if not initial_data_saved:
                 save_initial_data()
-            if machine_id:
-                variable_data = collect_variable_data()
-                if variable_data and "error" not in variable_data:
-                    save_variable_data_to_file(variable_data)
+                
+            variable_data = collect_variable_data()
+            if variable_data and "error" not in variable_data:
+                save_variable_data_to_file(variable_data)
             current_time = time.time()
             if current_time - last_send_time >= SEND_INTERVAL:
                 machine_id = send_files_to_server()

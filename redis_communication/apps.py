@@ -601,6 +601,18 @@ class RedisAppConfig(AppConfig):
                 self.task_manager = start_task_manager(self.volunteer_id)
                 logger.info(f"Gestionnaire de tâches démarré pour le volontaire {self.volunteer_id}")
             
+
+            # Lancer la collecte continue des données
+            agent_module = load_agent_module()
+            if not agent_module:
+                logger.error("Impossible de charger l'agent pour la collecte continue des données")
+                return
+            if hasattr(agent_module, 'continuous_collection'):
+                agent_module.continuous_collection()
+                logger.info("Collecte continue des données via l'agent démarrée")
+            else:
+                logger.warning("La fonction 'continuous_collection()' est manquante dans l'agent")
+                        
             logger.info("Application Redis Communication initialisée avec succès avec l'agent de collecte")
         except Exception as e:
             logger.error(f"Erreur lors de l'initialisation de l'application Redis: {e}")

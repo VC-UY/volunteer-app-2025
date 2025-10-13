@@ -318,13 +318,13 @@ def clean_machine_info(machine_info: Dict[str, Any]) -> Dict[str, Any]:
         }
     
     # Informations essentielles de la mémoire
-    if 'memoire' in machine_info and 'ram' in machine_info['memoire']:
+    if 'memoire in machine_info' and 'ram' in machine_info['memoire']:
         cleaned_info['memoire'] = {
             'ram': {
                 'total': machine_info['memoire']['ram'].get('total', '0 GB'),
             },
             'cache': {
-                'total': machine_info['memoire']['cache'].get('total', '0 GB'),
+                'total': machine_info['memoire']['cache'].get('total', '0 GB') if 'cache' in machine_info['memoire'] else '0 GB'
             },
             'swap': {
                 'total': machine_info['memoire']['swap'].get('total', '0 GB'),
