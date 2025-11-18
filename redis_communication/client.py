@@ -202,6 +202,27 @@ class RedisClient:
         if token:
             message.token = token
             logger.info(f"Token JWT ajouté au message pour le canal {channel}")
+        elif channel != 'auth/token_refresh':
+            from redis_communication.auth_client import load_volunter_credentials, refresh_token_if_needed
+            auth_info = load_volunter_credentials()
+            if auth_info and 'token' in auth_info:
+                # Vérifier si le token n'est pas expiré et le rafraîchir si nécessaire
+                last_login = auth_info.get('last_login')
+                import datetime
+                if datetime.datetime.now() - datetime.datetime.fromtimestamp(last_login) < datetime.timedelta(hours=1):
+                    message.token = auth_info['token']
+                    logger.info(f"Token JWT valide ajouté au message pour le canal {channel}")
+                else:
+                    # Token expiré, tenter de le rafraîchir
+                    logger.info(f"Token expiré, tentative de rafraîchissement pour le canal {channel}")
+                    new_token = refresh_token_if_needed(auth_info)
+                    if new_token:
+                        message.token = new_token
+                        logger.info(f"Token JWT rafraîchi et ajouté au message pour le canal {channel}")
+                    else:
+                        logger.warning(f"Impossible de rafraîchir le token pour le canal {channel}")
+            else:
+                logger.warning(f"Aucun token disponible pour le canal {channel}")
         
         # Publier le message
         try:

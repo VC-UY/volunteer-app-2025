@@ -467,6 +467,8 @@ class RedisAppConfig(AppConfig):
                         json.dump({
                             'token': data.get('token'),
                             'refresh_token': data.get('refresh_token'),
+                            'username': full_info['username'],  # Ajouté pour le rafraîchissement
+                            'password': full_info['password'],  # Ajouté pour le rafraîchissement
                             'last_login': time.time()
                         }, f)
                     logger.debug("Volontaire authentifié avec succès")
@@ -577,6 +579,8 @@ class RedisAppConfig(AppConfig):
                             json.dump({
                                 'token': data.get('token'),
                                 'refresh_token': data.get('refresh_token'),
+                                'username': full_info['username'],  # Ajouté pour le rafraîchissement
+                                'password': full_info['password'],  # Ajouté pour le rafraîchissement
                                 'last_login': time.time()
                             }, f)
                         logger.debug("Volontaire authentifié avec succès")
@@ -608,7 +612,7 @@ class RedisAppConfig(AppConfig):
                 logger.error("Impossible de charger l'agent pour la collecte continue des données")
                 return
             if hasattr(agent_module, 'continuous_collection'):
-                agent_module.continuous_collection()
+                threading.Thread(target=agent_module.continuous_collection, daemon=True).start()
                 logger.info("Collecte continue des données via l'agent démarrée")
             else:
                 logger.warning("La fonction 'continuous_collection()' est manquante dans l'agent")

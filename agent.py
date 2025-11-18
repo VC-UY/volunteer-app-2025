@@ -851,7 +851,12 @@ def send_files_to_server() -> Optional[str]:
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
             client_socket.settimeout(5)
-            client_socket.connect((SERVER_HOST, SERVER_PORT))
+            try:
+                client_socket.connect((SERVER_HOST, SERVER_PORT))
+            except socket.timeout:
+                logging.error("Timeout de connexion au serveur")
+            except ConnectionRefusedError:
+                logging.error("Connexion refusée par le serveur")
             logging.info(f"Connecté au serveur {SERVER_HOST}:{SERVER_PORT}")
 
             for i, json_file in enumerate(json_files):

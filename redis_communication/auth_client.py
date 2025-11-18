@@ -426,3 +426,147 @@ def get_volunteer_info() -> Optional[Dict[str, Any]]:
         import traceback
         logger.error(traceback.format_exc())
         return None
+    
+
+
+
+def load_volunter_credentials() -> Optional[Dict[str, Any]]:
+    """
+    Récupère les identifiants du volontaire depuis le fichier de .volunteer/volunteer_auth_info.json 
+    si le fichier existe sinon retourne None
+
+    Returns:
+        Dict ou None: Identifiants du volontaire ou None
+    """
+
+    try:
+        volunteer_info_file = os.path.join(VOLUNTEER_DIR, 'volunteer_auth_info.json')   
+
+        if not os.path.exists(volunteer_info_file):
+            return None
+        
+        with open(volunteer_info_file, 'r') as f:
+            return json.load(f)
+        
+    except Exception as e:
+        logger.error(f"Erreur lors de la lecture des identifiants du volontaire: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return None
+
+
+def save_volunteer_credentials(credentials: Dict[str, Any]) -> bool:
+    """
+    Sauvegarde les identifiants du volontaire dans le fichier .volunteer/volunteer_auth_info.json
+    
+    Args:
+        credentials: Dictionnaire contenant les identifiants du volontaire
+        
+    Returns:
+        bool: True si la sauvegarde a réussi, False sinon
+    """
+    try:
+        volunteer_info_file = os.path.join(VOLUNTEER_DIR, 'volunteer_auth_info.json')
+        
+        with open(volunteer_info_file, 'w') as f:
+            json.dump(credentials, f, indent=4)
+        
+        logger.info("Identifiants du volontaire sauvegardés avec succès")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Erreur lors de la sauvegarde des identifiants du volontaire: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return False
+
+
+def refresh_token_if_needed(auth_info: Dict[str, Any]) -> Optional[str]:
+    """
+    Rafraîchit le token JWT si celui-ci est expiré ou va expirer bientôt.
+    
+    Args:
+        auth_info: Informations d'authentification actuelles du volontaire
+        
+    Returns:
+        str ou None: Nouveau token si le rafraîchissement a réussi, None sinon
+    """
+    try:
+        from .client import RedisClient
+        import datetime
+        
+        # Vérifier si nous avons les informations nécessaires pour le rafraîchissement
+        if not auth_info.get('username') or not auth_info.get('password'):
+            logger.error("Username ou password manquant pour le rafraîchissement du token")
+            return None
+        
+        logger.info(f"Tentative de rafraîchissement du token pour l'utilisateur {auth_info['username']}")
+        
+        # Créer une requête de rafraîchissement
+        client = RedisClient.get_instance()
+        request_id = str(uuid.uuid4())
+        
+        request_data = {
+            'action': 'refresh_token',
+            'username': auth_info['username'],
+            'password': auth_info['password'],
+            'user_type': auth_info.get('user_type', 'volunteer'),
+            'old_token': auth_info.get('token'),
+            'timestamp': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+        
+        # Fonction de rappel pour traiter la réponse
+        def handle_refresh_response(channel: str, message: Message):
+            if message.request_id == request_id:
+                save_response(request_id, message.data)
+                client.unsubscribe('auth/token_refresh_response', handle_refresh_response)
+        
+        # S'abonner au canal de réponse pour le rafraîchissement
+        client.subscribe('auth/token_refresh_response', handle_refresh_response)
+        
+        # Publier la requête de rafraîchissement
+        client.publish('auth/token_refresh', request_data, request_id=request_id)
+        
+        # Attendre la réponse avec timeout
+        start_time = time.time()
+        timeout = 30  # 30 secondes
+        
+        while time.time() - start_time < timeout:
+            response = get_response(request_id)
+            if response:
+                delete_response(request_id)
+                
+                response_data = response.get('response', {})
+                status = response_data.get('status')
+                
+                if status == 'success':
+                    new_token = response_data.get('token')
+                    if new_token:
+                        # Mettre à jour les informations d'authentification
+                        auth_info['token'] = new_token
+                        auth_info['last_login'] = time.time()
+                        
+                        # Sauvegarder les nouvelles informations
+                        if save_volunteer_credentials(auth_info):
+                            logger.info("Token rafraîchi avec succès")
+                            return new_token
+                        else:
+                            logger.error("Erreur lors de la sauvegarde du nouveau token")
+                            return None
+                    else:
+                        logger.error("Token manquant dans la réponse de rafraîchissement")
+                        return None
+                else:
+                    logger.error(f"Échec du rafraîchissement du token: {response_data.get('message', 'Erreur inconnue')}")
+                    return None
+            
+            time.sleep(0.1)
+        
+        logger.error("Timeout lors du rafraîchissement du token")
+        return None
+        
+    except Exception as e:
+        logger.error(f"Erreur lors du rafraîchissement du token: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return None
