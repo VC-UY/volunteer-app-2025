@@ -1,0 +1,28 @@
+[Unit]
+Description=Volunteer Computing Service
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=volunteer
+Group=volunteer
+WorkingDirectory=/opt/volunteer-app
+Environment="PYTHONUNBUFFERED=1"
+Environment="DJANGO_SETTINGS_MODULE=backend.settings"
+ExecStart=/opt/volunteer-app/exp-env/bin/python /opt/volunteer-app/volunteer_daemon.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=volunteer-daemon
+
+# Limites de sécurité
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Performance
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

@@ -654,10 +654,12 @@ class RedisAppConfig(AppConfig):
             volunteer_info = get_volunteer_info()
             if volunteer_info:
                 self.volunteer_id = volunteer_info.get('volunteer_id')
-                self.volunteer_token = volunteer_info.get('token')
-                self.volunteer_refresh_token = volunteer_info.get('refresh_token')
-                self.username = volunteer_info.get('username')
-                self.password = volunteer_info.get('password')
+                from redis_communication.auth_client import load_volunter_credentials
+                auth_info = load_volunter_credentials()
+                self.volunteer_token = auth_info.get('token')
+                self.volunteer_refresh_token = auth_info.get('refresh_token')
+                self.username = auth_info.get('username')
+                self.password = auth_info.get('password')
                 logger.info(f"Identifiants du volontaire chargés avec succès: ID={self.volunteer_id}")
             else:
                 logger.warning("Aucun identifiant de volontaire trouvé, l'enregistrement sera nécessaire")

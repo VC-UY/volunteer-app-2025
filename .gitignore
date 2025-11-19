@@ -99,6 +99,9 @@ local_settings.py
 db.sqlite3
 venv/
 exp-env
-installers
+# installers
 
 TOKEN_REFRESH_GUIDE.md
+DEPLOYMENT_COMPLETE_GUIDE.md
+QUICK_DEPLOY.md
+SESSION_SUMMARY.md
