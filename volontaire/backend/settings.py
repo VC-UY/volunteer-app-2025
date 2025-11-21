@@ -144,6 +144,6 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Configuration Redis
-REDIS_PROXY_HOST = '192.168.1.165'  # Hôte du proxy Redis
-REDIS_PROXY_PORT = 6379
+REDIS_PROXY_HOST = '127.0.0.1'  # Hôte du proxy Redi
+REDIS_PROXY_PORT = 6380
 REDIS_DB = 0

@@ -1,0 +1,1018 @@
+{
+  "volunteer_id": "9e974910-84c8-40bd-88fd-2fa0c0a7f632",
+  "username": "volunteer_fce649ea",
+  "password": "6c70277e4cf54d629d58a33118202ef9",
+  "registration_date": 1760530561.6882808,
+  "machine_info": {
+    "timestamp": "2025-10-15 12:16:01",
+    "os": {
+      "nom": "Linux",
+      "version": "#85~22.04.1-Ubuntu SMP PREEMPT_DYNAMIC Fri Sep 19 16:18:59 UTC 2",
+      "release": "6.8.0-85-generic",
+      "architecture": "x86_64",
+      "hostname": "npe-tech"
+    },
+    "type_machine": "Portable",
+    "cpu": {
+      "type": "x86_64",
+      "architecture": "x86_64",
+      "bits": "64-bit",
+      "coeurs_physiques": 10,
+      "coeurs_logiques": 12,
+      "frequence": {
+        "actuelle": 1433.9829166666666,
+        "min": 400.0,
+        "max": 3666.6666666666665
+      }
+    },
+    "memoire": {
+      "ram": {
+        "total": "7.47 GB",
+        "disponible": "1.00 GB",
+        "utilisee": "5.65 GB",
+        "pourcentage_utilise": 86.6,
+        "pourcentage_libre": 13.400000000000006
+      },
+      "swap": {
+        "total": "9.54 GB",
+        "disponible": "112.00 KB",
+        "utilisee": "9.54 GB",
+        "pourcentage_utilise": 100.0,
+        "pourcentage_libre": 0.0
+      },
+      "cache": {
+        "total": "1.60 GB",
+        "pourcentage": 21.419193600091475
+      }
+    },
+    "disque": {
+      "total": "93.31 GB",
+      "disponible": "30.82 GB",
+      "utilise": "57.70 GB",
+      "pourcentage_utilise": 65.2,
+      "pourcentage_libre": 34.8
+    },
+    "adresse_mac": "f5:2a:60:86:86:bd",
+    "resolution_ecran": "primary",
+    "gpu": {
+      "Disponible": false
+    },
+    "interfaces_reseau": [
+      {
+        "nom": "lo",
+        "adresses": [
+          {
+            "type": "IPv4",
+            "adresse": "127.0.0.1",
+            "netmask": "255.0.0.0",
+            "broadcast": null
+          },
+          {
+            "type": "IPv6",
+            "adresse": "::1",
+            "netmask": "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff",
+            "broadcast": null
+          },
+          {
+            "type": "MAC",
+            "adresse": "00:00:00:00:00:00"
+          }
+        ],
+        "statut": "Up",
+        "vitesse": "Inconnue",
+        "duplex": 0,
+        "mtu": 65536
+      },
+      {
+        "nom": "wlo1",
+        "adresses": [
+          {
+            "type": "IPv4",
+            "adresse": "172.20.10.3",
+            "netmask": "255.255.255.240",
+            "broadcast": "172.20.10.15"
+          },
+          {
+            "type": "IPv6",
+            "adresse": "fe80::a258:87ae:5f15:1338%wlo1",
+            "netmask": "ffff:ffff:ffff:ffff::",
+            "broadcast": null
+          },
+          {
+            "type": "MAC",
+            "adresse": "00:d4:9e:91:76:43"
+          }
+        ],
+        "statut": "Up",
+        "vitesse": "Inconnue",
+        "duplex": 0,
+        "mtu": 1500
+      },
+      {
+        "nom": "virbr0",
+        "adresses": [
+          {
+            "type": "IPv4",
+            "adresse": "192.168.122.1",
+            "netmask": "255.255.255.0",
+            "broadcast": "192.168.122.255"
+          },
+          {
+            "type": "MAC",
+            "adresse": "52:54:00:41:a9:72"
+          }
+        ],
+        "statut": "Down",
+        "vitesse": "Inconnue",
+        "duplex": 0,
+        "mtu": 1500
+      },
+      {
+        "nom": "br0",
+        "adresses": [
+          {
+            "type": "IPv4",
+            "adresse": "192.168.1.100",
+            "netmask": "255.255.255.0",
+            "broadcast": "192.168.1.255"
+          },
+          {
+            "type": "MAC",
+            "adresse": "b6:09:c1:2d:6b:ac"
+          }
+        ],
+        "statut": "Down",
+        "vitesse": "Inconnue",
+        "duplex": 0,
+        "mtu": 1500
+      },
+      {
+        "nom": "docker0",
+        "adresses": [
+          {
+            "type": "IPv4",
+            "adresse": "172.17.0.1",
+            "netmask": "255.255.0.0",
+            "broadcast": "172.17.255.255"
+          },
+          {
+            "type": "MAC",
+            "adresse": "de:7c:a5:ae:44:d4"
+          }
+        ],
+        "statut": "Down",
+        "vitesse": "Inconnue",
+        "duplex": 0,
+        "mtu": 1500
+      },
+      {
+        "nom": "br-4d1b6a19fbf9",
+        "adresses": [
+          {
+            "type": "IPv4",
+            "adresse": "172.18.0.1",
+            "netmask": "255.255.0.0",
+            "broadcast": "172.18.255.255"
+          },
+          {
+            "type": "MAC",
+            "adresse": "0a:da:cd:52:33:e0"
+          }
+        ],
+        "statut": "Down",
+        "vitesse": "Inconnue",
+        "duplex": 0,
+        "mtu": 1500
+      }
+    ],
+    "bios_carte_mere": {
+      "BIOS": {
+        "Fabricant": "Insyde",
+        "Version": "F.16",
+        "Date de sortie": "07/20/2023"
+      },
+      "Carte m\u00e8re": {
+        "Fabricant": "HP",
+        "Mod\u00e8le": "8A34"
+      }
+    },
+    "utilisateurs_connectes": [
+      {
+        "username": "patrice",
+        "terminal": "tty2",
+        "host": "tty2",
+        "started": "2025-10-14 12:33:36",
+        "pid": 2605
+      }
+    ],
+    "partitions_disque": [
+      {
+        "device": "sysfs",
+        "mountpoint": "/sys",
+        "fstype": "sysfs",
+        "opts": "rw,nosuid,nodev,noexec,relatime",
+        "total": "0.00 B",
+        "used": "0.00 B",
+        "free": "0.00 B",
+        "percent_used": 0.0,
+        "percent_free": 100.0
+      },
+      {
+        "device": "proc",
+        "mountpoint": "/proc",
+        "fstype": "proc",
+        "opts": "rw,nosuid,nodev,noexec,relatime",
+        "total": "0.00 B",
+        "used": "0.00 B",
+        "free": "0.00 B",
+        "percent_used": 0.0,
+        "percent_free": 100.0
+      },
+      {
+        "device": "udev",
+        "mountpoint": "/dev",
+        "fstype": "devtmpfs",
+        "opts": "rw,nosuid,relatime,size=3874420k,nr_inodes=968605,mode=755,inode64",
+        "total": "3.69 GB",
+        "used": "0.00 B",
+        "free": "3.69 GB",
+        "percent_used": 0.0,
+        "percent_free": 100.0
+      },
+      {
+        "device": "devpts",
+        "mountpoint": "/dev/pts",
+        "fstype": "devpts",
+        "opts": "rw,nosuid,noexec,relatime,gid=5,mode=620,ptmxmode=000",
+        "total": "0.00 B",
+        "used": "0.00 B",
+        "free": "0.00 B",
+        "percent_used": 0.0,
+        "percent_free": 100.0
+      },
+      {
+        "device": "tmpfs",
+        "mountpoint": "/run",
+        "fstype": "tmpfs",
+        "opts": "rw,nosuid,nodev,noexec,relatime,size=783612k,mode=755,inode64",
+        "total": "765.25 MB",
+        "used": "3.52 MB",
+        "free": "761.72 MB",
+        "percent_used": 0.5,
+        "percent_free": 99.5
+      },
+      {
+        "device": "/dev/nvme0n1p4",
+        "mountpoint": "/",
+        "fstype": "ext4",
+        "opts": "rw,relatime,errors=remount-ro,stripe=32",
+        "total": "93.31 GB",
+        "used": "57.70 GB",
+        "free": "30.82 GB",
+        "percent_used": 65.2,
+        "percent_free": 34.8
+      },
+      {
+        "device": "securityfs",
+        "mountpoint": "/sys/kernel/security",
+        "fstype": "securityfs",
+        "opts": "rw,nosuid,nodev,noexec,relatime",
+        "total": "0.00 B",
+        "used": "0.00 B",
+        "free": "0.00 B",
+        "percent_used": 0.0,
+        "percent_free": 100.0
+      },
+      {
+        "device": "tmpfs",
+        "mountpoint": "/dev/shm",
+        "fstype": "tmpfs",
+        "opts": "rw,nosuid,nodev,inode64",
+        "total": "3.74 GB",
+        "used": "97.82 MB",
+        "free": "3.64 GB",
+        "percent_used": 2.6,
+        "percent_free": 97.4
+      },
+      {
+        "device": "tmpfs",
+        "mountpoint": "/run/lock",
+        "fstype": "tmpfs",
+        "opts": "rw,nosuid,nodev,noexec,relatime,size=5120k,inode64",
+        "total": "5.00 MB",
+        "used": "4.00 KB",
+        "free": "5.00 MB",
+        "percent_used": 0.1,
+        "percent_free": 99.9
+      },
+      {
+        "device": "cgroup2",
+        "mountpoint": "/sys/fs/cgroup",
+        "fstype": "cgroup2",
+        "opts": "rw,nosuid,nodev,noexec,relatime,nsdelegate,memory_recursiveprot",
+        "total": "0.00 B",
+        "used": "0.00 B",
+        "free": "0.00 B",
+        "percent_used": 0.0,
+        "percent_free": 100.0
+      },
+      {
+        "device": "pstore",
+        "mountpoint": "/sys/fs/pstore",
+        "fstype": "pstore",
+        "opts": "rw,nosuid,nodev,noexec,relatime",
+        "total": "0.00 B",
+        "used": "0.00 B",
+        "free": "0.00 B",
+        "percent_used": 0.0,
+        "percent_free": 100.0
+      },
+      {
+        "device": "efivarfs",
+        "mountpoint": "/sys/firmware/efi/efivars",
+        "fstype": "efivarfs",
+        "opts": "rw,nosuid,nodev,noexec,relatime",
+        "total": "191.91 KB",
+        "used": "132.08 KB",
+        "free": "54.83 KB",
+        "percent_used": 70.7,
+        "percent_free": 29.299999999999997
+      },
+      {
+        "device": "bpf",
+        "mountpoint": "/sys/fs/bpf",
+        "fstype": "bpf",
+        "opts": "rw,nosuid,nodev,noexec,relatime,mode=700",
+        "total": "0.00 B",
+        "used": "0.00 B",
+        "free": "0.00 B",
+        "percent_used": 0.0,
+        "percent_free": 100.0
+      },
+      {
+        "device": "systemd-1",
+        "mountpoint": "/proc/sys/fs/binfmt_misc",
+        "fstype": "autofs",
+        "opts": "rw,relatime,fd=29,pgrp=1,timeout=0,minproto=5,maxproto=5,direct,pipe_ino=3796",
+        "total": "0.00 B",
+        "used": "0.00 B",
+        "free": "0.00 B",
+        "percent_used": 0.0,
+        "percent_free": 100.0
+      },
+      {
+        "device": "mqueue",
+        "mountpoint": "/dev/mqueue",
+        "fstype": "mqueue",
+        "opts": "rw,nosuid,nodev,noexec,relatime",
+        "total": "0.00 B",
+        "used": "0.00 B",
+        "free": "0.00 B",
+        "percent_used": 0.0,
+        "percent_free": 100.0
+      },
+      {
+        "device": "hugetlbfs",
+        "mountpoint": "/dev/hugepages",
+        "fstype": "hugetlbfs",
+        "opts": "rw,relatime,pagesize=2M",
+        "total": "0.00 B",
+        "used": "0.00 B",
+        "free": "0.00 B",
+        "percent_used": 0.0,
+        "percent_free": 100.0
+      },
+      {
+        "device": "debugfs",
+        "mountpoint": "/sys/kernel/debug",
+        "fstype": "debugfs",
+        "opts": "rw,nosuid,nodev,noexec,relatime",
+        "total": "0.00 B",
+        "used": "0.00 B",
+        "free": "0.00 B",
+        "percent_used": 0.0,
+        "percent_free": 100.0
+      },
+      {
+        "device": "tracefs",
+        "mountpoint": "/sys/kernel/tracing",
+        "fstype": "tracefs",
+        "opts": "rw,nosuid,nodev,noexec,relatime",
+        "total": "0.00 B",
+        "used": "0.00 B",
+        "free": "0.00 B",
+        "percent_used": 0.0,
+        "percent_free": 100.0
+      },
+      {
+        "device": "fusectl",
+        "mountpoint": "/sys/fs/fuse/connections",
+        "fstype": "fusectl",
+        "opts": "rw,nosuid,nodev,noexec,relatime",
+        "total": "0.00 B",
+        "used": "0.00 B",
+        "free": "0.00 B",
+        "percent_used": 0.0,
+        "percent_free": 100.0
+      },
+      {
+        "device": "configfs",
+        "mountpoint": "/sys/kernel/config",
+        "fstype": "configfs",
+        "opts": "rw,nosuid,nodev,noexec,relatime",
+        "total": "0.00 B",
+        "used": "0.00 B",
+        "free": "0.00 B",
+        "percent_used": 0.0,
+        "percent_free": 100.0
+      },
+      {
+        "device": "ramfs",
+        "mountpoint": "/run/credentials/systemd-sysusers.service",
+        "fstype": "ramfs",
+        "opts": "ro,nosuid,nodev,noexec,relatime,mode=700",
+        "total": "0.00 B",
+        "used": "0.00 B",
+        "free": "0.00 B",
+        "percent_used": 0.0,
+        "percent_free": 100.0
+      },
+      {
+        "device": "/dev/loop0",
+        "mountpoint": "/snap/bare/5",
+        "fstype": "squashfs",
+        "opts": "ro,nodev,relatime,errors=continue,threads=single",
+        "total": "128.00 KB",
+        "used": "128.00 KB",
+        "free": "0.00 B",
+        "percent_used": 100.0,
+        "percent_free": 0.0
+      },
+      {
+        "device": "/dev/loop1",
+        "mountpoint": "/snap/core18/2947",
+        "fstype": "squashfs",
+        "opts": "ro,nodev,relatime,errors=continue,threads=single",
+        "total": "55.50 MB",
+        "used": "55.50 MB",
+        "free": "0.00 B",
+        "percent_used": 100.0,
+        "percent_free": 0.0
+      },
+      {
+        "device": "/dev/loop2",
+        "mountpoint": "/snap/core18/2952",
+        "fstype": "squashfs",
+        "opts": "ro,nodev,relatime,errors=continue,threads=single",
+        "total": "55.50 MB",
+        "used": "55.50 MB",
+        "free": "0.00 B",
+        "percent_used": 100.0,
+        "percent_free": 0.0
+      },
+      {
+        "device": "/dev/loop3",
+        "mountpoint": "/snap/core20/2599",
+        "fstype": "squashfs",
+        "opts": "ro,nodev,relatime,errors=continue,threads=single",
+        "total": "63.88 MB",
+        "used": "63.88 MB",
+        "free": "0.00 B",
+        "percent_used": 100.0,
+        "percent_free": 0.0
+      },
+      {
+        "device": "/dev/loop4",
+        "mountpoint": "/snap/core20/2669",
+        "fstype": "squashfs",
+        "opts": "ro,nodev,relatime,errors=continue,threads=single",
+        "total": "63.88 MB",
+        "used": "63.88 MB",
+        "free": "0.00 B",
+        "percent_used": 100.0,
+        "percent_free": 0.0
+      },
+      {
+        "device": "/dev/loop5",
+        "mountpoint": "/snap/core22/2111",
+        "fstype": "squashfs",
+        "opts": "ro,nodev,relatime,errors=continue,threads=single",
+        "total": "74.00 MB",
+        "used": "74.00 MB",
+        "free": "0.00 B",
+        "percent_used": 100.0,
+        "percent_free": 0.0
+      },
+      {
+        "device": "/dev/loop6",
+        "mountpoint": "/snap/core22/2133",
+        "fstype": "squashfs",
+        "opts": "ro,nodev,relatime,errors=continue,threads=single",
+        "total": "74.00 MB",
+        "used": "74.00 MB",
+        "free": "0.00 B",
+        "percent_used": 100.0,
+        "percent_free": 0.0
+      },
+      {
+        "device": "/dev/loop7",
+        "mountpoint": "/snap/core24/1151",
+        "fstype": "squashfs",
+        "opts": "ro,nodev,relatime,errors=continue,threads=single",
+        "total": "66.88 MB",
+        "used": "66.88 MB",
+        "free": "0.00 B",
+        "percent_used": 100.0,
+        "percent_free": 0.0
+      },
+      {
+        "device": "/dev/loop8",
+        "mountpoint": "/snap/core24/1196",
+        "fstype": "squashfs",
+        "opts": "ro,nodev,relatime,errors=continue,threads=single",
+        "total": "66.88 MB",
+        "used": "66.88 MB",
+        "free": "0.00 B",
+        "percent_used": 100.0,
+        "percent_free": 0.0
+      },
+      {
+        "device": "/dev/loop9",
+        "mountpoint": "/snap/docker/3064",
+        "fstype": "squashfs",
+        "opts": "ro,nodev,relatime,errors=continue,threads=single",
+        "total": "144.50 MB",
+        "used": "144.50 MB",
+        "free": "0.00 B",
+        "percent_used": 100.0,
+        "percent_free": 0.0
+      },
+      {
+        "device": "/dev/loop10",
+        "mountpoint": "/snap/docker/3265",
+        "fstype": "squashfs",
+        "opts": "ro,nodev,relatime,errors=continue,threads=single",
+        "total": "140.62 MB",
+        "used": "140.62 MB",
+        "free": "0.00 B",
+        "percent_used": 100.0,
+        "percent_free": 0.0
+      },
+      {
+        "device": "/dev/loop11",
+        "mountpoint": "/snap/firefox/6933",
+        "fstype": "squashfs",
+        "opts": "ro,nodev,relatime,errors=continue,threads=single",
+        "total": "247.25 MB",
+        "used": "247.25 MB",
+        "free": "0.00 B",
+        "percent_used": 100.0,
+        "percent_free": 0.0
+      },
+      {
+        "device": "/dev/loop12",
+        "mountpoint": "/snap/firefox/6966",
+        "fstype": "squashfs",
+        "opts": "ro,nodev,relatime,errors=continue,threads=single",
+        "total": "247.62 MB",
+        "used": "247.62 MB",
+        "free": "0.00 B",
+        "percent_used": 100.0,
+        "percent_free": 0.0
+      },
+      {
+        "device": "/dev/loop13",
+        "mountpoint": "/snap/flutter/149",
+        "fstype": "squashfs",
+        "opts": "ro,nodev,relatime,errors=continue,threads=single",
+        "total": "206.88 MB",
+        "used": "206.88 MB",
+        "free": "0.00 B",
+        "percent_used": 100.0,
+        "percent_free": 0.0
+      },
+      {
+        "device": "/dev/loop14",
+        "mountpoint": "/snap/gnome-3-28-1804/198",
+        "fstype": "squashfs",
+        "opts": "ro,nodev,relatime,errors=continue,threads=single",
+        "total": "164.88 MB",
+        "used": "164.88 MB",
+        "free": "0.00 B",
+        "percent_used": 100.0,
+        "percent_free": 0.0
+      },
+      {
+        "device": "/dev/loop15",
+        "mountpoint": "/snap/gnome-3-38-2004/143",
+        "fstype": "squashfs",
+        "opts": "ro,nodev,relatime,errors=continue,threads=single",
+        "total": "349.75 MB",
+        "used": "349.75 MB",
+        "free": "0.00 B",
+        "percent_used": 100.0,
+        "percent_free": 0.0
+      },
+      {
+        "device": "/dev/loop16",
+        "mountpoint": "/snap/gnome-3-38-2004/99",
+        "fstype": "squashfs",
+        "opts": "ro,nodev,relatime,errors=continue,threads=single",
+        "total": "248.88 MB",
+        "used": "248.88 MB",
+        "free": "0.00 B",
+        "percent_used": 100.0,
+        "percent_free": 0.0
+      },
+      {
+        "device": "/dev/loop17",
+        "mountpoint": "/snap/gnome-42-2204/202",
+        "fstype": "squashfs",
+        "opts": "ro,nodev,relatime,errors=continue,threads=single",
+        "total": "516.12 MB",
+        "used": "516.12 MB",
+        "free": "0.00 B",
+        "percent_used": 100.0,
+        "percent_free": 0.0
+      },
+      {
+        "device": "/dev/loop18",
+        "mountpoint": "/snap/gnome-42-2204/226",
+        "fstype": "squashfs",
+        "opts": "ro,nodev,relatime,errors=continue,threads=single",
+        "total": "516.25 MB",
+        "used": "516.25 MB",
+        "free": "0.00 B",
+        "percent_used": 100.0,
+        "percent_free": 0.0
+      },
+      {
+        "device": "/dev/loop19",
+        "mountpoint": "/snap/gnome-46-2404/117",
+        "fstype": "squashfs",
+        "opts": "ro,nodev,relatime,errors=continue,threads=single",
+        "total": "589.62 MB",
+        "used": "589.62 MB",
+        "free": "0.00 B",
+        "percent_used": 100.0,
+        "percent_free": 0.0
+      },
+      {
+        "device": "/dev/loop20",
+        "mountpoint": "/snap/gnome-46-2404/125",
+        "fstype": "squashfs",
+        "opts": "ro,nodev,relatime,errors=continue,threads=single",
+        "total": "618.38 MB",
+        "used": "618.38 MB",
+        "free": "0.00 B",
+        "percent_used": 100.0,
+        "percent_free": 0.0
+      },
+      {
+        "device": "/dev/loop21",
+        "mountpoint": "/snap/gtk-common-themes/1534",
+        "fstype": "squashfs",
+        "opts": "ro,nodev,relatime,errors=continue,threads=single",
+        "total": "81.38 MB",
+        "used": "81.38 MB",
+        "free": "0.00 B",
+        "percent_used": 100.0,
+        "percent_free": 0.0
+      },
+      {
+        "device": "/dev/loop22",
+        "mountpoint": "/snap/gtk-common-themes/1535",
+        "fstype": "squashfs",
+        "opts": "ro,nodev,relatime,errors=continue,threads=single",
+        "total": "91.75 MB",
+        "used": "91.75 MB",
+        "free": "0.00 B",
+        "percent_used": 100.0,
+        "percent_free": 0.0
+      },
+      {
+        "device": "/dev/loop23",
+        "mountpoint": "/snap/insomnia/341",
+        "fstype": "squashfs",
+        "opts": "ro,nodev,relatime,errors=continue,threads=single",
+        "total": "143.00 MB",
+        "used": "143.00 MB",
+        "free": "0.00 B",
+        "percent_used": 100.0,
+        "percent_free": 0.0
+      },
+      {
+        "device": "/dev/loop24",
+        "mountpoint": "/snap/insomnia/342",
+        "fstype": "squashfs",
+        "opts": "ro,nodev,relatime,errors=continue,threads=single",
+        "total": "143.00 MB",
+        "used": "143.00 MB",
+        "free": "0.00 B",
+        "percent_used": 100.0,
+        "percent_free": 0.0
+      },
+      {
+        "device": "/dev/loop26",
+        "mountpoint": "/snap/mesa-2404/887",
+        "fstype": "squashfs",
+        "opts": "ro,nodev,relatime,errors=continue,threads=single",
+        "total": "290.88 MB",
+        "used": "290.88 MB",
+        "free": "0.00 B",
+        "percent_used": 100.0,
+        "percent_free": 0.0
+      },
+      {
+        "device": "/dev/loop25",
+        "mountpoint": "/snap/mesa-2404/912",
+        "fstype": "squashfs",
+        "opts": "ro,nodev,relatime,errors=continue,threads=single",
+        "total": "290.88 MB",
+        "used": "290.88 MB",
+        "free": "0.00 B",
+        "percent_used": 100.0,
+        "percent_free": 0.0
+      },
+      {
+        "device": "/dev/loop27",
+        "mountpoint": "/snap/postman/351",
+        "fstype": "squashfs",
+        "opts": "ro,nodev,relatime,errors=continue,threads=single",
+        "total": "171.00 MB",
+        "used": "171.00 MB",
+        "free": "0.00 B",
+        "percent_used": 100.0,
+        "percent_free": 0.0
+      },
+      {
+        "device": "/dev/loop28",
+        "mountpoint": "/snap/postman/354",
+        "fstype": "squashfs",
+        "opts": "ro,nodev,relatime,errors=continue,threads=single",
+        "total": "174.38 MB",
+        "used": "174.38 MB",
+        "free": "0.00 B",
+        "percent_used": 100.0,
+        "percent_free": 0.0
+      },
+      {
+        "device": "/dev/loop29",
+        "mountpoint": "/snap/snap-store/1216",
+        "fstype": "squashfs",
+        "opts": "ro,nodev,relatime,errors=continue,threads=single",
+        "total": "12.25 MB",
+        "used": "12.25 MB",
+        "free": "0.00 B",
+        "percent_used": 100.0,
+        "percent_free": 0.0
+      },
+      {
+        "device": "/dev/loop30",
+        "mountpoint": "/snap/snap-store/575",
+        "fstype": "squashfs",
+        "opts": "ro,nodev,relatime,errors=continue,threads=single",
+        "total": "45.88 MB",
+        "used": "45.88 MB",
+        "free": "0.00 B",
+        "percent_used": 100.0,
+        "percent_free": 0.0
+      },
+      {
+        "device": "/dev/loop31",
+        "mountpoint": "/snap/snapd/24792",
+        "fstype": "squashfs",
+        "opts": "ro,nodev,relatime,errors=continue,threads=single",
+        "total": "49.38 MB",
+        "used": "49.38 MB",
+        "free": "0.00 B",
+        "percent_used": 100.0,
+        "percent_free": 0.0
+      },
+      {
+        "device": "/dev/loop32",
+        "mountpoint": "/snap/snapd/25202",
+        "fstype": "squashfs",
+        "opts": "ro,nodev,relatime,errors=continue,threads=single",
+        "total": "50.88 MB",
+        "used": "50.88 MB",
+        "free": "0.00 B",
+        "percent_used": 100.0,
+        "percent_free": 0.0
+      },
+      {
+        "device": "/dev/loop33",
+        "mountpoint": "/snap/snapd-desktop-integration/253",
+        "fstype": "squashfs",
+        "opts": "ro,nodev,relatime,errors=continue,threads=single",
+        "total": "640.00 KB",
+        "used": "640.00 KB",
+        "free": "0.00 B",
+        "percent_used": 100.0,
+        "percent_free": 0.0
+      },
+      {
+        "device": "/dev/loop35",
+        "mountpoint": "/snap/telegram-desktop/6822",
+        "fstype": "squashfs",
+        "opts": "ro,nodev,relatime,errors=continue,threads=single",
+        "total": "79.88 MB",
+        "used": "79.88 MB",
+        "free": "0.00 B",
+        "percent_used": 100.0,
+        "percent_free": 0.0
+      },
+      {
+        "device": "/dev/loop34",
+        "mountpoint": "/snap/snapd-desktop-integration/315",
+        "fstype": "squashfs",
+        "opts": "ro,nodev,relatime,errors=continue,threads=single",
+        "total": "640.00 KB",
+        "used": "640.00 KB",
+        "free": "0.00 B",
+        "percent_used": 100.0,
+        "percent_free": 0.0
+      },
+      {
+        "device": "/dev/loop36",
+        "mountpoint": "/snap/telegram-desktop/6828",
+        "fstype": "squashfs",
+        "opts": "ro,nodev,relatime,errors=continue,threads=single",
+        "total": "79.88 MB",
+        "used": "79.88 MB",
+        "free": "0.00 B",
+        "percent_used": 100.0,
+        "percent_free": 0.0
+      },
+      {
+        "device": "tmpfs",
+        "mountpoint": "/run/qemu",
+        "fstype": "tmpfs",
+        "opts": "rw,nosuid,nodev,relatime,mode=755,inode64",
+        "total": "3.74 GB",
+        "used": "0.00 B",
+        "free": "3.74 GB",
+        "percent_used": 0.0,
+        "percent_free": 100.0
+      },
+      {
+        "device": "/dev/nvme0n1p1",
+        "mountpoint": "/boot/efi",
+        "fstype": "vfat",
+        "opts": "rw,relatime,fmask=0077,dmask=0077,codepage=437,iocharset=iso8859-1,shortname=mixed,errors=remount-ro",
+        "total": "256.00 MB",
+        "used": "88.54 MB",
+        "free": "167.46 MB",
+        "percent_used": 34.6,
+        "percent_free": 65.4
+      },
+      {
+        "device": "/dev/nvme0n1p6",
+        "mountpoint": "/home",
+        "fstype": "ext4",
+        "opts": "rw,relatime,stripe=32",
+        "total": "102.41 GB",
+        "used": "87.01 GB",
+        "free": "10.16 GB",
+        "percent_used": 89.5,
+        "percent_free": 10.5
+      },
+      {
+        "device": "binfmt_misc",
+        "mountpoint": "/proc/sys/fs/binfmt_misc",
+        "fstype": "binfmt_misc",
+        "opts": "rw,nosuid,nodev,noexec,relatime",
+        "total": "0.00 B",
+        "used": "0.00 B",
+        "free": "0.00 B",
+        "percent_used": 0.0,
+        "percent_free": 100.0
+      },
+      {
+        "device": "tmpfs",
+        "mountpoint": "/run/snapd/ns",
+        "fstype": "tmpfs",
+        "opts": "rw,nosuid,nodev,noexec,relatime,size=783612k,mode=755,inode64",
+        "total": "765.25 MB",
+        "used": "3.52 MB",
+        "free": "761.72 MB",
+        "percent_used": 0.5,
+        "percent_free": 99.5
+      },
+      {
+        "device": "nsfs",
+        "mountpoint": "/run/snapd/ns/docker.mnt",
+        "fstype": "nsfs",
+        "opts": "rw",
+        "total": "0.00 B",
+        "used": "0.00 B",
+        "free": "0.00 B",
+        "percent_used": 0.0,
+        "percent_free": 100.0
+      },
+      {
+        "device": "nsfs",
+        "mountpoint": "/run/snapd/ns/snapd-desktop-integration.mnt",
+        "fstype": "nsfs",
+        "opts": "rw",
+        "total": "0.00 B",
+        "used": "0.00 B",
+        "free": "0.00 B",
+        "percent_used": 0.0,
+        "percent_free": 100.0
+      },
+      {
+        "device": "tmpfs",
+        "mountpoint": "/run/user/1000",
+        "fstype": "tmpfs",
+        "opts": "rw,nosuid,nodev,relatime,size=783608k,nr_inodes=195902,mode=700,uid=1000,gid=1000,inode64",
+        "total": "765.24 MB",
+        "used": "272.00 KB",
+        "free": "764.98 MB",
+        "percent_used": 0.0,
+        "percent_free": 100.0
+      },
+      {
+        "device": "portal",
+        "mountpoint": "/run/user/1000/doc",
+        "fstype": "fuse.portal",
+        "opts": "rw,nosuid,nodev,relatime,user_id=1000,group_id=1000",
+        "total": "Non disponible",
+        "used": "Non disponible",
+        "free": "Non disponible",
+        "percent_used": "Non disponible",
+        "percent_free": "Non disponible"
+      },
+      {
+        "device": "gvfsd-fuse",
+        "mountpoint": "/run/user/1000/gvfs",
+        "fstype": "fuse.gvfsd-fuse",
+        "opts": "rw,nosuid,nodev,relatime,user_id=1000,group_id=1000",
+        "total": "0.00 B",
+        "used": "0.00 B",
+        "free": "0.00 B",
+        "percent_used": 0.0,
+        "percent_free": 100.0
+      },
+      {
+        "device": "nsfs",
+        "mountpoint": "/run/snapd/ns/snap-store.mnt",
+        "fstype": "nsfs",
+        "opts": "rw",
+        "total": "0.00 B",
+        "used": "0.00 B",
+        "free": "0.00 B",
+        "percent_used": 0.0,
+        "percent_free": 100.0
+      },
+      {
+        "device": "nsfs",
+        "mountpoint": "/run/snapd/ns/firefox.mnt",
+        "fstype": "nsfs",
+        "opts": "rw",
+        "total": "0.00 B",
+        "used": "0.00 B",
+        "free": "0.00 B",
+        "percent_used": 0.0,
+        "percent_free": 100.0
+      },
+      {
+        "device": "nsfs",
+        "mountpoint": "/run/snapd/ns/telegram-desktop.mnt",
+        "fstype": "nsfs",
+        "opts": "rw",
+        "total": "0.00 B",
+        "used": "0.00 B",
+        "free": "0.00 B",
+        "percent_used": 0.0,
+        "percent_free": 100.0
+      }
+    ],
+    "peripheriques_usb": [
+      {
+        "Description": "Bus 004 Device 001: ID 1d6b:0003 Linux Foundation 3.0 root hub"
+      },
+      {
+        "Description": "Bus 003 Device 003: ID 30c9:006a Luxvisions Innotech Limited HP True Vision 5MP Camera"
+      },
+      {
+        "Description": "Bus 003 Device 002: ID 06cb:0124 Synaptics, Inc. "
+      },
+      {
+        "Description": "Bus 003 Device 004: ID 8087:0033 Intel Corp. "
+      },
+      {
+        "Description": "Bus 003 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub"
+      },
+      {
+        "Description": "Bus 002 Device 001: ID 1d6b:0003 Linux Foundation 3.0 root hub"
+      },
+      {
+        "Description": "Bus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub"
+      }
+    ],
+    "heure_demarrage_systeme": "2025-10-14 12:32:57",
+    "heure_demarrage_script": "2025-10-15 12:16:01",
+    "heure_arret_precedent": "Non disponible"
+  }
+}
