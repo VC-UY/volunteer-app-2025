@@ -531,7 +531,7 @@
     <div class="container-fluid px-4">
       <a class="navbar-brand fw-bold" href="#"><i class="fa fa-hands-helping me-2"></i>VolunteerApp</a>
       <div class="d-flex align-items-center gap-3">
-        <span class="text-white"><i class="fa fa-server"></i> <span id="machine-hostname">{{ machine.hostname }}</span></span>
+        <span class="text-white"><i class="fa fa-server"></i> <span id="machine-hostname">{% if machine %}{{ machine.hostname }}{% else %}Non configuré{% endif %}</span></span>
         <span class="badge" id="machine-status"></span>
         <button class="btn btn-outline-light" data-bs-toggle="modal" data-bs-target="#prefModal">
           <i class="fa fa-cog"></i> Préférences
@@ -545,18 +545,24 @@
       <!-- Sidebar -->
       <aside class="col-md-3 sidebar">
         <h5><i class="fas fa-server me-2"></i>Machine</h5>
+        {% if machine %}
         <div><strong>Nom :</strong> <span id="sidebar-hostname">{{ machine.hostname }}</span></div>
         <div><strong>OS :</strong> <span id="sidebar-os">{{ machine.os_name }} {{ machine.os_version }}</span></div>
         <div><strong>CPU :</strong> <span id="sidebar-cpu">{{ machine.cpu_type }} ({{ machine.cpu_cores_physical }} cœurs, {{ machine.cpu_cores_logical }} logiques)</span></div>
         <div><strong>RAM :</strong> <span id="sidebar-ram">{{ machine.ram_total_human }}</span></div>
         <div><strong>Disque :</strong> <span id="sidebar-disk">{{ machine.disk_total_human }}</span></div>
         <div><strong>Résolution :</strong> <span id="sidebar-screen">{{ machine.screen_resolution }}</span></div>
-        <div><strong>Statut :</strong> <span class="badge" id="sidebar-status">{% if etat %}{{ etat.statut_actuel }}{% endif %}</span></div>
-        
+        <div><strong>Statut :</strong> <span class="badge" id="sidebar-status">{% if etat %}{{ etat.statut_actuel }}{% else %}N/A{% endif %}</span></div>
+        {% else %}
+        <div class="alert alert-warning" style="background: rgba(255, 193, 7, 0.1); border: 1px solid rgba(255, 193, 7, 0.3); color: #FFC107; border-radius: 10px; padding: 1rem;">
+          <i class="fas fa-exclamation-triangle me-2"></i>Aucune machine enregistrée. Veuillez lancer l'agent pour enregistrer les informations de la machine.
+        </div>
+        {% endif %}
+
         <hr>
-        
+
         <h6><i class="fas fa-sliders-h me-2"></i>Préférences</h6>
-        <button type="button" class="btn btn-primary w-100 mb-3" data-bs-toggle="modal" data-bs-target="#prefModal">
+        <button type="button" class="btn btn-primary w-100 mb-3" data-bs-toggle="modal" data-bs-target="#prefModal" {% if not machine %}disabled title="Veuillez d'abord enregistrer une machine"{% endif %}>
           <i class="fas fa-plus"></i> Ajouter une préférence
         </button>
         <table id="prefsTable" class="table table-sm mt-2"></table>

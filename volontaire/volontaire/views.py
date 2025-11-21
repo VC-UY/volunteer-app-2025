@@ -185,10 +185,25 @@ from django.db.models import Prefetch
 
 
 def home(request):
-    # Dernière info machine
-    machine = MachineInfo.objects.order_by('-last_update').first()
-    etat = EtatMachine.objects.filter(machine=machine).order_by('-timestamp').first() if machine else None
-    preferences = PreferenceModel.objects.filter(machine=machine).first() if machine else None
+    # Utiliser le manager pour récupérer la dernière machine insérée
+    machine = MachineInfo.objects.get_last_inserted()
+
+    # Si aucune machine n'existe, créer des valeurs par défaut
+    if not machine:
+        # Créer une machine par défaut ou retourner des valeurs vides
+        context = {
+            'machine': None,
+            'etat': None,
+            'preferences': None,
+            'tasks': [],
+        }
+        return render(request, 'home.html', context)
+
+    # Récupérer le dernier état et les préférences
+    etat = EtatMachine.objects.filter(machine=machine).order_by('-timestamp').first()
+
+    # Récupérer ou créer les préférences pour cette machine
+    preferences, created = PreferenceModel.objects.get_or_create(machine=machine)
 
     # Toutes les tâches, avec progression la plus récente
     tasks = Task.objects.all().order_by('-start_date')
@@ -234,8 +249,11 @@ def save_preferences(request):
         try:
             data = json.loads(request.body)
 
-            # Récupérer la machine courante (adapte selon ta logique)
-            machine = MachineInfo.objects.first()  # ou via l'utilisateur connecté
+            # Récupérer la dernière machine insérée
+            machine = MachineInfo.objects.get_last_inserted()
+
+            if not machine:
+                return JsonResponse({"success": False, "error": "Aucune machine trouvée. Veuillez d'abord enregistrer les informations de la machine."}, status=404)
 
             # Créer ou mettre à jour les préférences
             pref, created = PreferenceModel.objects.get_or_create(machine=machine)
@@ -288,7 +306,11 @@ def delete_preferences(request):
         try:
             data = json.loads(request.body)
             if data.get("action") == "delete_all":
-                machine = MachineInfo.objects.first()  # ou ta logique machine réelle
+                # Utiliser la dernière machine insérée
+                machine = MachineInfo.objects.get_last_inserted()
+                if not machine:
+                    return JsonResponse({'error': 'Aucune machine trouvée'}, status=404)
+
                 preference = PreferenceModel.objects.filter(machine=machine).first()
                 if preference:
                     preference.delete()
@@ -317,21 +339,28 @@ def delete_preference(request, id):
 
 
 def preferences_list(request):
-    # Ici, filtrage par machine ou utilisateur si besoin
+    # Récupérer les préférences pour la dernière machine insérée
+    machine = MachineInfo.objects.get_last_inserted()
+
+    if not machine:
+        return JsonResponse([], safe=False)
+
     prefs = []
-    for pref in PreferenceModel.objects.all():
-        for jour in pref.jours.all():
+    preference = PreferenceModel.objects.filter(machine=machine).first()
+
+    if preference:
+        for jour in preference.jours.all():
             for plage in jour.plages.all():
                 prefs.append({
                     "id": plage.id,  # L'id utilisé pour la suppression
                     "day": jour.jour,
                     "startTime": plage.heure_debut.strftime('%H:%M'),
                     "endTime": plage.heure_fin.strftime('%H:%M'),
-                    # Ajoute ici cpu/ram/maxTime si tu les stockes dans PlageHoraire ou ailleurs
-                    "cpu": getattr(plage, "cpu", 100),  # à adapter
-                    "ram": getattr(plage, "ram", 16),   # à adapter
-                    "maxTime": getattr(plage, "max_time", 60)  # à adapter
+                    "cpu": preference.cpu_max_utilisation,
+                    "ram": preference.ram_max_utilisation,
+                    "maxTime": preference.duree_max_execution
                 })
+
     return JsonResponse(prefs, safe=False)
 
 

@@ -175,38 +175,37 @@ class EtatMachine(models.Model):
 # --------------------------------------------- Modèle de préférences
 class PreferenceModel(models.Model):
     # Machine associée
-    machine = models.OneToOneField(MachineInfo, on_delete=models.CASCADE, related_name='preferences', default=None)
-    
+    machine = models.OneToOneField(MachineInfo, on_delete=models.CASCADE, related_name='preferences', null=True, blank=True)
+
     # Préférences d'utilisation des ressources
     cpu_max_utilisation = models.IntegerField(default=80, help_text="Utilisation maximale du CPU en pourcentage")
     ram_max_utilisation = models.IntegerField(default=80, help_text="Utilisation maximale de la RAM en pourcentage")
     disk_max_utilisation = models.IntegerField(default=90, help_text="Utilisation maximale du disque en pourcentage")
-    
+
     # Préférences de collecte de données
     collection_interval = models.IntegerField(default=60, help_text="Intervalle de collecte des données en secondes")
     send_interval = models.IntegerField(default=300, help_text="Intervalle d'envoi des données en secondes")
-    
+
     # Préférences de disponibilité
     available_hours_start = models.TimeField(null=True, blank=True, help_text="Heure de début de disponibilité")
     available_hours_end = models.TimeField(null=True, blank=True, help_text="Heure de fin de disponibilité")
     available_days = models.JSONField(default=list, help_text="Jours de disponibilité (0-6, 0=lundi)")
-    
+
     # Préférences de notification
     notify_on_task_assignment = models.BooleanField(default=True, help_text="Notifier lors de l'assignation d'une tâche")
     notify_on_resource_threshold = models.BooleanField(default=True, help_text="Notifier lorsqu'un seuil de ressource est atteint")
-    
-    def __str__(self):
-        return f"Préférences pour {self.machine.hostname}"
 
-    ram_max_utilisation = models.IntegerField(default=100)
-    priorite_min_acceptee = models.IntegerField(default=0)
-    duree_max_execution = models.IntegerField(default=0)
-    notification_email = models.BooleanField(default=False)
-    pauseActiviteUser = models.BooleanField(default=False)
-    playInactiviteUser = models.IntegerField(default=0)
-    types_calcul_autorises = models.CharField(max_length=100, blank=True, null=True)
+    # Préférences additionnelles
+    priorite_min_acceptee = models.IntegerField(default=0, help_text="Priorité minimale acceptée pour les tâches")
+    duree_max_execution = models.IntegerField(default=0, help_text="Durée maximale d'exécution en minutes")
+    notification_email = models.BooleanField(default=False, help_text="Activer les notifications par email")
+    pauseActiviteUser = models.BooleanField(default=False, help_text="Pause lors de l'activité utilisateur")
+    playInactiviteUser = models.IntegerField(default=0, help_text="Temps d'inactivité avant reprise (en minutes)")
+    types_calcul_autorises = models.CharField(max_length=100, blank=True, null=True, help_text="Types de calcul autorisés")
 
     def __str__(self):
+        if self.machine:
+            return f"Préférences pour {self.machine.hostname}"
         return f"Préférence #{self.id}"
 
     class Meta:
