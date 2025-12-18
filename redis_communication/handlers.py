@@ -158,15 +158,17 @@ def volunteer_login_response_handler(channel: str, message: Message):
         return
 
 # Dictionnaire des gestionnaires par défaut
+# Note: Les handlers pour auth/volunteer_register_response et auth/volunteer_login_response
+# sont gérés directement par auth_client.py lors des appels register_volunteer/login_volunteer
 DEFAULT_HANDLERS = {
     # Canaux génériques
     "coord/heartbeat": heartbeat_handler,
     "coord/emergency": error_handler,
     "system/error": error_handler,
     
-    # Canaux d'authentification
-    "auth/volunteer_register_response": volunteer_register_response_handler,
-    "auth/volunteer_login_response": volunteer_login_response_handler,
+    # Les canaux d'authentification sont gérés par auth_client.py
+    # "auth/volunteer_register_response": volunteer_register_response_handler,
+    # "auth/volunteer_login_response": volunteer_login_response_handler,
     
     # Canaux de tâches
 }

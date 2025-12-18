@@ -1,17 +1,41 @@
 import os
 import docker
-from docker.errors import NotFound, APIError
+from docker.errors import NotFound, APIError, DockerException
 from threading import Lock
+import logging
+
+logger = logging.getLogger(__name__)
 
 class DockerManager:
     _instance = None
     _lock = Lock()
 
     def __init__(self):
-
-        os.environ["DOCKER_HOST"] = "unix:///run/user/1000/docker.sock"
-        self.client = docker.from_env()
+        self.client = None
         self.tasks = {}  # task_id: container_id
+        self._connected = False
+        self._try_connect()
+    
+    def _try_connect(self):
+        """Tente de se connecter à Docker sans bloquer l'application"""
+        try:
+            # Essayer le socket rootless d'abord
+            if os.path.exists("/run/user/1000/docker.sock"):
+                os.environ["DOCKER_HOST"] = "unix:///run/user/1000/docker.sock"
+            
+            self.client = docker.from_env()
+            self._connected = True
+            logger.info("Connexion Docker établie")
+        except DockerException as e:
+            logger.warning(f"Docker non disponible: {e}")
+            self._connected = False
+            self.client = None
+    
+    def is_connected(self):
+        """Vérifie si Docker est disponible"""
+        if not self._connected or self.client is None:
+            self._try_connect()
+        return self._connected
 
     @classmethod
     def get_instance(cls):
@@ -21,6 +45,9 @@ class DockerManager:
         return cls._instance
 
     def pull_image(self, image_name):
+        if not self.is_connected():
+            logger.error("Docker non disponible pour pull_image")
+            return None
         try:
             print(f"Pulling image {image_name}...")
             image = self.client.images.pull(image_name)
@@ -31,6 +58,9 @@ class DockerManager:
             return None
 
     def run_container(self, image_name, task_id, cpu_limit=None, mem_limit=None, **kwargs):
+        if not self.is_connected():
+            logger.error("Docker non disponible pour run_container")
+            return None
         try:
             # Vérifie d'abord si l'image est présente localement
             try:

@@ -5,16 +5,27 @@ from .views import (
     save_preferences,
     preferences_list,
     MachineInfoView,
+    MachineStateView,
     DockerContainersStatusView,
     delete_preference,
     delete_preferences,
     tasks,
+    AgentStatusView,
+    AgentControlView,
     )
 
 urlpatterns = [
     path("", home, name="home"),
     path("machines/", MachineInfoView.as_view(), name="machine-info"),
     path("api/docker/containers/", DockerContainersStatusView.as_view(), name="docker-containers-status"),
+    
+    # API Agent de collecte
+    path('api/agent/status/', AgentStatusView.as_view(), name='agent-status'),
+    path('api/agent/<str:action>/', AgentControlView.as_view(), name='agent-control'),
+    
+    # API État machine (temps réel)
+    path('api/machine/state/', MachineStateView.as_view(), name='machine-state'),
+    
     # Gestion des actios sur conteneur
     path('api/task/<str:task_id>/<str:action>/', handle_task_action, name='handle_task_action'),
     # ------Gestion des preferences

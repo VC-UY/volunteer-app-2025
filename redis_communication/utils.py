@@ -5,21 +5,30 @@ Utilitaires divers pour le module de communication Redis.
 import time
 import json
 import logging
+import os
 from typing import Dict, Any, Optional
 import jwt
 from django.conf import settings
 from django.utils import timezone
 from .exceptions import NoLoginError
+from .auth_client import DATA_BASE_DIR
+
 logger = logging.getLogger(__name__)
 
 
 def get_volunteer_auth_token():
+    """Récupère le token d'authentification du volontaire depuis le fichier de configuration."""
+    # Utiliser le même répertoire que auth_client.py
+    auth_file = os.path.join('.volunteer', 'volunteer_auth_info.json')
     try:
-        with open('.volunteer/volunteer_auth_info.json', 'r') as f:
+        with open(auth_file, 'r') as f:
             data = json.load(f)
-            return data['token']
+            return data.get('token')
     except FileNotFoundError:
-        logger.error("Le fichier .volunteer/volunteer_auth_info.json n'a pas été trouvé")
+        logger.error(f"Le fichier {auth_file} n'a pas été trouvé")
+        return None
+    except Exception as e:
+        logger.error(f"Erreur lors de la lecture du fichier d'auth: {e}")
         return None
 
 def extract_machine_info(static_data: Dict[str, Any], name: str = '', ip_address: str = '', 
@@ -72,7 +81,7 @@ def extract_machine_info(static_data: Dict[str, Any], name: str = '', ip_address
         'hostname': os_info.get('hostname', name),
         
         # Type de machine
-        'machine_type': static_data.get('machine_type', ''),
+        'machine_tipe': static_data.get('machine_tipe', ''),
         
         # Informations sur le processeur
         'cpu_type': cpu_info.get('model', ''),
@@ -133,25 +142,19 @@ def format_timestamp(timestamp: float) -> str:
     from datetime import datetime
     return datetime.fromtimestamp(timestamp).isoformat()
 
-
-def get_manager_login_token():
-    """
-    Recuper le token stoker dans le json .manager/manager_login_info.json et provoque une erreur NoLoginError si le fichier n'est pas trouvé
-    """
-    try:
-        with open('.manager/manager_login_info.json', 'r') as f:
-            data = json.load(f)
-            return data['token']
-    except FileNotFoundError:
-        raise NoLoginError("Le fichier .manager/manager_login_info.json n'a pas été trouvé")
-
 def get_volunteer_id():
+    """Récupère l'ID du volontaire depuis le fichier de configuration."""
+    # Utiliser le même répertoire que auth_client.py
+    info_file = os.path.join('.volunteer', 'volunteer_info.json')
     try:
-        with open('.volunteer/volunteer_info.json', 'r') as f:
+        with open(info_file, 'r') as f:
             data = json.load(f)
-            return data['volunteer_id']
+            return data.get('volunteer_id')
     except FileNotFoundError:
-        logger.error("Le fichier .volunteer/volunteer_info.json n'a pas été trouvé donc pas de volunteer_id")
+        logger.error(f"Le fichier {info_file} n'a pas été trouvé donc pas de volunteer_id")
+        return None
+    except Exception as e:
+        logger.error(f"Erreur lors de la lecture du fichier d'info: {e}")
         return None
     
 

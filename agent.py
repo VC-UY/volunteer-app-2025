@@ -29,11 +29,48 @@ try:
 except ImportError:
     GPU_UTIL_AVAILABLE = False
 
-# Configuration du logging
+# Déterminer le répertoire de données accessible en écriture
+def _get_writable_data_dir():
+    """Trouve un répertoire accessible en écriture pour les données."""
+    # Option 1: Variable d'environnement
+    if os.environ.get('VOLUNTEER_DATA_DIR'):
+        data_dir = os.environ.get('VOLUNTEER_DATA_DIR')
+        os.makedirs(data_dir, exist_ok=True)
+        return data_dir
+    
+    # Option 2: /var/lib/volunteer-app
+    var_lib_dir = '/var/lib/volunteer-app'
+    try:
+        os.makedirs(var_lib_dir, exist_ok=True)
+        test_file = os.path.join(var_lib_dir, '.test')
+        with open(test_file, 'w') as f:
+            f.write('test')
+        os.remove(test_file)
+        return var_lib_dir
+    except (OSError, IOError, PermissionError):
+        pass
+    
+    # Option 3: Répertoire data dans le script
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    data_dir = os.path.join(script_dir, 'data')
+    try:
+        os.makedirs(data_dir, exist_ok=True)
+        return data_dir
+    except (OSError, IOError, PermissionError):
+        pass
+    
+    # Option 4: Répertoire temporaire
+    import tempfile
+    return tempfile.mkdtemp(prefix='volunteer-')
+
+WRITABLE_DIR = _get_writable_data_dir()
+
+# Configuration du logging - utiliser un chemin accessible en écriture
+log_file = os.path.join(WRITABLE_DIR, 'system_monitor.log')
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
-    filename='system_monitor.log'
+    filename=log_file
 )
 
 # Configuration
@@ -41,8 +78,8 @@ SERVER_HOST = os.getenv('COORDINATOR_HOST', 'localhost')
 SERVER_PORT = os.getenv('COORDINATOR_PORT', 12345)
 COLLECTION_INTERVAL = os.getenv('COLLECTION_INTERVAL', 2)
 SEND_INTERVAL = os.getenv('SEND_INTERVAL', 30)
-DATA_DIR = "data"
-ID_FILE = "machine_id.txt"
+DATA_DIR = os.path.join(WRITABLE_DIR, 'data')
+ID_FILE = os.path.join(WRITABLE_DIR, 'machine_id.txt')
 RESOURCE_THRESHOLD = 80
 STORAGE_LIMIT = 200 * 1024 * 1024  # 200 Mo
 FILES_PER_BATCH = int(os.getenv('FILES_PER_BATCH', 5))
@@ -156,7 +193,7 @@ def get_machine_type() -> int:
 def get_bios_motherboard_info() -> Dict[str, Any]:
     """Récupère les informations BIOS et carte mère."""
     bios_info = {"BIOS": {"Fabricant": "Non disponible", "Version": "Non disponible", "Date": "Non disponible"},
-                 "Carte mère": {"Fabricant": "Non disponible", "Modèle": "Non disponible"}}
+                 "mother_board": {"Fabricant": "Non disponible", "Modele": "Non disponible"}}
     try:
         if platform.system() == "Windows":
             import wmi
@@ -168,9 +205,9 @@ def get_bios_motherboard_info() -> Dict[str, Any]:
                     "Date": bios.ReleaseDate
                 }
             for board in c.Win32_BaseBoard():
-                bios_info["Carte mère"] = {
+                bios_info["mother_board"] = {
                     "Fabricant": board.Manufacturer,
-                    "Modèle": board.Product
+                    "Modele": board.Product
                 }
         elif platform.system() == "Linux":
             # Utiliser /sys/class/dmi/id/ pour éviter les permissions root
@@ -185,10 +222,10 @@ def get_bios_motherboard_info() -> Dict[str, Any]:
                     bios_info["BIOS"]["Date"] = f.read().strip()
             if os.path.exists('/sys/class/dmi/id/board_vendor'):
                 with open('/sys/class/dmi/id/board_vendor', 'r') as f:
-                    bios_info["Carte mère"]["Fabricant"] = f.read().strip()
+                    bios_info["mother_board"]["Fabricant"] = f.read().strip()
             if os.path.exists('/sys/class/dmi/id/board_name'):
                 with open('/sys/class/dmi/id/board_name', 'r') as f:
-                    bios_info["Carte mère"]["Modèle"] = f.read().strip()
+                    bios_info["mother_board"]["Modele"] = f.read().strip()
             # Essayer dmidecode en dernier recours
             try:
                 bios_output = subprocess.check_output("dmidecode -t bios", shell=True, stderr=subprocess.DEVNULL).decode()
@@ -198,9 +235,9 @@ def get_bios_motherboard_info() -> Dict[str, Any]:
                     "Date": next((line.split("Release Date:")[1].strip() for line in bios_output.splitlines() if "Release Date:" in line), bios_info["BIOS"]["Date"])
                 }
                 board_output = subprocess.check_output("dmidecode -t baseboard", shell=True, stderr=subprocess.DEVNULL).decode()
-                bios_info["Carte mère"] = {
-                    "Fabricant": next((line.split("Manufacturer:")[1].strip() for line in board_output.splitlines() if "Manufacturer:" in line), bios_info["Carte mère"]["Fabricant"]),
-                    "Modèle": next((line.split("Product Name:")[1].strip() for line in board_output.splitlines() if "Product Name:" in line), bios_info["Carte mère"]["Modèle"])
+                bios_info["mother_board"] = {
+                    "Fabricant": next((line.split("Manufacturer:")[1].strip() for line in board_output.splitlines() if "Manufacturer:" in line), bios_info["mother_board"]["Fabricant"]),
+                    "Modele": next((line.split("Product Name:")[1].strip() for line in board_output.splitlines() if "Product Name:" in line), bios_info["mother_board"]["Modele"])
                 }
             except (subprocess.CalledProcessError, PermissionError):
                 logging.warning("dmidecode non accessible, utilisant valeurs par défaut")
@@ -668,7 +705,7 @@ def collect_initial_data() -> Dict[str, Any]:
             "hostname": platform.node()
         }
         cpu_info = {
-            "type": platform.processor(),
+            "modele": platform.processor(),
             "coeurs_physiques": psutil.cpu_count(logical=False),
             "coeurs_logiques": psutil.cpu_count(logical=True),
             "frequence": {
@@ -700,7 +737,7 @@ def collect_initial_data() -> Dict[str, Any]:
         return {
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "os": os_info,
-            "type_machine": get_machine_type(),
+            "tipe_machine": get_machine_type(),
             "cpu": cpu_info,
             "memoire": memory_info,
             "disque": disk_info,

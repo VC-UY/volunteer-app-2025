@@ -1,4 +1,7 @@
 exp-env\
+venv\
+.venv\
+.volunteer\
 __pycache__\
 *.pyc
 *.pyo
@@ -6,3 +9,16 @@ __pycache__\
 db.sqlite3
 .git\
 .gitignore
+data\
+*.json.gz
+.env
+node_modules\
+.idea\
+.vscode\
+*.egg-info
+.pytest_cache\
+.coverage
+htmlcov\
+dist\
+build\
+logs\*.log

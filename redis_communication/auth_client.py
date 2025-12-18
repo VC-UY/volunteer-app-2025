@@ -13,13 +13,53 @@ from .message import Message
 
 logger = logging.getLogger(__name__)
 
+# Déterminer le répertoire de base pour les données
+# En production (systemd avec WorkingDirectory=/opt/volunteer-app), utiliser /opt/volunteer-app/data
+# En développement, utiliser le répertoire data de l'application
+def _get_data_base_dir():
+    """Retourne le répertoire de base pour stocker les données."""
+    # Option 1: Variable d'environnement explicite
+    if os.environ.get('VOLUNTEER_DATA_DIR'):
+        return os.environ.get('VOLUNTEER_DATA_DIR')
+    
+    # Option 2: Répertoire /opt/volunteer-app/data (production)
+    opt_data_dir = '/opt/volunteer-app/data'
+    try:
+        os.makedirs(opt_data_dir, exist_ok=True)
+        # Vérifier si on peut écrire
+        test_file = os.path.join(opt_data_dir, '.write_test')
+        with open(test_file, 'w') as f:
+            f.write('test')
+        os.remove(test_file)
+        return opt_data_dir
+    except (OSError, IOError):
+        pass  # Continuer avec les autres options
+    
+    # Option 3: Répertoire data dans l'application (développement)
+    app_data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
+    try:
+        os.makedirs(app_data_dir, exist_ok=True)
+        test_file = os.path.join(app_data_dir, '.write_test')
+        with open(test_file, 'w') as f:
+            f.write('test')
+        os.remove(test_file)
+        return app_data_dir
+    except (OSError, IOError):
+        pass
+    
+    # Option 4: Répertoire temporaire (dernier recours)
+    import tempfile
+    return tempfile.mkdtemp(prefix='volunteer-app-')
+
+DATA_BASE_DIR = _get_data_base_dir()
+
 # Répertoire pour stocker les réponses
-RESPONSES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.volunteer/temp_data')
+RESPONSES_DIR = os.path.join(DATA_BASE_DIR, 'temp_data')
 os.makedirs(RESPONSES_DIR, exist_ok=True)
 
 # Répertoire pour stocker les informations du volontaire
-VOLUNTEER_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.volunteer')
-os.makedirs(VOLUNTEER_DIR, exist_ok=True)
+VOLUNTEER_DIR = '.volunteer'
+# Le répertoire est déjà créé par RESPONSES_DIR
 
 def save_response(request_id: str, response: Dict[str, Any]):
     """
@@ -419,7 +459,7 @@ def get_volunteer_info() -> Optional[Dict[str, Any]]:
         with open(config_file, 'r') as f:
             info = json.load(f)
         
-        logger.info(f"Informations du volontaire chargées depuis")
+        logger.info(f"Informations du volontaire chargées depuis le fichier {config_file}")
         return info
     except Exception as e:
         logger.error(f"Erreur lors de la lecture des informations du volontaire: {e}")

@@ -184,19 +184,36 @@ class RedisClient:
             channel: Nom du canal
             handler: Fonction de rappel qui sera appelée avec (channel, message)
         """
-        # Ajouter le gestionnaire
+        # Initialiser la liste des handlers pour ce canal si nécessaire
         if channel not in self.handlers:
             self.handlers[channel] = []
-        self.handlers[channel].append(handler)
+        
+        # Vérifier si ce handler existe déjà (par nom de fonction) pour éviter les doublons
+        handler_name = getattr(handler, '__name__', str(handler))
+        existing_handler_names = [getattr(h, '__name__', str(h)) for h in self.handlers[channel]]
+        
+        if handler_name not in existing_handler_names:
+            self.handlers[channel].append(handler)
+            logger.debug(f"Handler '{handler_name}' ajouté pour le canal {channel}")
+        else:
+            logger.debug(f"Handler '{handler_name}' existe déjà pour le canal {channel}, ignoré")
         
         # Garder trace des canaux souscrits (pour réabonnement)
         self.subscribed_channels.add(channel)
         
-        # S'abonner au canal Redis si connecté
+        # S'abonner au canal Redis si connecté (et pas déjà abonné)
         if self.connected and self.pubsub:
             try:
-                self.pubsub.subscribe(channel)
-                logger.info(f"Abonné au canal: {channel}")
+                # Vérifier si on n'est pas déjà abonné au niveau Redis
+                if not hasattr(self, '_redis_subscribed_channels'):
+                    self._redis_subscribed_channels = set()
+                
+                if channel not in self._redis_subscribed_channels:
+                    self.pubsub.subscribe(channel)
+                    self._redis_subscribed_channels.add(channel)
+                    logger.info(f"Abonné au canal: {channel}")
+                else:
+                    logger.debug(f"Déjà abonné au canal Redis: {channel}")
             except Exception as e:
                 logger.error(f"Erreur lors de l'abonnement à {channel}: {e}")
                 self.connected = False
@@ -343,12 +360,34 @@ class RedisClient:
             if self.subscribed_channels:
                 self._resubscribe_all()
             
+            
             logger.info("✅ Reconnexion réussie!")
             self.stats['reconnections'] += 1
+
+            # verifier si le le volontaire est connecté et que sont token est valide
+            from redis_communication.auth_client import load_volunter_credentials
+            from redis_communication.auth_client import get_volunteer_info
+            import datetime
+            creds = load_volunter_credentials()
+            if creds:
+                volunteer_last_login = get_volunteer_info() # date de la derniere connexion en decimale
+                if volunteer_last_login and datetime.datetime.fromtimestamp(volunteer_last_login['last_login']) + datetime.timedelta(hours=24) > datetime.datetime.now(): # verifier si le token est encore valide pour 24h
+                    logger.info("✅  Le volontaire était déjà authentifié et token valide")
+                    
+                else:
+                    logger.warning("Le token d'authentification du volontaire n'est plus valide, reconnexion ...")
+                    from redis_communication.apps import auth_volunteer_flow
+                    auth_volunteer_flow()
+            else:
+                logger.warning("Aucune information d'authentification du volontaire disponible après reconnexion")
+                from redis_communication.apps import auth_volunteer_flow
+                auth_volunteer_flow()
             return True
             
         except Exception as e:
             logger.warning(f"Échec de reconnexion (tentative {self.reconnect_attempts}): {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             logger.info(f"Nouvelle tentative dans {backoff:.1f}s...")
             time.sleep(backoff)
             return False

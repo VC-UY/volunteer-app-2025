@@ -4,10 +4,120 @@ from rest_framework import status
 from volontaire.utils.get_info import get_statics_infos
 from volontaire.docker_manager import DockerManager
 from django.shortcuts import render
+from pathlib import Path
+import psutil
+import time as time_module
+import json
 
 
 # Utiliser l'instance singleton de DockerManager
 manager = DockerManager.get_instance()
+
+# Chemin vers le fichier de statistiques de l'agent
+BASE_DIR = Path(__file__).resolve().parent.parent
+AGENT_STATS_FILE = BASE_DIR / '.volunteer' / 'agent_stats.json'
+
+
+def _read_agent_stats():
+    """Lit les statistiques de l'agent depuis le fichier partagé"""
+    try:
+        if AGENT_STATS_FILE.exists():
+            with open(AGENT_STATS_FILE, 'r') as f:
+                return json.load(f)
+    except Exception:
+        pass
+    
+    # Valeurs par défaut si le fichier n'existe pas
+    return {
+        'status': 'unknown',
+        'connected': False,
+        'start_time': None,
+        'messages_sent': 0,
+        'messages_received': 0,
+        'files_collected': 0,
+        'files_sent': 0,
+        'tasks_completed': 0,
+        'tasks_failed': 0,
+        'data_collected_mb': 0.0,
+        'data_sent_mb': 0.0,
+        'reconnections': 0,
+        'last_sync': None,
+        'last_error': None,
+        'uptime_seconds': 0
+    }
+
+
+# ==================== API AGENT DE COLLECTE ====================
+
+class AgentStatusView(APIView):
+    """Récupère le statut de l'agent de collecte Redis"""
+    def get(self, request):
+        stats = _read_agent_stats()
+        return Response(stats)
+
+
+class AgentControlView(APIView):
+    """Contrôle l'agent de collecte (start/stop)"""
+    def post(self, request, action):
+        try:
+            from redis_communication.client import RedisClient
+            
+            if action == 'start':
+                client = RedisClient.get_instance()
+                if not client.running:
+                    client.start()
+                return Response({'message': 'Agent démarré', 'success': True})
+            
+            elif action == 'stop':
+                if RedisClient._instance:
+                    RedisClient._instance.stop()
+                return Response({'message': 'Agent arrêté', 'success': True})
+            
+            else:
+                return Response({'error': 'Action inconnue'}, status=400)
+                
+        except Exception as e:
+            return Response({'error': str(e), 'success': False}, status=500)
+
+
+class MachineStateView(APIView):
+    """Récupère l'état actuel de la machine (CPU, RAM, Disk usage)"""
+    def get(self, request):
+        try:
+            # CPU usage (moyenne sur 1 seconde)
+            cpu_usage = psutil.cpu_percent(interval=0.5)
+            cpu_count = psutil.cpu_count(logical=True)
+            cpu_count_physical = psutil.cpu_count(logical=False)
+            
+            # RAM usage
+            memory = psutil.virtual_memory()
+            ram_usage = memory.percent
+            ram_used = memory.used / (1024 ** 3)  # GB
+            ram_total = memory.total / (1024 ** 3)  # GB
+            
+            # Disk usage
+            disk = psutil.disk_usage('/')
+            disk_usage = disk.percent
+            disk_used = disk.used / (1024 ** 3)  # GB
+            disk_total = disk.total / (1024 ** 3)  # GB
+            
+            return Response({
+                'cpu_usage': round(cpu_usage, 1),
+                'cpu_count': cpu_count,
+                'cpu_count_physical': cpu_count_physical,
+                'ram_usage': round(ram_usage, 1),
+                'ram_used_gb': round(ram_used, 2),
+                'ram_total_gb': round(ram_total, 2),
+                'disk_usage': round(disk_usage, 1),
+                'disk_used_gb': round(disk_used, 2),
+                'disk_total_gb': round(disk_total, 2),
+                'timestamp': time_module.time()
+            })
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
+
+
+# ==================== DOCKER CONTAINER MANAGEMENT ====================
 
 
 
@@ -234,11 +344,18 @@ def save_preferences(request):
         try:
             data = json.loads(request.body)
 
-            # Récupérer la machine courante (adapte selon ta logique)
-            machine = MachineInfo.objects.first()  # ou via l'utilisateur connecté
+            # Récupérer la machine courante
+            machine = MachineInfo.objects.first()
 
             # Créer ou mettre à jour les préférences
-            pref, created = PreferenceModel.objects.get_or_create(machine=machine)
+            if machine:
+                pref, created = PreferenceModel.objects.get_or_create(machine=machine)
+            else:
+                # Si pas de machine, créer/récupérer une préférence sans machine
+                pref = PreferenceModel.objects.filter(machine__isnull=True).first()
+                if not pref:
+                    pref = PreferenceModel.objects.create()
+                created = False
 
             # Mettre à jour les champs simples
             pref.cpu_max_utilisation = data.get('cpu_max_utilisation', 80)

@@ -91,10 +91,12 @@ CHANNEL_LAYERS = {
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
+# La base de données est dans data/ pour être accessible en écriture par systemd
+# (ProtectSystem=strict nécessite des chemins explicites dans ReadWritePaths)
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME': BASE_DIR / 'data' / 'db.sqlite3',
         'OPTIONS': {
             'timeout': 30,  # Augmente le délai d'attente pour les connexions à la base de données
             'check_same_thread': False,  # Permet l'accès à la base de données depuis plusieurs threads   

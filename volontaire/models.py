@@ -30,10 +30,10 @@ class MachineInfo(models.Model):
     hostname = models.CharField(max_length=255, default="", help_text="Nom d'hôte de la machine")
     
     # Type de machine
-    machine_type = models.CharField(max_length=50, default="", help_text="Type de machine (Portable, PC de bureau, etc.)")
+    machine_tipe = models.CharField(max_length=50, default="", help_text="Type de machine (Portable, PC de bureau, etc.)")
     
     # Informations sur le processeur
-    cpu_type = models.CharField(max_length=100, default="", help_text="Type de processeur")
+    cpu_modele = models.CharField(max_length=100, default="", help_text="Type de processeur")
     cpu_architecture = models.CharField(max_length=50, default="", help_text="Architecture du processeur")
     cpu_bits = models.CharField(max_length=10, default="", help_text="Nombre de bits du processeur (32-bit, 64-bit)")
     cpu_cores_physical = models.IntegerField(default=1, help_text="Nombre de cœurs physiques")
@@ -174,8 +174,8 @@ class EtatMachine(models.Model):
 
 # --------------------------------------------- Modèle de préférences
 class PreferenceModel(models.Model):
-    # Machine associée
-    machine = models.OneToOneField(MachineInfo, on_delete=models.CASCADE, related_name='preferences', default=None)
+    # Machine associée (nullable pour permettre la création sans machine)
+    machine = models.OneToOneField(MachineInfo, on_delete=models.CASCADE, related_name='preferences', null=True, blank=True)
     
     # Préférences d'utilisation des ressources
     cpu_max_utilisation = models.IntegerField(default=80, help_text="Utilisation maximale du CPU en pourcentage")

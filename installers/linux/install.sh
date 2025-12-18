@@ -28,7 +28,9 @@ echo -e "${GREEN}✓ Privilèges root détectés${NC}"
 # Variables
 INSTALL_DIR="/opt/volunteer-app"
 SERVICE_NAME="volunteer"
+WEB_SERVICE_NAME="volunteer-web"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
+WEB_SERVICE_FILE="/etc/systemd/system/${WEB_SERVICE_NAME}.service"
 USER="volunteer"
 GROUP="volunteer"
 
@@ -58,10 +60,34 @@ echo "Création du répertoire d'installation..."
 mkdir -p $INSTALL_DIR
 echo -e "${GREEN}✓ Répertoire $INSTALL_DIR créé${NC}"
 
-# Copier les fichiers de l'application
+# Copier les fichiers de l'application (exclure les fichiers inutiles)
 echo "Copie des fichiers de l'application..."
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-rsync -av --exclude='exp-env' --exclude='__pycache__' --exclude='*.pyc' \
+rsync -av \
+    --exclude='exp-env' \
+    --exclude='venv' \
+    --exclude='.venv' \
+    --exclude='__pycache__' \
+    --exclude='*.pyc' \
+    --exclude='*.pyo' \
+    --exclude='.git' \
+    --exclude='.gitignore' \
+    --exclude='.volunteer/' \
+    --exclude='data/' \
+    --exclude='*.json.gz' \
+    --exclude='*.log' \
+    --exclude='logs/*.log' \
+    --exclude='db.sqlite3' \
+    --exclude='.env' \
+    --exclude='node_modules' \
+    --exclude='.idea' \
+    --exclude='.vscode' \
+    --exclude='*.egg-info' \
+    --exclude='.pytest_cache' \
+    --exclude='.coverage' \
+    --exclude='htmlcov' \
+    --exclude='dist' \
+    --exclude='build' \
     "$SCRIPT_DIR/" "$INSTALL_DIR/"
 echo -e "${GREEN}✓ Fichiers copiés${NC}"
 
@@ -95,18 +121,37 @@ echo -e "${GREEN}✓ Dépendances installées${NC}"
 # Copier le fichier de service systemd
 echo "Installation du service systemd..."
 cp "$INSTALL_DIR/installers/linux/volunteer.service" "$SERVICE_FILE"
+cp "$INSTALL_DIR/installers/linux/volunteer-web.service" "$WEB_SERVICE_FILE"
 
-# Remplacer les chemins dans le fichier de service
+# Créer et appliquer  les migration  pour créer la base de données
+echo "Application des migrations de la base de données..."
+$INSTALL_DIR/exp-env/bin/python $INSTALL_DIR/manage.py migrate
+echo -e "${GREEN}✓ Migrations appliquées${NC}"
+
+# Remplacer les chemins dans les fichiers de service
 sed -i "s|/opt/volunteer-app|$INSTALL_DIR|g" "$SERVICE_FILE"
 sed -i "s|User=volunteer|User=$USER|g" "$SERVICE_FILE"
 sed -i "s|Group=volunteer|Group=$GROUP|g" "$SERVICE_FILE"
 
-echo -e "${GREEN}✓ Service systemd configuré${NC}"
+sed -i "s|/opt/volunteer-app|$INSTALL_DIR|g" "$WEB_SERVICE_FILE"
+sed -i "s|User=volunteer|User=$USER|g" "$WEB_SERVICE_FILE"
+sed -i "s|Group=volunteer|Group=$GROUP|g" "$WEB_SERVICE_FILE"
+
+echo -e "${GREEN}✓ Services systemd configurés${NC}"
+
+# Créer les répertoires nécessaires (pour les permissions systemd)
+echo "Création des répertoires de données..."
+mkdir -p $INSTALL_DIR/logs
+mkdir -p $INSTALL_DIR/data
+mkdir -p $INSTALL_DIR/pending_requests
+mkdir -p $INSTALL_DIR/.volunteer
+echo -e "${GREEN}✓ Répertoires de données créés${NC}"
 
 # Ajuster les permissions
 echo "Configuration des permissions..."
 chown -R $USER:$GROUP $INSTALL_DIR
 chmod +x $INSTALL_DIR/volunteer_daemon.py
+chmod 777 -R $INSTALL_DIR
 echo -e "${GREEN}✓ Permissions configurées${NC}"
 
 # Recharger systemd
@@ -114,35 +159,43 @@ echo "Rechargement de systemd..."
 systemctl daemon-reload
 echo -e "${GREEN}✓ Systemd rechargé${NC}"
 
-# Activer le service au démarrage
-echo "Activation du service au démarrage..."
+# Activer les services au démarrage
+echo "Activation des services au démarrage..."
 systemctl enable $SERVICE_NAME
-echo -e "${GREEN}✓ Service activé${NC}"
+systemctl enable $WEB_SERVICE_NAME
+echo -e "${GREEN}✓ Services activés${NC}"
 
-# Démarrer le service
-echo "Démarrage du service..."
+# Démarrer les services
+echo "Démarrage des services..."
 systemctl start $SERVICE_NAME
-echo -e "${GREEN}✓ Service démarré${NC}"
+systemctl start $WEB_SERVICE_NAME
+echo -e "${GREEN}✓ Services démarrés${NC}"
 
 # Vérifier le statut
 sleep 2
-if systemctl is-active --quiet $SERVICE_NAME; then
+if systemctl is-active --quiet $SERVICE_NAME && systemctl is-active --quiet $WEB_SERVICE_NAME; then
     echo ""
     echo "╔═══════════════════════════════════════════════════════════════╗"
     echo "║             ✅ INSTALLATION RÉUSSIE                           ║"
     echo "╚═══════════════════════════════════════════════════════════════╝"
     echo ""
-    echo "Le service volontaire est maintenant installé et actif!"
+    echo "Les services volontaire sont maintenant installés et actifs!"
+    echo ""
+    echo "🌐 Interface Web: http://localhost:8002"
     echo ""
     echo "Commandes utiles:"
-    echo "  • Statut    : sudo systemctl status $SERVICE_NAME"
-    echo "  • Arrêter   : sudo systemctl stop $SERVICE_NAME"
-    echo "  • Démarrer  : sudo systemctl start $SERVICE_NAME"
-    echo "  • Redémarrer: sudo systemctl restart $SERVICE_NAME"
-    echo "  • Logs      : sudo journalctl -u $SERVICE_NAME -f"
+    echo "  • Statut daemon : sudo systemctl status $SERVICE_NAME"
+    echo "  • Statut web    : sudo systemctl status $WEB_SERVICE_NAME"
+    echo "  • Arrêter tout  : sudo systemctl stop $SERVICE_NAME $WEB_SERVICE_NAME"
+    echo "  • Démarrer tout : sudo systemctl start $SERVICE_NAME $WEB_SERVICE_NAME"
+    echo "  • Redémarrer    : sudo systemctl restart $SERVICE_NAME $WEB_SERVICE_NAME"
+    echo "  • Logs daemon   : sudo journalctl -u $SERVICE_NAME -f"
+    echo "  • Logs web      : sudo journalctl -u $WEB_SERVICE_NAME -f"
     echo ""
 else
-    echo -e "${RED}✗ Le service n'a pas démarré correctement${NC}"
-    echo "Vérifiez les logs: sudo journalctl -u $SERVICE_NAME -n 50"
+    echo -e "${RED}✗ Un ou plusieurs services n'ont pas démarré correctement${NC}"
+    echo "Vérifiez les logs:"
+    echo "  sudo journalctl -u $SERVICE_NAME -n 50"
+    echo "  sudo journalctl -u $WEB_SERVICE_NAME -n 50"
     exit 1
 fi

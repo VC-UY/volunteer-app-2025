@@ -3,318 +3,886 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Application Volontaire</title>
+  <title>VolunteerApp - Computing Distribué</title>
   <!-- Bootstrap 5 -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
   <style>
-    body { background: #f5f7fa; }
-    .sidebar { background: #fff; border-right: 1px solid #eee; min-height: 100vh; padding: 2rem 1rem; }
-    .machine-badge { font-size: 1em; }
-    .table td, .table th { vertical-align: middle; }
-    .badge-running { background: #198754; }
-    .badge-paused { background: #ffc107; color: #333; }
-    .badge-stopped { background: #dc3545; }
-    .badge-pending { background: #0dcaf0; color: #222; }
+    :root {
+      --primary-color: #2c3e50;
+      --secondary-color: #3498db;
+      --accent-color: #1abc9c;
+      --success-color: #27ae60;
+      --warning-color: #f39c12;
+      --danger-color: #e74c3c;
+      --bg-light: #ecf0f1;
+      --card-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    
+    * { box-sizing: border-box; }
+    
+    body { 
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    
+    /* Navbar moderne */
+    .navbar-custom {
+      background: rgba(255,255,255,0.95);
+      backdrop-filter: blur(10px);
+      box-shadow: var(--card-shadow);
+      padding: 0.8rem 1.5rem;
+    }
+    
+    .navbar-brand {
+      font-weight: 700;
+      font-size: 1.4rem;
+      color: var(--primary-color) !important;
+    }
+    
+    .navbar-brand i {
+      color: var(--secondary-color);
+    }
+    
+    /* Cards modernes */
+    .card-modern {
+      background: rgba(255,255,255,0.98);
+      border: none;
+      border-radius: 16px;
+      box-shadow: var(--card-shadow);
+      overflow: hidden;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    
+    .card-modern:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+    }
+    
+    .card-header-custom {
+      background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+      color: white;
+      padding: 1rem 1.5rem;
+      font-weight: 600;
+      border: none;
+    }
+    
+    /* Agent Status Card */
+    .agent-status-card {
+      background: linear-gradient(135deg, #1a1a2e, #16213e);
+      color: white;
+      border-radius: 16px;
+      padding: 1.5rem;
+    }
+    
+    .agent-status-indicator {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      display: inline-block;
+      animation: pulse 2s infinite;
+    }
+    
+    .agent-status-indicator.connected {
+      background: var(--success-color);
+      box-shadow: 0 0 10px var(--success-color);
+    }
+    
+    .agent-status-indicator.disconnected {
+      background: var(--danger-color);
+      box-shadow: 0 0 10px var(--danger-color);
+      animation: none;
+    }
+    
+    .agent-status-indicator.connecting {
+      background: var(--warning-color);
+      box-shadow: 0 0 10px var(--warning-color);
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.7; transform: scale(1.1); }
+    }
+    
+    /* Jauges circulaires */
+    .gauge-container {
+      position: relative;
+      width: 100px;
+      height: 100px;
+      margin: 0 auto;
+    }
+    
+    .gauge-circle {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      background: conic-gradient(
+        var(--gauge-color, var(--secondary-color)) var(--percentage, 0%),
+        #e0e0e0 var(--percentage, 0%)
+      );
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .gauge-inner {
+      width: 75%;
+      height: 75%;
+      background: white;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+    }
+    
+    .gauge-value {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--primary-color);
+    }
+    
+    .gauge-label {
+      font-size: 0.7rem;
+      color: #666;
+      text-transform: uppercase;
+    }
+    
+    /* Stats boxes */
+    .stat-box {
+      background: linear-gradient(135deg, var(--stat-color, var(--secondary-color)), var(--stat-color-dark, #2980b9));
+      color: white;
+      border-radius: 12px;
+      padding: 1rem;
+      text-align: center;
+      transition: transform 0.3s ease;
+    }
+    
+    .stat-box:hover {
+      transform: scale(1.02);
+    }
+    
+    .stat-box .stat-value {
+      font-size: 1.8rem;
+      font-weight: 700;
+    }
+    
+    .stat-box .stat-label {
+      font-size: 0.85rem;
+      opacity: 0.9;
+    }
+    
+    /* Préférences simplifiées */
+    .pref-day-btn {
+      width: 45px;
+      height: 45px;
+      border-radius: 50%;
+      border: 2px solid #ddd;
+      background: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: #666;
+    }
+    
+    .pref-day-btn:hover {
+      border-color: var(--secondary-color);
+      color: var(--secondary-color);
+    }
+    
+    .pref-day-btn.active {
+      background: var(--secondary-color);
+      border-color: var(--secondary-color);
+      color: white;
+    }
+    
+    /* Slider moderne */
+    .slider-container {
+      padding: 0.5rem 0;
+    }
+    
+    .slider-label {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 0.5rem;
+      font-weight: 500;
+    }
+    
+    .slider-value {
+      background: var(--secondary-color);
+      color: white;
+      padding: 2px 10px;
+      border-radius: 12px;
+      font-size: 0.85rem;
+    }
+    
+    input[type="range"] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 8px;
+      border-radius: 5px;
+      background: #e0e0e0;
+      outline: none;
+    }
+    
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: var(--secondary-color);
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+      transition: transform 0.2s;
+    }
+    
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.1);
+    }
+    
+    /* Table des tâches */
+    .tasks-table {
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    
+    .tasks-table thead {
+      background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+      color: white;
+    }
+    
+    .tasks-table th {
+      font-weight: 600;
+      padding: 1rem;
+      border: none;
+    }
+    
+    .tasks-table td {
+      padding: 1rem;
+      vertical-align: middle;
+      border-color: #f0f0f0;
+    }
+    
+    .tasks-table tbody tr:hover {
+      background: rgba(52, 152, 219, 0.05);
+    }
+    
+    /* Progress bar animée */
+    .progress-modern {
+      height: 10px;
+      border-radius: 5px;
+      background: #e0e0e0;
+      overflow: hidden;
+    }
+    
+    .progress-bar-modern {
+      height: 100%;
+      border-radius: 5px;
+      background: linear-gradient(90deg, var(--secondary-color), var(--accent-color));
+      transition: width 0.5s ease;
+      position: relative;
+    }
+    
+    .progress-bar-modern::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+      animation: shimmer 2s infinite;
+    }
+    
+    @keyframes shimmer {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+    
+    /* Status badges */
+    .status-badge {
+      padding: 0.4rem 0.8rem;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    
+    .status-running {
+      background: rgba(39, 174, 96, 0.15);
+      color: var(--success-color);
+    }
+    
+    .status-paused {
+      background: rgba(243, 156, 18, 0.15);
+      color: var(--warning-color);
+    }
+    
+    .status-complete {
+      background: rgba(52, 152, 219, 0.15);
+      color: var(--secondary-color);
+    }
+    
+    .status-failed, .status-error {
+      background: rgba(231, 76, 60, 0.15);
+      color: var(--danger-color);
+    }
+    
+    /* Action buttons */
+    .action-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.2s, box-shadow 0.2s;
+      margin: 0 2px;
+    }
+    
+    .action-btn:hover:not(:disabled) {
+      transform: scale(1.1);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+    
+    .action-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    
+    /* Modal moderne */
+    .modal-content {
+      border: none;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    
+    .modal-header {
+      background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+      color: white;
+      border-radius: 20px 20px 0 0;
+      padding: 1.5rem;
+    }
+    
+    .modal-header .btn-close {
+      filter: brightness(0) invert(1);
+    }
+    
+    /* Préférences actives */
+    .pref-active-card {
+      background: linear-gradient(135deg, #f8f9fa, #fff);
+      border: 1px solid #e9ecef;
+      border-radius: 12px;
+      padding: 1rem;
+      margin-bottom: 0.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .pref-active-card .pref-time {
+      background: var(--secondary-color);
+      color: white;
+      padding: 0.3rem 0.8rem;
+      border-radius: 20px;
+      font-size: 0.85rem;
+    }
+    
+    .pref-active-card .pref-resources {
+      font-size: 0.85rem;
+      color: #666;
+    }
+    
+    /* Quick toggle */
+    .quick-toggle {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 1rem;
+      background: #f8f9fa;
+      border-radius: 12px;
+    }
+    
+    .toggle-switch {
+      position: relative;
+      width: 60px;
+      height: 30px;
+    }
+    
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: #ccc;
+      border-radius: 30px;
+      transition: 0.4s;
+    }
+    
+    .toggle-slider:before {
+      position: absolute;
+      content: "";
+      height: 24px;
+      width: 24px;
+      left: 3px;
+      bottom: 3px;
+      background: white;
+      border-radius: 50%;
+      transition: 0.4s;
+    }
+    
+    input:checked + .toggle-slider {
+      background: var(--success-color);
+    }
+    
+    input:checked + .toggle-slider:before {
+      transform: translateX(30px);
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .gauge-container { width: 80px; height: 80px; }
+      .stat-box .stat-value { font-size: 1.4rem; }
+    }
   </style>
 </head>
 <body>
-  <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4">
+  <!-- Navbar -->
+  <nav class="navbar navbar-expand-lg navbar-custom sticky-top">
     <div class="container-fluid">
-      <a class="navbar-brand fw-bold" href="#"><i class="fa fa-hands-helping me-2"></i>VolunteerApp</a>
-      <span class="text-white"><i class="fa fa-server"></i> <span id="machine-hostname">{{ machine.hostname }}</span></span>
-      <span class="badge ms-3" id="machine-status"></span>
-      <button class="btn btn-outline-light ms-3" data-bs-toggle="modal" data-bs-target="#prefModal"><i class="fa fa-cog"></i> Préférences</button>
+      <a class="navbar-brand" href="#">
+        <i class="fas fa-atom me-2"></i>VolunteerApp
+      </a>
+      <div class="d-flex align-items-center gap-3">
+        <span class="text-muted">
+          <i class="fas fa-server me-1"></i>
+          <span id="machine-hostname">{{ machine.hostname }}</span>
+        </span>
+        <button class="btn btn-outline-primary rounded-pill" data-bs-toggle="modal" data-bs-target="#prefModal">
+          <i class="fas fa-sliders-h me-1"></i> Préférences
+        </button>
+      </div>
     </div>
   </nav>
-  <div class="container-fluid">
-    <div class="row">
-      <!-- Sidebar gauche: Infos machine et préférences -->
-      <aside class="col-md-3 sidebar">
-        <h5>Machine</h5>
-        <div><strong>Nom :</strong> <span id="sidebar-hostname">{{ machine.hostname }}</span></div>
-        <div><strong>OS :</strong> <span id="sidebar-os">{{ machine.os_name }} {{ machine.os_version }}</span></div>
-        <div><strong>CPU :</strong> <span id="sidebar-cpu">{{ machine.cpu_type }} ({{ machine.cpu_cores_physical }} cœurs, {{ machine.cpu_cores_logical }} logiques)</span></div>
-        <div><strong>RAM :</strong> <span id="sidebar-ram">{{ machine.ram_total_human }}</span></div>
-        <div><strong>Disque :</strong> <span id="sidebar-disk">{{ machine.disk_total_human }}</span></div>
-        <div><strong>Résolution :</strong> <span id="sidebar-screen">{{ machine.screen_resolution }}</span></div>
-        <div><strong>Statut :</strong> <span class="badge" id="sidebar-status">{% if etat %}{{ etat.statut_actuel }}{% endif %}</span></div>
-        <hr>
-        <h6>Préférences</h6>
-        <button type="button" class="btn btn-primary w-100 mb-2" data-bs-toggle="modal" data-bs-target="#prefModal">
-          <i class="fas fa-plus"></i> Ajouter une préférence
-        </button>
-        <pre id="sidebar-preferences" style="background:#f7f7f7; border-radius:6px; padding:1em; font-size:0.96em;">{{ preferences|default:'-' }}</pre>
-        <table id="prefsTable" class="table table-sm table-bordered mt-2"></table> <!-- Affichage dynamique -->
-      </aside>
-      <!-- Centre: Liste des tâches -->
-      <main class="col-md-9 py-4">
-        <div class="d-flex align-items-center mb-3">
-          <h4 class="me-auto">Tâches</h4>
-          <input type="text" id="search-task" class="form-control w-25" placeholder="Rechercher une tâche...">
-        </div>
-        <div class="table-responsive">
-          <table class="table table-bordered align-middle bg-white" id="tasks-table">
-            <thead class="table-light">
-              <tr>
-                <th>Nom</th>
-                <th>Statut</th>
-                <th>Progression</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody id="tasks-table-body">
-              {% if not tasks %}
-              <tr>
-                <td colspan="4" class="text-center">Aucune tâche en cours</td>
-              </tr>
-              {% endif %}
-              {% for task in tasks %}
-              <tr data-task-id="{{ task.id }}">
-                <td>{{ task.name }}</td>
-                <td><span class="text-muted" id="status-{{ task.id }}">{{ task.status }}</span></td>
-                <td>
-                  {{ task.progress }}%
-                  </td>
-                <td>
-                  <button class="btn btn-sm btn-warning pause-btn me-1" {% if not task.can_pause %}disabled{% endif %}><i class="fa fa-pause"></i></button>
-                  <button class="btn btn-sm btn-success resume-btn me-1" {% if not task.can_resume %}disabled{% endif %}><i class="fa fa-play"></i></button>
-                  <button class="btn btn-sm btn-danger stop-btn" {% if not task.can_stop %}disabled{% endif %}><i class="fa fa-stop"></i></button>
-                </td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </main>
-    </div>
-  </div>
-  <!-- Modal préférences -->
-  <div class="modal fade" id="prefModal" tabindex="-1" aria-labelledby="prefModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title" id="prefModalLabel">Préférences</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-          <form id="preferenceForm">
-            <div class="form-group mb-2">
-              <label>Jours disponibles:</label>
-              <div class="days-container">
-                <input type="checkbox" id="day-lundi" class="day-checkbox" value="Lundi">
-                <label for="day-lundi" class="day-label">Lundi</label>
-                <input type="checkbox" id="day-mardi" class="day-checkbox" value="Mardi">
-                <label for="day-mardi" class="day-label">Mardi</label>
-                <input type="checkbox" id="day-mercredi" class="day-checkbox" value="Mercredi">
-                <label for="day-mercredi" class="day-label">Mercredi</label>
-                <input type="checkbox" id="day-jeudi" class="day-checkbox" value="Jeudi">
-                <label for="day-jeudi" class="day-label">Jeudi</label>
-                <input type="checkbox" id="day-vendredi" class="day-checkbox" value="Vendredi">
-                <label for="day-vendredi" class="day-label">Vendredi</label>
-                <input type="checkbox" id="day-samedi" class="day-checkbox" value="Samedi">
-                <label for="day-samedi" class="day-label">Samedi</label>
-                <input type="checkbox" id="day-dimanche" class="day-checkbox" value="Dimanche">
-                <label for="day-dimanche" class="day-label">Dimanche</label>
+
+  <div class="container-fluid py-4">
+    <div class="row g-4">
+      
+      <!-- Colonne gauche: Agent & Machine -->
+      <div class="col-lg-4">
+        
+        <!-- Agent de collecte Status -->
+        <div class="agent-status-card mb-4">
+          <div class="d-flex justify-content-between align-items-start mb-3">
+            <div>
+              <h6 class="mb-1 opacity-75">Agent de Collecte</h6>
+              <div class="d-flex align-items-center gap-2">
+                <span class="agent-status-indicator" id="agent-indicator"></span>
+                <span class="fw-bold" id="agent-status-text">Chargement...</span>
               </div>
             </div>
-            <div id="timeSlotsContainer" class="mb-2"></div>
-            <div class="form-group time-range mb-2">
-              <div>
-                <label for="startTime">Heure début:</label>
-                <input type="time" id="startTime">
-              </div>
-              <div>
-                <label for="endTime">Heure fin:</label>
-                <input type="time" id="endTime">
-              </div>
-            </div>
-            <div class="form-group resources mb-2">
-              <div>
-                <label for="cpu">CPU (%):</label>
-                <input type="number" id="cpu" min="1" max="100" value="100">
-              </div>
-              <div>
-                <label for="ram">RAM (GB):</label>
-                <input type="number" id="ram" min="1" value="16">
-              </div>
-              <div>
-                <label for="maxTime">Temps max (min):</label>
-                <input type="number" id="maxTime" min="1" value="60">
-              </div>
-            </div>
-            <div class="form-group mb-2">
-              <button type="button" class="btn btn-outline-primary" onclick="addTimeSlot()">
-                <i class="fas fa-plus"></i> Ajouter ce créneau
+            <div class="d-flex gap-2">
+              <button class="btn btn-sm btn-success rounded-pill" onclick="startAgent()" id="agent-start-btn" title="Démarrer">
+                <i class="fas fa-play"></i>
+              </button>
+              <button class="btn btn-sm btn-danger rounded-pill" onclick="stopAgent()" id="agent-stop-btn" title="Arrêter">
+                <i class="fas fa-stop"></i>
               </button>
             </div>
-            <div class="form-group mb-2">
-              <button type="button" class="btn btn-success w-100" onclick="savePreferences()">
-                <i class="fas fa-save"></i> Enregistrer les préférences
+          </div>
+          
+          <!-- Tableau des statistiques de l'agent -->
+          <div class="table-responsive">
+            <table class="table table-sm table-dark table-borderless mb-0" style="font-size: 0.85rem;">
+              <tbody>
+                <tr>
+                  <td class="opacity-75"><i class="fas fa-paper-plane me-2"></i>Messages envoyés</td>
+                  <td class="text-end fw-bold" id="agent-msgs-sent">0</td>
+                </tr>
+                <tr>
+                  <td class="opacity-75"><i class="fas fa-inbox me-2"></i>Messages reçus</td>
+                  <td class="text-end fw-bold" id="agent-msgs-received">0</td>
+                </tr>
+                <tr>
+                  <td class="opacity-75"><i class="fas fa-file-download me-2"></i>Fichiers collectés</td>
+                  <td class="text-end fw-bold" id="agent-files-collected">0</td>
+                </tr>
+                <tr>
+                  <td class="opacity-75"><i class="fas fa-file-upload me-2"></i>Fichiers envoyés</td>
+                  <td class="text-end fw-bold" id="agent-files-sent">0</td>
+                </tr>
+                <tr>
+                  <td class="opacity-75"><i class="fas fa-check-circle me-2"></i>Tâches terminées</td>
+                  <td class="text-end fw-bold text-success" id="agent-tasks-completed">0</td>
+                </tr>
+                <tr>
+                  <td class="opacity-75"><i class="fas fa-times-circle me-2"></i>Tâches échouées</td>
+                  <td class="text-end fw-bold text-danger" id="agent-tasks-failed">0</td>
+                </tr>
+                <tr>
+                  <td class="opacity-75"><i class="fas fa-database me-2"></i>Données collectées</td>
+                  <td class="text-end fw-bold" id="agent-data-collected">0 MB</td>
+                </tr>
+                <tr>
+                  <td class="opacity-75"><i class="fas fa-cloud-upload-alt me-2"></i>Données envoyées</td>
+                  <td class="text-end fw-bold" id="agent-data-sent">0 MB</td>
+                </tr>
+                <tr>
+                  <td class="opacity-75"><i class="fas fa-sync me-2"></i>Reconnexions</td>
+                  <td class="text-end fw-bold" id="agent-reconnections">0</td>
+                </tr>
+                <tr>
+                  <td class="opacity-75"><i class="fas fa-clock me-2"></i>Uptime</td>
+                  <td class="text-end fw-bold" id="agent-uptime">0h 0m</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          
+          <div class="mt-3 pt-3 border-top border-secondary">
+            <div class="d-flex justify-content-between small">
+              <span class="opacity-75"><i class="fas fa-sync-alt me-1"></i>Dernière sync:</span>
+              <span id="agent-last-sync">-</span>
+            </div>
+            <div class="d-flex justify-content-between small mt-1" id="agent-error-row" style="display: none !important;">
+              <span class="opacity-75 text-danger"><i class="fas fa-exclamation-triangle me-1"></i>Erreur:</span>
+              <span class="text-danger" id="agent-last-error">-</span>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Machine Info Card -->
+        <div class="card-modern mb-4">
+          <div class="card-header-custom">
+            <i class="fas fa-desktop me-2"></i>Machine
+          </div>
+          <div class="card-body p-4">
+            <div class="row g-3 mb-4">
+              <div class="col-4">
+                <div class="gauge-container">
+                  <div class="gauge-circle" id="cpu-gauge" style="--percentage: 0%; --gauge-color: #3498db;">
+                    <div class="gauge-inner">
+                      <span class="gauge-value" id="cpu-value">0%</span>
+                      <span class="gauge-label">CPU</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-4">
+                <div class="gauge-container">
+                  <div class="gauge-circle" id="ram-gauge" style="--percentage: 0%; --gauge-color: #9b59b6;">
+                    <div class="gauge-inner">
+                      <span class="gauge-value" id="ram-value">0%</span>
+                      <span class="gauge-label">RAM</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-4">
+                <div class="gauge-container">
+                  <div class="gauge-circle" id="disk-gauge" style="--percentage: 0%; --gauge-color: #1abc9c;">
+                    <div class="gauge-inner">
+                      <span class="gauge-value" id="disk-value">0%</span>
+                      <span class="gauge-label">Disque</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div class="border-top pt-3">
+              <div class="row small">
+                <div class="col-6 mb-2">
+                  <i class="fas fa-microchip text-primary me-2"></i>
+                  <span class="text-muted">CPU:</span>
+                  <div class="fw-bold" id="sidebar-cpu">Chargement...</div>
+                </div>
+                <div class="col-6 mb-2">
+                  <i class="fas fa-memory text-purple me-2"></i>
+                  <span class="text-muted">RAM:</span>
+                  <div class="fw-bold" id="sidebar-ram">Chargement...</div>
+                </div>
+                <div class="col-6 mb-2">
+                  <i class="fas fa-hdd text-success me-2"></i>
+                  <span class="text-muted">Disque:</span>
+                  <div class="fw-bold" id="sidebar-disk">Chargement...</div>
+                </div>
+                <div class="col-6 mb-2">
+                  <i class="fab fa-linux text-info me-2"></i>
+                  <span class="text-muted">OS:</span>
+                  <div class="fw-bold" id="sidebar-os">{% if machine %}{{ machine.os_name }}{% else %}Linux{% endif %}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Préférences actives -->
+        <div class="card-modern">
+          <div class="card-header-custom d-flex justify-content-between align-items-center">
+            <span><i class="fas fa-clock me-2"></i>Préférences actives</span>
+            <button class="btn btn-sm btn-light rounded-pill" data-bs-toggle="modal" data-bs-target="#prefModal">
+              <i class="fas fa-edit"></i>
+            </button>
+          </div>
+          <div class="card-body p-3" id="active-prefs-container">
+            <p class="text-muted text-center mb-0">Chargement...</p>
+          </div>
+        </div>
+        
+      </div>
+      
+      <!-- Colonne droite: Tâches -->
+      <div class="col-lg-8">
+        
+        <!-- Stats rapides -->
+        <div class="row g-3 mb-4">
+          <div class="col-6 col-md-3">
+            <div class="stat-box" style="--stat-color: #3498db; --stat-color-dark: #2980b9;">
+              <div class="stat-value" id="stat-total">0</div>
+              <div class="stat-label"><i class="fas fa-tasks me-1"></i>Total</div>
+            </div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="stat-box" style="--stat-color: #27ae60; --stat-color-dark: #1e8449;">
+              <div class="stat-value" id="stat-running">0</div>
+              <div class="stat-label"><i class="fas fa-play me-1"></i>En cours</div>
+            </div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="stat-box" style="--stat-color: #9b59b6; --stat-color-dark: #7d3c98;">
+              <div class="stat-value" id="stat-complete">0</div>
+              <div class="stat-label"><i class="fas fa-check me-1"></i>Terminées</div>
+            </div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="stat-box" style="--stat-color: #e74c3c; --stat-color-dark: #c0392b;">
+              <div class="stat-value" id="stat-failed">0</div>
+              <div class="stat-label"><i class="fas fa-times me-1"></i>Échecs</div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Liste des tâches -->
+        <div class="card-modern">
+          <div class="card-header-custom d-flex justify-content-between align-items-center">
+            <span><i class="fas fa-list-check me-2"></i>Tâches</span>
+            <div class="d-flex gap-2">
+              <input type="text" id="search-task" class="form-control form-control-sm rounded-pill" 
+                     placeholder="Rechercher..." style="width: 200px;">
+              <button class="btn btn-sm btn-light rounded-pill" onclick="reloadTasks()">
+                <i class="fas fa-sync-alt"></i>
               </button>
             </div>
-          </form>
-</div>
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table tasks-table mb-0">
+                <thead>
+                  <tr>
+                    <th>Tâche</th>
+                    <th>Statut</th>
+                    <th style="width: 200px;">Progression</th>
+                    <th style="width: 140px;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="tasks-table-body">
+                  {% if not tasks %}
+                  <tr>
+                    <td colspan="4" class="text-center py-5 text-muted">
+                      <i class="fas fa-inbox fa-3x mb-3 d-block opacity-50"></i>
+                      Aucune tâche en cours
+                    </td>
+                  </tr>
+                  {% endif %}
+                  {% for task in tasks %}
+                  <tr data-task-id="{{ task.id }}">
+                    <td>
+                      <div class="fw-bold">{{ task.name }}</div>
+                      <small class="text-muted">ID: {{ task.id }}</small>
+                    </td>
+                    <td>
+                      <span class="status-badge status-{{ task.status }}" id="status-{{ task.id }}">
+                        {{ task.status }}
+                      </span>
+                    </td>
+                    <td>
+                      <div class="d-flex align-items-center gap-2">
+                        <div class="progress-modern flex-grow-1">
+                          <div class="progress-bar-modern" id="progress-bar-{{ task.id }}" 
+                               style="width: {{ task.progress }}%"></div>
+                        </div>
+                        <span class="fw-bold" id="progress-{{ task.id }}">{{ task.progress }}%</span>
+                      </div>
+                    </td>
+                    <td>
+                      <button class="action-btn btn-warning pause-btn" 
+                              {% if not task.can_pause %}disabled{% endif %} title="Pause">
+                        <i class="fas fa-pause"></i>
+                      </button>
+                      <button class="action-btn btn-success resume-btn" 
+                              {% if not task.can_resume %}disabled{% endif %} title="Reprendre">
+                        <i class="fas fa-play"></i>
+                      </button>
+                      <button class="action-btn btn-danger stop-btn" 
+                              {% if not task.can_stop %}disabled{% endif %} title="Arrêter">
+                        <i class="fas fa-stop"></i>
+                      </button>
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        
       </div>
     </div>
   </div>
-  <!-- JS: jQuery, Bootstrap, Toastify, WebSocket & Logic -->
+
+  <!-- Modal Préférences Simplifiées -->
+  <div class="modal fade" id="prefModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">
+            <i class="fas fa-sliders-h me-2"></i>Préférences de disponibilité
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body p-4">
+          
+          <!-- Toggle disponibilité globale -->
+          <div class="quick-toggle mb-4">
+            <label class="toggle-switch">
+              <input type="checkbox" id="global-availability" checked>
+              <span class="toggle-slider"></span>
+            </label>
+            <div>
+              <div class="fw-bold">Disponible pour le calcul</div>
+              <small class="text-muted">Activer/désactiver votre participation au calcul distribué</small>
+            </div>
+          </div>
+          
+          <!-- Sélection des jours -->
+          <div class="mb-4">
+            <label class="form-label fw-bold mb-3">
+              <i class="fas fa-calendar-week me-2 text-primary"></i>Jours de disponibilité
+            </label>
+            <div class="d-flex justify-content-between flex-wrap gap-2" id="days-selector">
+              <div class="pref-day-btn" data-day="Lundi">Lu</div>
+              <div class="pref-day-btn" data-day="Mardi">Ma</div>
+              <div class="pref-day-btn" data-day="Mercredi">Me</div>
+              <div class="pref-day-btn" data-day="Jeudi">Je</div>
+              <div class="pref-day-btn" data-day="Vendredi">Ve</div>
+              <div class="pref-day-btn" data-day="Samedi">Sa</div>
+              <div class="pref-day-btn" data-day="Dimanche">Di</div>
+            </div>
+          </div>
+          
+          <!-- Plage horaire -->
+          <div class="mb-4">
+            <label class="form-label fw-bold mb-3">
+              <i class="fas fa-clock me-2 text-primary"></i>Plage horaire
+            </label>
+            <div class="row g-3">
+              <div class="col-6">
+                <label class="small text-muted">Début</label>
+                <input type="time" class="form-control" id="pref-start-time" value="09:00">
+              </div>
+              <div class="col-6">
+                <label class="small text-muted">Fin</label>
+                <input type="time" class="form-control" id="pref-end-time" value="18:00">
+              </div>
+            </div>
+          </div>
+          
+          <!-- Ressources avec sliders -->
+          <div class="mb-4">
+            <label class="form-label fw-bold mb-3">
+              <i class="fas fa-microchip me-2 text-primary"></i>Ressources à partager
+            </label>
+            
+            <div class="slider-container mb-3">
+              <div class="slider-label">
+                <span>Utilisation CPU maximale</span>
+                <span class="slider-value" id="cpu-slider-value">50%</span>
+              </div>
+              <input type="range" id="pref-cpu" min="10" max="100" value="50" step="5">
+            </div>
+            
+            <div class="slider-container mb-3">
+              <div class="slider-label">
+                <span>Mémoire RAM maximale</span>
+                <span class="slider-value" id="ram-slider-value">4 GB</span>
+              </div>
+              <input type="range" id="pref-ram" min="1" max="32" value="4" step="1">
+            </div>
+            
+          </div>
+          
+          <!-- Préférences enregistrées -->
+          <div class="border-top pt-4">
+            <label class="form-label fw-bold mb-3">
+              <i class="fas fa-list me-2 text-primary"></i>Créneaux enregistrés
+            </label>
+            <div id="saved-prefs-list">
+              <!-- Rempli dynamiquement -->
+            </div>
+          </div>
+          
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+          <button type="button" class="btn btn-primary" onclick="savePreferences()">
+            <i class="fas fa-save me-2"></i>Enregistrer
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
   <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
   <script>
-    
-    // Recherche tâche
-    $('#search-task').on('keyup', function() {
-      var value = $(this).val().toLowerCase();
-      $('#tasks-table tbody tr').filter(function() {
-        $(this).toggle($(this).text().toLowerCase().indexOf(value) > -1)
-      });
-    });
-    // Actions tâches
-    function sendTaskAction(taskId, action) {
-      var csrftoken = getCookie('csrftoken');
-      $.ajax({
-        url: '/api/task/' + taskId + '/' + action + '/',
-        type: 'POST',
-        headers: {'X-CSRFToken': csrftoken},
-        success: function(data) {
-          Toastify({text: 'Action réussie', duration:2000, gravity:'top', style: {background: '#198754'}}).showToast();
-        },
-        error: function(xhr) {
-          Toastify({text: 'Erreur: ' + xhr.responseText, duration:3000, gravity:'top', style: {background: '#dc3545'}}).showToast();
-        }
-      });
-    }
-    // Confirmation et actions
-    $('#tasks-table').on('click', '.pause-btn', function() {
-      var row = $(this).closest('tr');
-      var taskId = row.data('task-id');
-      if (confirm('Mettre en pause cette tâche ?')) sendTaskAction(taskId, 'pause');
-    });
-    $('#tasks-table').on('click', '.resume-btn', function() {
-      var row = $(this).closest('tr');
-      var taskId = row.data('task-id');
-      if (confirm('Reprendre cette tâche ?')) sendTaskAction(taskId, 'resume');
-    });
-    $('#tasks-table').on('click', '.stop-btn', function() {
-      var row = $(this).closest('tr');
-      var taskId = row.data('task-id');
-      if (confirm('Arrêter cette tâche ?')) sendTaskAction(taskId, 'stop');
-    });
-
-    const reloadTasks = () => {
-      $.ajax({
-        url: '/tasks/',
-        type: 'GET',
-        success: function(data) {
-          var tbody = $('#tasks-table-body');
-          tbody.empty();
-          if (data.length === 0) {
-            tbody.append('<tr><td colspan="4" class="text-center">Aucune tâche en cours</td></tr>');
-          } else {
-            data.forEach(task => {
-              tbody.append(`
-                <tr data-task-id="${task.id}">
-                  <td>${task.name}</td>
-                  <td><span class="text-muted" id="status-${task.id}">${task.status}</span></td>
-                  <td><span id="progress-${task.id}">${task.progress}%</span></td>
-                  <td>
-                    <button class="btn btn-sm btn-warning pause-btn" ${task.status !== "running" ? 'disabled' : ''}><i class="fa fa-pause"></i></button>
-                    <button class="btn btn-sm btn-success resume-btn" ${task.status !== 'paused' ? 'disabled' : ''}><i class="fa fa-play"></i></button>
-                    <button class="btn btn-sm btn-danger stop-btn" ${task.status !== "failed" && task.status !== "complete" && task.status !== "terminate" && task.status !== "error" ? 'disabled' : ''}><i class="fa fa-stop"></i></button>
-                  </td>
-                </tr>
-              `);
-            });
-          }
-        },
-        error: function(xhr) {
-          console.error('Erreur lors du chargement des tâches:', xhr);
-          Toastify({text: 'Erreur de chargement des tâches', duration:3000, gravity:'top', style: {background: '#dc3545'}}).showToast();
-        }
-      });
+    // ==================== CONFIGURATION ====================
+    const CONFIG = {
+      wsReconnectDelay: 2000,
+      agentPollInterval: 5000,
+      machinePollInterval: 10000
     };
 
-    // WebSocket pour updates temps réel
-    function setupWebSocket() {
-      var wsProto = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-      var wsUrl = wsProto + window.location.host + '/ws/tasks/';
-      var ws = new WebSocket(wsUrl);
-
-      ws.onopen = function() {
-        console.log('WebSocket connecté');
-        Toastify({text: 'Connexion WebSocket établie', duration:2000, gravity:'top', style: {background: '#198754'}}).showToast();
-      };
-
-      ws.onclose = function() {
-        console.log('WebSocket déconnecté, tentative de reconnexion dans 0.5 secondes...');
-        Toastify({text: 'Connexion WebSocket perdue, tentative de reconnexion...', duration:2000, gravity:'top', style: {background: '#dc3545'}}).showToast();
-        setTimeout(setupWebSocket, 500); // Reconnexion après 0.5 secondes
-      };
-
-      ws.onerror = function(error) {
-        console.error('WebSocket error:', error);
-        Toastify({text: 'Erreur WebSocket: ' + error.message, duration:3000, gravity:'top', style: {background: '#dc3545'}}).showToast();
-      };
-
-      ws.onmessage = function(e) {
-        var data = JSON.parse(e.data);
-        console.log('Message WebSocket reçu:', e);
-        // Validation des messages WebSocket
-
-        // Compatibilité : certains messages arrivent sous forme 'send_task_update', 'send_task_progress', etc.
-        const type = data.type;
-
-        if (type === 'send_task_progress' || type === 'send_task_update') {
-
-          var row = $('#tasks-table-body tr[data-task-id="' + data.data.task_id + '"]');
-          if (row.length === 0) {
-            // Si la ligne n'existe pas, ajouter une nouvelle ligne
-            $('#tasks-table-body').append(`
-              <tr data-task-id="${data.data.task_id}">
-                <td>${data.data.name}</td>
-                <td><span class="text-muted" id="status-${data.data.task_id}">${data.data.status}</span></td>
-                <td><span id="progress-${data.data.task_id}">${data.data.progress || 0}%</span></td>
-                <td>
-                  <button class="btn btn-sm btn-warning pause-btn" ${data.data.status !== "running" ? 'disabled' : ''}><i class="fa fa-pause"></i></button>
-                  <button class="btn btn-sm btn-success resume-btn" ${data.data.status !== 'paused' ? 'disabled' : ''}><i class="fa fa-play"></i></button>
-                  <button class="btn btn-sm btn-danger stop-btn" ${data.data.status !== "failed" && data.data.status !== "complete" && data.data.status !== "terminate" && data.data.status !== "error" ? 'disabled' : ''}><i class="fa fa-stop"></i></button>
-                </td>
-              </tr>
-            `);
-          } else {
-            // Si la ligne existe, mettre à jour le statut et la progression
-            row.find('span[id^="status-"]').text(data.data.status);
-            if (data.data.progress !== undefined) {
-              row.find('span[id^="progress-"]').text(data.data.progress + '%');
-            }
-            if (data.data.status === 'complete') {
-              row.find('span[id^="progress-"]').text('100%');
-            }
-
-            // Mise à jour des boutons en fonction du statut
-            row.find('.pause-btn').prop('disabled', data.data.status !== 'running');
-            row.find('.resume-btn').prop('disabled', data.data.status !== 'paused');
-            row.find('.stop-btn').prop('disabled', !['failed', 'complete', 'terminate', 'error'].includes(data.data.status));
-          }
-
-
-        } else if (data.type === 'send_add_task') {
-          console.log("Nouvelle tâche ou découpage terminé", data);
-          reloadTasks();
-          Toastify({text: 'Nouvelle tache recupére: ' + data.data?.name, duration:2000, gravity:'top', style: {background: '#198754'}}).showToast();
-        } else {
-          // Pour debug, affiche le message brut
-          Toastify({text: 'Type de message inconnu : \n' + JSON.stringify(data), duration:2000, gravity:'top', style: {background: '#dc3545'}}).showToast();
-        }
-      };
-    }
-
-    // Initialiser la connexion WebSocket
-    setupWebSocket();
-    // CSRF utilitaire
+    // ==================== ÉTAT GLOBAL ====================
+    let agentStatus = {
+      connected: false,
+      messagesSent: 0,
+      messagesReceived: 0,
+      reconnections: 0,
+      uptime: 0,
+      lastSync: null
+    };
+    
+    let currentPreferences = [];
+    
+    // ==================== UTILITAIRES ====================
     function getCookie(name) {
       let cookieValue = null;
       if (document.cookie && document.cookie !== '') {
@@ -329,165 +897,586 @@
       }
       return cookieValue;
     }
-// ------------------ Gestion préférences ------------------
-let currentPreferences = [];
-let tempTimeSlots = [];
 
-function loadPreferences() {
-  fetch('/preferences/')
-    .then(response => response.json())
-    .then(data => {
-      currentPreferences = data;
-      renderPrefs();
-    })
-    .catch(e => {
-      currentPreferences = [];
-      renderPrefs();
+    function showToast(message, type = 'success') {
+      const colors = {
+        success: 'linear-gradient(135deg, #27ae60, #2ecc71)',
+        error: 'linear-gradient(135deg, #e74c3c, #c0392b)',
+        warning: 'linear-gradient(135deg, #f39c12, #e67e22)',
+        info: 'linear-gradient(135deg, #3498db, #2980b9)'
+      };
+      Toastify({
+        text: message,
+        duration: 3000,
+        gravity: 'top',
+        position: 'right',
+        style: { background: colors[type] || colors.info },
+        stopOnFocus: true
+      }).showToast();
+    }
+
+    // ==================== AGENT DE COLLECTE ====================
+    function formatUptime(seconds) {
+      if (!seconds || seconds <= 0) return '0m';
+      const hours = Math.floor(seconds / 3600);
+      const minutes = Math.floor((seconds % 3600) / 60);
+      if (hours > 0) {
+        return `${hours}h ${minutes}m`;
+      }
+      return `${minutes}m`;
+    }
+    
+    function formatDateTime(isoString) {
+      if (!isoString) return '-';
+      try {
+        const date = new Date(isoString);
+        return date.toLocaleString('fr-FR', { 
+          hour: '2-digit', 
+          minute: '2-digit',
+          second: '2-digit'
+        });
+      } catch {
+        return '-';
+      }
+    }
+
+    function updateAgentUI() {
+      const indicator = document.getElementById('agent-indicator');
+      const statusText = document.getElementById('agent-status-text');
+      const startBtn = document.getElementById('agent-start-btn');
+      const stopBtn = document.getElementById('agent-stop-btn');
+      
+      // Status indicator
+      const status = agentStatus.status || 'unknown';
+      const connected = agentStatus.connected || false;
+      
+      if (status === 'running' && connected) {
+        indicator.className = 'agent-status-indicator connected';
+        statusText.textContent = 'Connecté';
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+      } else if (status === 'running' || status === 'waiting_connection') {
+        indicator.className = 'agent-status-indicator connecting';
+        statusText.textContent = 'En attente...';
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+      } else if (status === 'error') {
+        indicator.className = 'agent-status-indicator disconnected';
+        statusText.textContent = 'Erreur';
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+      } else {
+        indicator.className = 'agent-status-indicator disconnected';
+        statusText.textContent = 'Arrêté';
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+      }
+      
+      // Stats table
+      document.getElementById('agent-msgs-sent').textContent = agentStatus.messages_sent || 0;
+      document.getElementById('agent-msgs-received').textContent = agentStatus.messages_received || 0;
+      document.getElementById('agent-files-collected').textContent = agentStatus.files_collected || 0;
+      document.getElementById('agent-files-sent').textContent = agentStatus.files_sent || 0;
+      document.getElementById('agent-tasks-completed').textContent = agentStatus.tasks_completed || 0;
+      document.getElementById('agent-tasks-failed').textContent = agentStatus.tasks_failed || 0;
+      document.getElementById('agent-data-collected').textContent = 
+        (agentStatus.data_collected_mb || 0).toFixed(2) + ' MB';
+      document.getElementById('agent-data-sent').textContent = 
+        (agentStatus.data_sent_mb || 0).toFixed(2) + ' MB';
+      document.getElementById('agent-reconnections').textContent = agentStatus.reconnections || 0;
+      document.getElementById('agent-uptime').textContent = formatUptime(agentStatus.uptime_seconds);
+      
+      // Last sync
+      document.getElementById('agent-last-sync').textContent = formatDateTime(agentStatus.last_sync);
+      
+      // Error display
+      const errorRow = document.getElementById('agent-error-row');
+      if (agentStatus.last_error) {
+        errorRow.style.display = 'flex';
+        document.getElementById('agent-last-error').textContent = 
+          agentStatus.last_error.substring(0, 50) + (agentStatus.last_error.length > 50 ? '...' : '');
+      } else {
+        errorRow.style.display = 'none';
+      }
+    }
+
+    function fetchAgentStatus() {
+      fetch('/api/agent/status/')
+        .then(res => res.json())
+        .then(data => {
+          agentStatus = data;
+          updateAgentUI();
+        })
+        .catch(() => {
+          agentStatus = { status: 'unknown', connected: false };
+          updateAgentUI();
+        });
+    }
+
+    function startAgent() {
+      showToast('Démarrage de l\'agent...', 'info');
+      fetch('/api/agent/start/', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': getCookie('csrftoken') }
+      })
+      .then(res => res.json())
+      .then(data => {
+        showToast(data.message || 'Agent démarré', 'success');
+        setTimeout(fetchAgentStatus, 1000);
+      })
+      .catch(() => showToast('Erreur lors du démarrage de l\'agent', 'error'));
+    }
+
+    function stopAgent() {
+      showToast('Arrêt de l\'agent...', 'info');
+      fetch('/api/agent/stop/', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': getCookie('csrftoken') }
+      })
+      .then(res => res.json())
+      .then(data => {
+        showToast(data.message || 'Agent arrêté', 'success');
+        setTimeout(fetchAgentStatus, 1000);
+      })
+      .catch(() => showToast('Erreur lors de l\'arrêt de l\'agent', 'error'));
+    }
+
+    // ==================== JAUGES MACHINE ====================
+    function updateGauge(id, percentage, color) {
+      const gauge = document.getElementById(id);
+      if (gauge) {
+        gauge.style.setProperty('--percentage', percentage + '%');
+        // Changer la couleur selon le niveau
+        if (percentage > 80) {
+          gauge.style.setProperty('--gauge-color', '#e74c3c');
+        } else if (percentage > 60) {
+          gauge.style.setProperty('--gauge-color', '#f39c12');
+        } else {
+          gauge.style.setProperty('--gauge-color', color || '#3498db');
+        }
+      }
+    }
+
+    function fetchMachineState() {
+      fetch('/api/machine/state/')
+        .then(res => res.json())
+        .then(data => {
+          // CPU
+          const cpuUsage = data.cpu_usage || 0;
+          updateGauge('cpu-gauge', cpuUsage, '#3498db');
+          document.getElementById('cpu-value').textContent = Math.round(cpuUsage) + '%';
+          
+          // RAM
+          const ramUsage = data.ram_usage || 0;
+          updateGauge('ram-gauge', ramUsage, '#9b59b6');
+          document.getElementById('ram-value').textContent = Math.round(ramUsage) + '%';
+          
+          // Disk
+          const diskUsage = data.disk_usage || 0;
+          updateGauge('disk-gauge', diskUsage, '#1abc9c');
+          document.getElementById('disk-value').textContent = Math.round(diskUsage) + '%';
+          
+          // Mettre à jour les totaux dans la sidebar
+          if (data.cpu_count) {
+            document.getElementById('sidebar-cpu').textContent = data.cpu_count + ' cœurs';
+          }
+          if (data.ram_total_gb) {
+            document.getElementById('sidebar-ram').textContent = data.ram_total_gb.toFixed(1) + ' GB';
+          }
+          if (data.disk_total_gb) {
+            document.getElementById('sidebar-disk').textContent = data.disk_total_gb.toFixed(0) + ' GB';
+          }
+        })
+        .catch(() => {});
+    }
+
+    // ==================== TÂCHES ====================
+    function updateTaskStats() {
+      const rows = document.querySelectorAll('#tasks-table-body tr[data-task-id]');
+      let total = rows.length;
+      let running = 0, complete = 0, failed = 0;
+      
+      rows.forEach(row => {
+        const statusEl = row.querySelector('[id^="status-"]');
+        if (statusEl) {
+          const status = statusEl.textContent.toLowerCase().trim();
+          if (status === 'running') running++;
+          else if (status === 'complete') complete++;
+          else if (status === 'failed' || status === 'error') failed++;
+        }
+      });
+      
+      document.getElementById('stat-total').textContent = total;
+      document.getElementById('stat-running').textContent = running;
+      document.getElementById('stat-complete').textContent = complete;
+      document.getElementById('stat-failed').textContent = failed;
+    }
+
+    function reloadTasks() {
+      $.ajax({
+        url: '/tasks/',
+        type: 'GET',
+        success: function(data) {
+          const tbody = $('#tasks-table-body');
+          tbody.empty();
+          
+          if (data.length === 0) {
+            tbody.append(`
+              <tr>
+                <td colspan="4" class="text-center py-5 text-muted">
+                  <i class="fas fa-inbox fa-3x mb-3 d-block opacity-50"></i>
+                  Aucune tâche en cours
+                </td>
+              </tr>
+            `);
+          } else {
+            data.forEach(task => {
+              tbody.append(createTaskRow(task));
+            });
+          }
+          updateTaskStats();
+        },
+        error: function() {
+          showToast('Erreur de chargement des tâches', 'error');
+        }
+      });
+    }
+
+    function createTaskRow(task) {
+      return `
+        <tr data-task-id="${task.id}">
+          <td>
+            <div class="fw-bold">${task.name}</div>
+            <small class="text-muted">ID: ${task.id}</small>
+          </td>
+          <td>
+            <span class="status-badge status-${task.status}" id="status-${task.id}">
+              ${task.status}
+            </span>
+          </td>
+          <td>
+            <div class="d-flex align-items-center gap-2">
+              <div class="progress-modern flex-grow-1">
+                <div class="progress-bar-modern" id="progress-bar-${task.id}" 
+                     style="width: ${task.progress || 0}%"></div>
+              </div>
+              <span class="fw-bold" id="progress-${task.id}">${task.progress || 0}%</span>
+            </div>
+          </td>
+          <td>
+            <button class="action-btn btn-warning pause-btn" 
+                    ${task.status !== 'running' ? 'disabled' : ''} title="Pause">
+              <i class="fas fa-pause"></i>
+            </button>
+            <button class="action-btn btn-success resume-btn" 
+                    ${task.status !== 'paused' ? 'disabled' : ''} title="Reprendre">
+              <i class="fas fa-play"></i>
+            </button>
+            <button class="action-btn btn-danger stop-btn" 
+                    ${['failed','complete','terminate','error'].includes(task.status) ? '' : 'disabled'} title="Arrêter">
+              <i class="fas fa-stop"></i>
+            </button>
+          </td>
+        </tr>
+      `;
+    }
+
+    function sendTaskAction(taskId, action) {
+      $.ajax({
+        url: `/api/task/${taskId}/${action}/`,
+        type: 'POST',
+        headers: {'X-CSRFToken': getCookie('csrftoken')},
+        success: function() {
+          showToast(`Tâche ${action} avec succès`, 'success');
+          reloadTasks();
+        },
+        error: function(xhr) {
+          showToast('Erreur: ' + (xhr.responseText || 'Action échouée'), 'error');
+        }
+      });
+    }
+
+    // Événements des boutons d'action
+    $('#tasks-table').on('click', '.pause-btn:not(:disabled)', function() {
+      const taskId = $(this).closest('tr').data('task-id');
+      sendTaskAction(taskId, 'pause');
     });
-}
 
-function addTimeSlot() {
-  const startTime = document.getElementById('startTime').value;
-  const endTime = document.getElementById('endTime').value;
-  const cpu = document.getElementById('cpu').value;
-  const ram = document.getElementById('ram').value;
-  const maxTime = document.getElementById('maxTime').value;
-  if (!startTime || !endTime) {
-    alert('Veuillez spécifier les heures de début et de fin.');
-    return;
-  }
-  tempTimeSlots.push({startTime, endTime, cpu, ram, maxTime});
-  renderTimeSlots();
-}
-function renderTimeSlots() {
-  const container = document.getElementById('timeSlotsContainer');
-  container.innerHTML = '';
-  if (tempTimeSlots.length === 0) {
-    container.innerHTML = '<p class="text-muted">Aucun créneau ajouté.</p>';
-    return;
-  }
-  tempTimeSlots.forEach((slot, index) => {
-    const slotEl = document.createElement('div');
-    slotEl.className = 'time-slot mb-1';
-    slotEl.innerHTML = `<div class='d-inline-block'><strong>${slot.startTime} - ${slot.endTime}</strong> | CPU: ${slot.cpu}% | RAM: ${slot.ram}GB | Max: ${slot.maxTime}min</div> <button type='button' class='btn btn-sm btn-danger ms-2' onclick='removeTimeSlot(${index})'><i class='fas fa-trash-alt'></i></button>`;
-    container.appendChild(slotEl);
-  });
-}
-function removeTimeSlot(index) {
-  tempTimeSlots.splice(index, 1);
-  renderTimeSlots();
-}
-function savePreferences() {
-  const selectedDays = Array.from(document.querySelectorAll('.day-checkbox:checked')).map(cb => cb.value);
-  if (selectedDays.length === 0) {
-    alert('Veuillez sélectionner au moins un jour.');
-    return;
-  }
-  if (tempTimeSlots.length === 0) {
-    alert('Veuillez ajouter au moins un créneau horaire.');
-    return;
-  }
-  // Pour chaque jour sélectionné, ajouter les créneaux horaires
-  const allPrefs = [];
-  selectedDays.forEach(day => {
-    tempTimeSlots.forEach(slot => {
-      allPrefs.push({
-        day,
-        startTime: slot.startTime,
-        endTime: slot.endTime,
-        cpu: slot.cpu,
-        ram: slot.ram,
-        maxTime: slot.maxTime
+    $('#tasks-table').on('click', '.resume-btn:not(:disabled)', function() {
+      const taskId = $(this).closest('tr').data('task-id');
+      sendTaskAction(taskId, 'resume');
+    });
+
+    $('#tasks-table').on('click', '.stop-btn:not(:disabled)', function() {
+      const taskId = $(this).closest('tr').data('task-id');
+      if (confirm('Arrêter cette tâche ?')) {
+        sendTaskAction(taskId, 'stop');
+      }
+    });
+
+    // Recherche
+    $('#search-task').on('keyup', function() {
+      const value = $(this).val().toLowerCase();
+      $('#tasks-table tbody tr').filter(function() {
+        $(this).toggle($(this).text().toLowerCase().indexOf(value) > -1);
       });
     });
-  });
-  // Créer l'objet à envoyer
-  const payload = { preferences: allPrefs };
-  fetch('/save_preferences/', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRFToken': getCookie('csrftoken')
-    },
-    body: JSON.stringify(payload)
-  })
-  .then(response => response.json())
-  .then ((data) => {
-    if (data.success) {
-      Toastify({text: 'Préférences enregistrées.', duration:2000, gravity:'top', style: {background: '#198754'}}).showToast();
-      loadPreferences();
-      var modalEl = bootstrap.Modal.getInstance(document.getElementById('prefModal'));
-      if (modalEl) modalEl.hide();
-    } else {
-      alert('Erreur: ' + data.error);
-    }
-  })
-  .catch(error => alert('Erreur réseau: ' + error));
-}
 
-function renderPrefs() {
-  const table = document.getElementById('prefsTable');
-  table.innerHTML = `<tr><th>Jour</th><th>Plage horaire</th><th>Ressources</th><th>Action</th></tr>`;
-  if (!currentPreferences || currentPreferences.length === 0) {
-    const emptyRow = document.createElement('tr');
-    emptyRow.innerHTML = '<td colspan="4" class="text-center">Aucune préférence enregistrée</td>';
-    table.appendChild(emptyRow);
-    return;
-  }
-  // Regrouper les préférences par jour
-  const groupedPrefs = {};
-  currentPreferences.forEach((pref, index) => {
-    const day = pref.day;
-    if (!groupedPrefs[day]) groupedPrefs[day] = [];
-    groupedPrefs[day].push({...pref, index});
-  });
-  Object.keys(groupedPrefs).sort().forEach(day => {
-    const prefs = groupedPrefs[day];
-    const rowspan = prefs.length;
-    prefs.forEach((pref, idx) => {
-      const row = document.createElement('tr');
-      if (idx === 0) {
-        const dayCell = document.createElement('td');
-        dayCell.rowSpan = rowspan;
-        dayCell.innerHTML = `<strong>${day}</strong>`;
-        row.appendChild(dayCell);
+    // ==================== WEBSOCKET ====================
+    function setupWebSocket() {
+      const wsProto = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+      const wsUrl = wsProto + window.location.host + '/ws/tasks/';
+      const ws = new WebSocket(wsUrl);
+
+      ws.onopen = function() {
+        agentStatus.connected = true;
+        updateAgentUI();
+        showToast('Connexion établie', 'success');
+      };
+
+      ws.onclose = function() {
+        agentStatus.connected = false;
+        agentStatus.reconnections++;
+        updateAgentUI();
+        setTimeout(setupWebSocket, CONFIG.wsReconnectDelay);
+      };
+
+      ws.onerror = function() {
+        agentStatus.connected = false;
+        updateAgentUI();
+      };
+
+      ws.onmessage = function(e) {
+        const data = JSON.parse(e.data);
+        agentStatus.messagesReceived++;
+        agentStatus.lastSync = new Date().toISOString();
+        updateAgentUI();
+        
+        const type = data.type;
+        
+        if (type === 'send_task_progress' || type === 'send_task_update') {
+          updateTaskFromWS(data.data);
+        } else if (type === 'send_add_task') {
+          reloadTasks();
+          showToast('Nouvelle tâche reçue: ' + (data.data?.name || ''), 'info');
+        }
+      };
+    }
+
+    function updateTaskFromWS(taskData) {
+      let row = $(`#tasks-table-body tr[data-task-id="${taskData.task_id}"]`);
+      
+      if (row.length === 0) {
+        $('#tasks-table-body').append(createTaskRow({
+          id: taskData.task_id,
+          name: taskData.name,
+          status: taskData.status,
+          progress: taskData.progress || 0
+        }));
+      } else {
+        // Update status
+        const statusEl = row.find('[id^="status-"]');
+        statusEl.text(taskData.status);
+        statusEl.attr('class', `status-badge status-${taskData.status}`);
+        
+        // Update progress
+        if (taskData.progress !== undefined) {
+          row.find('[id^="progress-"]').text(taskData.progress + '%');
+          row.find('[id^="progress-bar-"]').css('width', taskData.progress + '%');
+        }
+        
+        // Update buttons
+        row.find('.pause-btn').prop('disabled', taskData.status !== 'running');
+        row.find('.resume-btn').prop('disabled', taskData.status !== 'paused');
+        row.find('.stop-btn').prop('disabled', !['failed','complete','terminate','error'].includes(taskData.status));
       }
-      const timeCell = document.createElement('td');
-      timeCell.innerHTML = `${pref.startTime} - ${pref.endTime}`;
-      row.appendChild(timeCell);
-      const resourceCell = document.createElement('td');
-      resourceCell.innerHTML = `CPU: ${pref.cpu}% | RAM: ${pref.ram}GB | Max: ${pref.maxTime}min`;
-      row.appendChild(resourceCell);
-      const actionCell = document.createElement('td');
-      actionCell.innerHTML = `<button class="btn btn-sm btn-danger" onclick="deletePreference(${pref.id || pref.index})"><i class="fas fa-trash-alt"></i></button>`;
-      row.appendChild(actionCell);
-      table.appendChild(row);
+      
+      updateTaskStats();
+    }
+
+    // ==================== PRÉFÉRENCES ====================
+    // Sélection des jours
+    document.querySelectorAll('.pref-day-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        this.classList.toggle('active');
+      });
     });
-  });
-}
-function deletePreference(id) {
-  if (!confirm("Voulez-vous vraiment supprimer cette préférence ?")) return;
-  fetch(`/preferences/delete/${id}/`, {
-    method: 'DELETE',
-    headers: {
-      'X-CSRFToken': getCookie('csrftoken'),
-      'Content-Type': 'application/json',
+
+    // Sliders
+    document.getElementById('pref-cpu').addEventListener('input', function() {
+      document.getElementById('cpu-slider-value').textContent = this.value + '%';
+    });
+
+    document.getElementById('pref-ram').addEventListener('input', function() {
+      document.getElementById('ram-slider-value').textContent = this.value + ' GB';
+    });
+
+    function loadPreferences() {
+      fetch('/preferences/')
+        .then(res => res.json())
+        .then(data => {
+          currentPreferences = data || [];
+          renderActivePrefs();
+          renderSavedPrefsList();
+        })
+        .catch(() => {
+          currentPreferences = [];
+          renderActivePrefs();
+          renderSavedPrefsList();
+        });
     }
-  })
-  .then(response => {
-    if (response.ok) {
+
+    function renderActivePrefs() {
+      const container = document.getElementById('active-prefs-container');
+      
+      if (!currentPreferences || currentPreferences.length === 0) {
+        container.innerHTML = `
+          <div class="text-center text-muted py-3">
+            <i class="fas fa-calendar-times fa-2x mb-2 opacity-50 d-block"></i>
+            <small>Aucune préférence configurée</small>
+          </div>
+        `;
+        return;
+      }
+
+      // Grouper par jour
+      const grouped = {};
+      currentPreferences.forEach(pref => {
+        if (!grouped[pref.day]) grouped[pref.day] = [];
+        grouped[pref.day].push(pref);
+      });
+
+      let html = '';
+      Object.keys(grouped).sort().forEach(day => {
+        const prefs = grouped[day];
+        prefs.forEach(pref => {
+          html += `
+            <div class="pref-active-card">
+              <div>
+                <strong>${day}</strong>
+                <span class="pref-time ms-2">${pref.startTime} - ${pref.endTime}</span>
+              </div>
+              <div class="pref-resources">
+                <i class="fas fa-microchip me-1"></i>${pref.cpu}%
+                <i class="fas fa-memory ms-2 me-1"></i>${pref.ram}GB
+              </div>
+            </div>
+          `;
+        });
+      });
+
+      container.innerHTML = html;
+    }
+
+    function renderSavedPrefsList() {
+      const container = document.getElementById('saved-prefs-list');
+      
+      if (!currentPreferences || currentPreferences.length === 0) {
+        container.innerHTML = '<p class="text-muted text-center">Aucun créneau enregistré</p>';
+        return;
+      }
+
+      let html = '';
+      currentPreferences.forEach((pref, index) => {
+        html += `
+          <div class="d-flex justify-content-between align-items-center p-2 border-bottom">
+            <div>
+              <strong>${pref.day}</strong> : ${pref.startTime} - ${pref.endTime}
+              <small class="text-muted d-block">CPU: ${pref.cpu}% | RAM: ${pref.ram}GB | Max: ${pref.maxTime}min</small>
+            </div>
+            <button class="btn btn-sm btn-outline-danger rounded-circle" onclick="deletePreference(${pref.id || index})">
+              <i class="fas fa-trash-alt"></i>
+            </button>
+          </div>
+        `;
+      });
+
+      container.innerHTML = html;
+    }
+
+    function savePreferences() {
+      const selectedDays = Array.from(document.querySelectorAll('.pref-day-btn.active'))
+        .map(btn => btn.dataset.day);
+      
+      if (selectedDays.length === 0) {
+        showToast('Veuillez sélectionner au moins un jour', 'warning');
+        return;
+      }
+
+      const startTime = document.getElementById('pref-start-time').value;
+      const endTime = document.getElementById('pref-end-time').value;
+      const cpu = document.getElementById('pref-cpu').value;
+      const ram = document.getElementById('pref-ram').value;
+
+      const prefs = selectedDays.map(day => ({
+        day,
+        startTime,
+        endTime,
+        cpu,
+        ram
+      }));
+
+      fetch('/save_preferences/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify({ preferences: prefs })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          showToast('Préférences enregistrées', 'success');
+          loadPreferences();
+          bootstrap.Modal.getInstance(document.getElementById('prefModal'))?.hide();
+          // Reset selection
+          document.querySelectorAll('.pref-day-btn').forEach(btn => btn.classList.remove('active'));
+        } else {
+          showToast('Erreur: ' + data.error, 'error');
+        }
+      })
+      .catch(() => showToast('Erreur réseau', 'error'));
+    }
+
+    function deletePreference(id) {
+      if (!confirm('Supprimer cette préférence ?')) return;
+      
+      fetch(`/preferences/delete/${id}/`, {
+        method: 'DELETE',
+        headers: { 'X-CSRFToken': getCookie('csrftoken') }
+      })
+      .then(res => {
+        if (res.ok) {
+          showToast('Préférence supprimée', 'success');
+          loadPreferences();
+        } else {
+          showToast('Erreur lors de la suppression', 'error');
+        }
+      })
+      .catch(() => showToast('Erreur réseau', 'error'));
+    }
+
+    // ==================== INITIALISATION ====================
+    document.addEventListener('DOMContentLoaded', function() {
+      // Init agent status
+      updateAgentUI();
+      fetchAgentStatus();
+      setInterval(fetchAgentStatus, CONFIG.agentPollInterval);
+      
+      // Init machine state
+      fetchMachineState();
+      setInterval(fetchMachineState, CONFIG.machinePollInterval);
+      
+      // Init WebSocket
+      setupWebSocket();
+      
+      // Init preferences
       loadPreferences();
-    } else {
-      alert("Erreur lors de la suppression");
-    }
-  })
-  .catch(() => alert("Erreur lors de la suppression"));
-}
-// Charger à l'affichage
-window.addEventListener('DOMContentLoaded', function() {
-  loadPreferences();
-});
-// --------------------------------------------------------
+      
+      // Init task stats
+      updateTaskStats();
+    });
   </script>
 </body>
 </html>

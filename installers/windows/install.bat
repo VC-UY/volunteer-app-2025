@@ -127,6 +127,13 @@ if %errorLevel% equ 0 (
 REM Installer le service
 echo.
 echo Installation du service Windows...
+
+REM Creer les repertoires necessaires pour les logs et donnees
+if not exist "%INSTALL_DIR%\logs" mkdir "%INSTALL_DIR%\logs"
+if not exist "%INSTALL_DIR%\data" mkdir "%INSTALL_DIR%\data"
+if not exist "%INSTALL_DIR%\pending_requests" mkdir "%INSTALL_DIR%\pending_requests"
+echo [OK] Repertoires de donnees crees
+
 "%NSSM_DIR%\nssm.exe" install "%SERVICE_NAME%" "%INSTALL_DIR%\exp-env\Scripts\python.exe" "%INSTALL_DIR%\volunteer_daemon.py"
 
 REM Configurer le service
