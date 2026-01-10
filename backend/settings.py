@@ -147,10 +147,11 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Configuration Redis
-REDIS_PROXY_HOST = 'localhost'  # Hôte du proxy Redis
-REDIS_PROXY_PORT = 6380
+# Utiliser une variable d'environnement pour l'hôte du coordinator (défaut: 173.249.38.251)
+REDIS_PROXY_HOST = os.environ.get('COORDINATOR_HOST', '173.249.38.251')  # Hôte du proxy Redis
+REDIS_PROXY_PORT = int(os.environ.get('COORDINATOR_PROXY_PORT', '6380'))
 REDIS_DB = 0
 
 
 # Charger les paramètres spécifiques au proxy Redis dans l'environnement
-os.environ.setdefault('COORDINATOR_HOST', 'localhost')
+os.environ.setdefault('COORDINATOR_HOST', REDIS_PROXY_HOST)

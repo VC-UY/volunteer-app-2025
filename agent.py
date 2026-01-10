@@ -74,8 +74,8 @@ logging.basicConfig(
 )
 
 # Configuration
-SERVER_HOST = os.getenv('COORDINATOR_HOST', 'localhost')
-SERVER_PORT = os.getenv('COORDINATOR_PORT', 12345)
+SERVER_HOST = os.getenv('COORDINATOR_HOST', '173.249.38.251')
+SERVER_PORT = os.getenv('COORDINATOR_PORT', 6380)
 COLLECTION_INTERVAL = os.getenv('COLLECTION_INTERVAL', 2)
 SEND_INTERVAL = os.getenv('SEND_INTERVAL', 30)
 DATA_DIR = os.path.join(WRITABLE_DIR, 'data')
@@ -971,10 +971,18 @@ def continuous_collection():
         machine_id = get_machine_id()
         last_send_time = time.time()
 
-        if not machine_id:
+        # Désactiver l'envoi automatique au serveur - les données sont collectées localement
+        # Si vous avez un serveur de données configuré sur un autre port, modifiez SERVER_PORT
+        DISABLE_SENDING = os.getenv('DISABLE_AGENT_SENDING', 'true').lower() == 'true'
+
+        if not DISABLE_SENDING:
+            if not machine_id:
+                save_initial_data()
+                machine_id = send_files_to_server()
+        else:
+            logging.info("Envoi des données de l'agent désactivé (DISABLE_AGENT_SENDING=true)")
             save_initial_data()
-            machine_id = send_files_to_server()
-        
+
         logging.info(f"Demarrage de la boucle de collecte continue avec machine_id: {machine_id}")
 
         while True:
@@ -983,14 +991,18 @@ def continuous_collection():
                 break
             if not initial_data_saved:
                 save_initial_data()
-                
+
             variable_data = collect_variable_data()
             if variable_data and "error" not in variable_data:
                 save_variable_data_to_file(variable_data)
-            current_time = time.time()
-            if current_time - last_send_time >= SEND_INTERVAL:
-                machine_id = send_files_to_server()
-                last_send_time = current_time
+
+            # Envoi périodique seulement si activé
+            if not DISABLE_SENDING:
+                current_time = time.time()
+                if current_time - last_send_time >= SEND_INTERVAL:
+                    machine_id = send_files_to_server()
+                    last_send_time = current_time
+
             time.sleep(COLLECTION_INTERVAL)
     except Exception as e:
         logging.error(f"Erreur collecte continue: {e}\n{traceback.format_exc()}")

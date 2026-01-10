@@ -57,7 +57,7 @@ class RedisClient:
         self.client_id = get_volunteer_id() or 'volunteer'
         
         # Paramètres de connexion
-        self.host = self.config.get('host', getattr(settings, 'REDIS_PROXY_HOST', 'localhost'))
+        self.host = self.config.get('host', getattr(settings, 'REDIS_PROXY_HOST', '173.249.38.251'))
         self.port = self.config.get('port', getattr(settings, 'REDIS_PROXY_PORT', 6380))
         self.db = self.config.get('db', getattr(settings, 'REDIS_DB', 0))
         
@@ -116,11 +116,12 @@ class RedisClient:
                     socket.TCP_KEEPCNT: 3
                 },
                 socket_connect_timeout=5,
-                socket_timeout=5
+                socket_timeout=5,
+                health_check_interval=0  # Désactiver le health check automatique
             )
-            
-            # Tester la connexion
-            self.redis.ping()
+
+            # Ne pas faire de PING initial car le proxy nécessite une authentification JWT
+            # self.redis.ping()
             
             # Créer le PubSub
             self.pubsub = self.redis.pubsub(ignore_subscribe_messages=True)
