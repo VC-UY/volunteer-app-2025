@@ -67,7 +67,7 @@ class DockerManager:
             print(f"Error pulling image: {e}")
             return None
 
-    def run_container(self, image_name, task_id, cpu_limit=None, mem_limit=None, **kwargs):
+    def run_container(self, image_name, task_id, cpu_limit=None, mem_limit=None, command=None, **kwargs):
         """
         Démarre un conteneur Docker pour une tâche.
 
@@ -113,6 +113,7 @@ class DockerManager:
                 name=task_id,
                 cpu_quota=int(cpu_limit * 100000) if cpu_limit else None,
                 mem_limit=mem_limit,
+                command=command,
                 **kwargs
             )
             self.tasks[task_id] = container.id

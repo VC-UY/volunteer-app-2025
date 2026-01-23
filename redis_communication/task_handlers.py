@@ -147,6 +147,7 @@ class TaskManager:
                 task_id=str(task_id),
                 name=task_data.get('name', 'Tâche sans nom'),
                 workflow=workflow,
+                command=task_data.get('command'),
                 parameters=task_data.get('parameters', {}),
                 status='pending',
                 input_data=task_data.get('input_data', {}),
@@ -945,7 +946,7 @@ class TaskManager:
             volumes[str(output_dir)] = {'bind': '/output', 'mode': 'rw'}
             
             # Démarrer le conteneur Docker avec working_dir=/input pour que les fichiers d'entrée soient accessibles
-            logger.info(f"Démarrage du conteneur Docker pour la tâche {task.task_id} avec l'image {image_name}")
+            logger.info(f"Démarrage du conteneur Docker pour la tâche {task.task_id} avec l'image {image_name} et la commande {task.command}")
             logger.info(f"Volumes montés: {volumes}")
             container = docker_manager.run_container(
                 image_name=image_name,
@@ -954,6 +955,7 @@ class TaskManager:
                 mem_limit=mem_limit,
                 volumes=volumes,
                 working_dir='/input',  # Le conteneur démarre dans /input où les fichiers sont montés
+                command=task.command
             )
             
             if not container:
