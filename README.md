@@ -2,7 +2,7 @@
 
 ---
 
-## 📝 DESCRIPTION DU PROJET
+##  DESCRIPTION DU PROJET
 
 Cette application permet à des **volontaires d'utiliser leurs ressources informatiques inutilisées** pour effectuer des calculs demandés par des gestionnaires de workflow via un système de coordinateur central.  
 
@@ -12,7 +12,7 @@ L'application volontaire se connecte au **réseau du coordinateur** via Redis Pu
 
 ---
 
-## 🎯 OBJECTIFS
+##  OBJECTIFS
 
 - **Objectif principal** : Permettre aux volontaires de partager leurs ressources pour l'exécution de tâches de calcul distribué
 - **Problématique** : Pallier les difficultés d'accès aux supercalculateurs et infrastructures HPC 
@@ -20,60 +20,60 @@ L'application volontaire se connecte au **réseau du coordinateur** via Redis Pu
 
 ---
 
-## 🧩 FONCTIONNALITÉS
+##  FONCTIONNALITÉS
 
-### ✅ CONNEXION AU COORDINATEUR
+###  CONNEXION AU COORDINATEUR
 - Authentification automatique auprès du coordinateur
 - Communication temps réel via Redis Pub/Sub
 - Détection automatique des tâches assignées
 
-### 📊 GESTION DES RESSOURCES
+###  GESTION DES RESSOURCES
 - Surveillance en temps réel des ressources système (CPU, RAM, disque)
 - Configuration des limites d'utilisation
 - Gestion intelligente de la disponibilité
 
-### 🐳 EXÉCUTION DES TÂCHES
+###  EXÉCUTION DES TÂCHES
 - Réception automatique des tâches via Redis
 - Exécution sécurisée dans des conteneurs Docker
 - Isolation complète entre les tâches
 - Nettoyage automatique après exécution
 
-### 📡 COMMUNICATION TEMPS RÉEL
+###  COMMUNICATION TEMPS RÉEL
 - WebSockets pour l'interface utilisateur
 - Pub/Sub Redis pour la communication avec le coordinateur
 - Mise à jour en temps réel du statut des tâches
 
-### 🌐 INTERFACE WEB
+###  INTERFACE WEB
 - Dashboard de suivi des tâches en cours et terminées
 - Visualisation des performances système
 - Configuration des préférences volontaire
 
 ---
 
-## 🚀 PRÉREQUIS SYSTÈME
+##  PRÉREQUIS SYSTÈME
 
-### 🔧 **Logiciels Requis**
+###  **Logiciels Requis**
 - **Python 3.8+** - [Télécharger Python](https://www.python.org/downloads/)
 - **Redis Server** - [Installer Redis](https://redis.io/docs/getting-started/installation/)
 - **Docker** - [Installer Docker](https://docs.docker.com/get-docker/)
 - **Git** - [Installer Git](https://git-scm.com/downloads)
 
-### 🌐 **Connexion Réseau**
+###  **Connexion Réseau**
 - **Accès au réseau du coordinateur** (même réseau local ou VPN)
 - **Port Redis accessible** (par défaut 6379)
 - **Connexion Internet** pour télécharger les images Docker
 
 ---
 
-## 📦 INSTALLATION COMPLÈTE
+##  INSTALLATION COMPLÈTE
 
-### 1️⃣ **Cloner le Projet**
+###  **Cloner le Projet**
 ```bash
 git clone https://github.com/VC-UY/volunteer-app-2025.git
 cd volunteer-app-2025
 ```
 
-### 2️⃣ **Créer l'Environnement Virtuel**
+###  **Créer l'Environnement Virtuel**
 ```bash
 # Créer l'environnement virtuel
 python -m venv volunteer-env
@@ -86,15 +86,15 @@ source volunteer-env/bin/activate
 volunteer-env\Scripts\activate
 ```
 
-### 3️⃣ **Installer les Dépendances**
+###  **Installer les Dépendances**
 ```bash
 # Installer toutes les dépendances Python
 pip install -r requirements.txt
 ```
 
-### 4️⃣ **Vérifications Prérequis**
+###  **Vérifications Prérequis**
 
-#### ✅ **Vérifier Docker**
+#### **Vérifier Docker**
 ```bash
 # Vérifier que Docker fonctionne
 docker --version
@@ -105,7 +105,7 @@ sudo systemctl start docker  # Linux
 # ou démarrer Docker Desktop    # Windows/Mac
 ```
 
-#### ✅ **Vérifier la Connexion au Coordinateur**
+####  **Vérifier la Connexion au Coordinateur**
 ```bash
 # Tester la connexion Redis au coordinateur
 # Remplacer COORDINATOR_IP par l'IP du coordinateur
@@ -114,7 +114,7 @@ redis-cli -h COORDINATOR_IP -p 6379 ping
 # Devrait retourner : PONG
 ```
 
-### 5️⃣ **Configuration de la Base de Données**
+###  **Configuration de la Base de Données**
 ```bash
 # Appliquer les migrations Django
 python manage.py makemigrations
@@ -123,9 +123,9 @@ python manage.py migrate
 
 ---
 
-## ▶️ LANCEMENT DE L'APPLICATION
+## LANCEMENT DE L'APPLICATION
 
-### 🚀 **Méthode Recommandée : Daphne (ASGI)**
+###  **Méthode Recommandée : Daphne (ASGI)**
 
 
 
@@ -147,16 +147,16 @@ source volunteer-env/bin/activate
 python agent.py
 ```
 
-### 🌐 **Accéder à l'Application**
+###  **Accéder à l'Application**
 - Ouvrez votre navigateur
 - Allez sur : `http://127.0.0.1:8002`
 - L'application devrait se connecter automatiquement au coordinateur
 
 ---
 
-## ⚙️ CONFIGURATION
+##  CONFIGURATION
 
-### 🔧 **Configuration Redis/Coordinateur**
+###  **Configuration Redis/Coordinateur**
 Modifier le fichier `backend/settings.py` :
 ```python
 # Configuration Redis - Coordinateur
@@ -169,7 +169,7 @@ VOLUNTEER_NAME = 'Mon-Volontaire-001'
 VOLUNTEER_ID = 'unique-volunteer-id'
 ```
 
-### 🐳 **Configuration Docker**
+###  **Configuration Docker**
 ```python
 # settings.py
 DOCKER_ENABLED = True
@@ -177,7 +177,7 @@ DOCKER_MEMORY_LIMIT = '2g'  # Limite mémoire par conteneur
 DOCKER_CPU_LIMIT = '1.0'    # Limite CPU par conteneur
 ```
 
-### 📊 **Limites de Ressources**
+###  **Limites de Ressources**
 ```python
 # settings.py  
 MAX_CPU_USAGE = 80    # % maximum d'utilisation CPU
@@ -187,7 +187,7 @@ MAX_DISK_USAGE = 85   # % maximum d'utilisation disque
 
 ---
 
-## 📁 STRUCTURE DU PROJET
+## STRUCTURE DU PROJET
 
 ```
 volunteer-app-2025/
@@ -218,7 +218,7 @@ volunteer-app-2025/
 
 ---
 
-## 🔄 FONCTIONNEMENT
+##  FONCTIONNEMENT
 
 ### 1. **Connexion au Coordinateur**
 L'application se connecte automatiquement au coordinateur via Redis et s'authentifie.
@@ -239,7 +239,7 @@ Les résultats sont automatiquement envoyés au coordinateur via Redis.
 
 ---
 
-## 🛑 ARRÊTER L'APPLICATION
+##  ARRÊTER L'APPLICATION
 
 ```bash
 # Dans chaque terminal, appuyez sur :
@@ -254,9 +254,9 @@ docker container prune -f
 
 ---
 
-## 🐛 DÉPANNAGE
+## DÉPANNAGE
 
-### ❌ **Erreur de connexion Redis**
+###  **Erreur de connexion Redis**
 ```bash
 # Vérifier que le coordinateur est accessible
 ping IP_DU_COORDINATEUR
@@ -265,7 +265,7 @@ ping IP_DU_COORDINATEUR
 redis-cli -h IP_DU_COORDINATEUR -p 6379 ping
 ```
 
-### ❌ **Erreur Docker**
+### **Erreur Docker**
 ```bash
 # Vérifier que Docker fonctionne
 docker ps
@@ -274,7 +274,7 @@ docker ps
 sudo systemctl restart docker  # Linux
 ```
 
-### ❌ **Port 8002 déjà utilisé**
+###  **Port 8002 déjà utilisé**
 ```bash
 # Utiliser un autre port
 daphne backend.asgi:application -p 8003
@@ -282,14 +282,14 @@ daphne backend.asgi:application -p 8003
 
 ---
 
-## 📊 MONITORING
+##  MONITORING
 
-### 📈 **Vérifier le Statut**
+### **Vérifier le Statut**
 - Interface web : `http://localhost:8002`
 - Logs : `tail -f server.log`
 - Statut Docker : `docker ps`
 
-### 📋 **Commandes Utiles**
+### **Commandes Utiles**
 ```bash
 # Voir les tâches en cours
 docker ps
@@ -303,14 +303,14 @@ htop
 
 ---
 
-## 📄 LICENCE
+##  LICENCE
 
 Ce projet est **open source** sous licence MIT.  
 Réutilisation, modification et contribution autorisées.
 
 ---
 
-## 👥 CONTRIBUTEURS
+## CONTRIBUTEURS
 
 - **iyemte** - [https://github.com/iyemte](https://github.com/iyemte)
 - **Kamron-Ems** - [https://github.com/Kamron-Ems](https://github.com/Kamron-Ems)
@@ -319,7 +319,7 @@ Réutilisation, modification et contribution autorisées.
 
 ---
 
-## 📞 SUPPORT
+## SUPPORT
 
 En cas de problème :
 1. Vérifier que tous les prérequis sont installés

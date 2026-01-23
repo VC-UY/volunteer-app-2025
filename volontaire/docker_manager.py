@@ -6,6 +6,16 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
+class DockerNotAvailableError(Exception):
+    """Exception levée quand Docker n'est pas disponible."""
+    pass
+
+
+class DockerImageNotFoundError(Exception):
+    """Exception levée quand l'image Docker n'est pas trouvée."""
+    pass
+
 class DockerManager:
     _instance = None
     _lock = Lock()
@@ -58,19 +68,45 @@ class DockerManager:
             return None
 
     def run_container(self, image_name, task_id, cpu_limit=None, mem_limit=None, **kwargs):
+        """
+        Démarre un conteneur Docker pour une tâche.
+
+        Args:
+            image_name: Nom de l'image Docker
+            task_id: ID de la tâche
+            cpu_limit: Limite CPU (optionnel)
+            mem_limit: Limite mémoire (optionnel)
+            **kwargs: Arguments supplémentaires pour Docker
+
+        Returns:
+            Container: Le conteneur démarré
+
+        Raises:
+            DockerNotAvailableError: Si Docker n'est pas disponible
+            DockerImageNotFoundError: Si l'image n'est pas trouvée et ne peut pas être téléchargée
+            APIError: Si une erreur Docker se produit
+        """
         if not self.is_connected():
-            logger.error("Docker non disponible pour run_container")
-            return None
+            error_msg = "Docker n'est pas disponible. Vérifiez que Docker est installé et en cours d'exécution."
+            logger.error(error_msg)
+            raise DockerNotAvailableError(error_msg)
+
         try:
             # Vérifie d'abord si l'image est présente localement
             try:
                 self.client.images.get(image_name)
-                print(f"Using local image {image_name}")
+                logger.info(f"Utilisation de l'image locale {image_name}")
             except docker.errors.ImageNotFound:
-                print(f"Local image {image_name} not found. Attempting to pull...")
-                self.client.images.pull(image_name)
-                
-            print(f"Running container for task {task_id}...")
+                logger.info(f"Image locale {image_name} non trouvée. Téléchargement en cours...")
+                try:
+                    self.client.images.pull(image_name)
+                    logger.info(f"Image {image_name} téléchargée avec succès")
+                except APIError as pull_error:
+                    error_msg = f"Impossible de télécharger l'image {image_name}: {pull_error}"
+                    logger.error(error_msg)
+                    raise DockerImageNotFoundError(error_msg)
+
+            logger.info(f"Démarrage du conteneur pour la tâche {task_id}...")
             container = self.client.containers.run(
                 image=image_name,
                 detach=True,
@@ -80,11 +116,14 @@ class DockerManager:
                 **kwargs
             )
             self.tasks[task_id] = container.id
-            print(f"Container started for task {task_id}: {container.id}")
+            logger.info(f"Conteneur démarré pour la tâche {task_id}: {container.id}")
             return container
+        except (DockerNotAvailableError, DockerImageNotFoundError):
+            raise  # Re-lever les exceptions personnalisées
         except APIError as e:
-            print(f"Error running container for task {task_id}: {e}")
-            return None
+            error_msg = f"Erreur Docker lors du démarrage du conteneur pour la tâche {task_id}: {e}"
+            logger.error(error_msg)
+            raise
 
     def get_container_by_task(self, task_id):
         container_id = self.tasks.get(task_id)

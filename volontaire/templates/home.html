@@ -209,18 +209,21 @@
     .table tbody tr {
       border-bottom: 1px solid rgba(0, 180, 240, 0.1);
       transition: all 0.3s ease;
+      color: #FFFFFF !important;
+      background: transparent !important;
     }
-    
+
     .table tbody tr:hover {
-      background: rgba(0, 180, 240, 0.05);
+      background: rgba(0, 180, 240, 0.05) !important;
       transform: translateX(5px);
     }
-    
+
     .table tbody td {
-      color: #FFFFFF;
-      border: none;
+      color: #FFFFFF !important;
+      border: none !important;
       padding: 1rem;
       vertical-align: middle;
+      background: transparent !important;
     }
     
     .table tbody td .text-muted {
@@ -488,10 +491,40 @@
       border: 1px solid rgba(220, 38, 38, 0.3);
     }
     
-    .badge-pending { 
+    .badge-pending {
       background: linear-gradient(135deg, rgba(0, 212, 255, 0.2) 0%, rgba(0, 180, 240, 0.1) 100%);
       color: #00D4FF;
       border: 1px solid rgba(0, 212, 255, 0.3);
+    }
+
+    .badge-complete, .badge-completed {
+      background: linear-gradient(135deg, rgba(0, 255, 136, 0.2) 0%, rgba(0, 200, 100, 0.1) 100%);
+      color: #00FF88;
+      border: 1px solid rgba(0, 255, 136, 0.3);
+    }
+
+    .badge-assigned {
+      background: linear-gradient(135deg, rgba(138, 43, 226, 0.2) 0%, rgba(75, 0, 130, 0.1) 100%);
+      color: #DA70D6;
+      border: 1px solid rgba(138, 43, 226, 0.3);
+    }
+
+    .badge-error, .badge-failed {
+      background: linear-gradient(135deg, rgba(220, 38, 38, 0.2) 0%, rgba(185, 28, 28, 0.1) 100%);
+      color: #FF4444;
+      border: 1px solid rgba(220, 38, 38, 0.3);
+    }
+
+    .badge-terminate {
+      background: linear-gradient(135deg, rgba(128, 128, 128, 0.2) 0%, rgba(64, 64, 64, 0.1) 100%);
+      color: #AAAAAA;
+      border: 1px solid rgba(128, 128, 128, 0.3);
+    }
+
+    .badge-downloading {
+      background: linear-gradient(135deg, rgba(255, 193, 7, 0.2) 0%, rgba(255, 165, 0, 0.1) 100%);
+      color: #FFC107;
+      border: 1px solid rgba(255, 193, 7, 0.3);
     }
     
     /* Scrollbar */
@@ -580,6 +613,7 @@
             <thead>
               <tr>
                 <th><i class="fas fa-file-alt me-2"></i>Nom</th>
+                <th><i class="fas fa-terminal me-2"></i>Commande</th>
                 <th><i class="fas fa-info-circle me-2"></i>Statut</th>
                 <th><i class="fas fa-chart-line me-2"></i>Progression</th>
                 <th><i class="fas fa-cogs me-2"></i>Actions</th>
@@ -588,26 +622,37 @@
             <tbody id="tasks-table-body">
               {% if not tasks %}
               <tr>
-                <td colspan="4" class="text-center" style="color: #00B0F0; padding: 2rem;">
+                <td colspan="5" class="text-center" style="color: #00B0F0; padding: 2rem;">
                   <i class="fas fa-inbox fa-3x mb-3" style="opacity: 0.5;"></i>
                   <div>Aucune tâche en cours</div>
                 </td>
               </tr>
               {% endif %}
               {% for task in tasks %}
-              <tr data-task-id="{{ task.id }}">
-                <td>{{ task.name }}</td>
-                <td><span class="text-muted" id="status-{{ task.id }}">{{ task.status }}</span></td>
-                <td>{{ task.progress }}%</td>
+              <tr data-task-id="{{ task.task_id }}" style="color: #FFFFFF !important;">
+                <td style="color: #00D4FF; font-weight: 600;">{{ task.name }}</td>
+                <td style="color: #94A3B8; font-size: 0.85rem; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{{ task.command }}">{{ task.command|truncatechars:30 }}</td>
+                <td><span class="badge badge-{{ task.status }}" id="status-{{ task.task_id }}">{{ task.status }}</span></td>
+                <td style="color: #FFFFFF;">
+                  <div class="d-flex align-items-center">
+                    <div class="progress me-2" style="width: 80px; height: 8px; background: rgba(0, 180, 240, 0.2); border-radius: 4px;">
+                      <div class="progress-bar" role="progressbar" style="width: {{ task.progress }}%; background: linear-gradient(90deg, #00B0F0, #00D4FF);" id="progress-bar-{{ task.task_id }}"></div>
+                    </div>
+                    <span id="progress-{{ task.task_id }}">{{ task.progress }}%</span>
+                  </div>
+                </td>
                 <td>
-                  <button class="btn btn-sm btn-warning pause-btn me-1" {% if not task.can_pause %}disabled{% endif %}>
+                  <button class="btn btn-sm btn-warning pause-btn me-1" {% if task.status != 'running' and task.status != 'progress' %}disabled{% endif %} title="Pause">
                     <i class="fa fa-pause"></i>
                   </button>
-                  <button class="btn btn-sm btn-success resume-btn me-1" {% if not task.can_resume %}disabled{% endif %}>
+                  <button class="btn btn-sm btn-success resume-btn me-1" {% if task.status != 'paused' %}disabled{% endif %} title="Reprendre">
                     <i class="fa fa-play"></i>
                   </button>
-                  <button class="btn btn-sm btn-danger stop-btn" {% if not task.can_stop %}disabled{% endif %}>
+                  <button class="btn btn-sm btn-danger stop-btn" {% if task.status == 'completed' or task.status == 'complete' or task.status == 'failed' or task.status == 'terminate' or task.status == 'error' or task.status == 'stopped' %}disabled{% endif %} title="Arrêter">
                     <i class="fa fa-stop"></i>
+                  </button>
+                  <button class="btn btn-sm btn-info details-btn ms-1" data-task-id="{{ task.task_id }}" title="Détails">
+                    <i class="fa fa-info"></i>
                   </button>
                 </td>
               </tr>
@@ -619,6 +664,68 @@
     </div>
   </div>
   
+  <!-- Modal Détails de la tâche -->
+  <div class="modal fade" id="taskDetailModal" tabindex="-1" aria-labelledby="taskDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content" style="background: linear-gradient(180deg, #0A1929 0%, #0D1F2D 100%); border: 1px solid rgba(0, 180, 240, 0.3); color: #FFFFFF;">
+        <div class="modal-header" style="border-bottom: 1px solid rgba(0, 180, 240, 0.2);">
+          <h5 class="modal-title" id="taskDetailModalLabel" style="color: #00D4FF;">
+            <i class="fas fa-tasks me-2"></i>Détails de la tâche
+          </h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body" id="taskDetailContent" style="padding: 1.5rem;">
+          <div class="text-center py-4">
+            <i class="fas fa-spinner fa-spin fa-2x" style="color: #00B0F0;"></i>
+            <p class="mt-2" style="color: #94A3B8;">Chargement...</p>
+          </div>
+        </div>
+        <div class="modal-footer" style="border-top: 1px solid rgba(0, 180, 240, 0.2);">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    .task-detail-item {
+      padding: 10px 15px;
+      margin-bottom: 8px;
+      background: rgba(0, 180, 240, 0.05);
+      border-radius: 8px;
+      border-left: 3px solid #00B0F0;
+    }
+    .task-detail-item strong {
+      color: #00D4FF;
+      min-width: 140px;
+      display: inline-block;
+    }
+    .badge-running, .badge-progress {
+      background: linear-gradient(135deg, #00B0F0, #00D4FF) !important;
+      color: #FFF;
+    }
+    .badge-completed, .badge-complete {
+      background: linear-gradient(135deg, #00FF88, #00CC6A) !important;
+      color: #000;
+    }
+    .badge-failed, .badge-error {
+      background: linear-gradient(135deg, #FF4444, #CC0000) !important;
+      color: #FFF;
+    }
+    .badge-paused {
+      background: linear-gradient(135deg, #FFB800, #FF9500) !important;
+      color: #000;
+    }
+    .badge-pending, .badge-queued {
+      background: linear-gradient(135deg, #6B7280, #4B5563) !important;
+      color: #FFF;
+    }
+    .badge-stopped {
+      background: linear-gradient(135deg, #9CA3AF, #6B7280) !important;
+      color: #FFF;
+    }
+  </style>
+
   <!-- Modal Préférences -->
   <div class="modal fade" id="prefModal" tabindex="-1" aria-labelledby="prefModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
@@ -726,6 +833,8 @@
               background: 'linear-gradient(135deg, rgba(0, 255, 136, 0.9) 0%, rgba(0, 200, 100, 0.9) 100%)',
             }
           }).showToast();
+          // Recharger les tâches après l'action
+          setTimeout(reloadTasks, 500);
         },
         error: function(xhr) {
           Toastify({
@@ -760,6 +869,73 @@
       if (confirm('Arrêter cette tâche ?')) sendTaskAction(taskId, 'stop');
     });
 
+    // Gestionnaire pour le bouton détails
+    $('#tasks-table').on('click', '.details-btn', function() {
+      var taskId = $(this).data('task-id');
+      $.ajax({
+        url: '/api/task/' + taskId + '/details/',
+        type: 'GET',
+        success: function(task) {
+          // Formatage de l'image Docker
+          var dockerImage = 'N/A';
+          if (task.docker_info) {
+            dockerImage = task.docker_info.image || (task.docker_info.name + ':' + (task.docker_info.tag || 'latest'));
+          }
+
+          // Formatage des fichiers
+          var inputFilesStr = task.input_files && task.input_files.length > 0
+            ? task.input_files.map(f => typeof f === 'string' ? f : f.name || f.path || JSON.stringify(f)).join(', ')
+            : 'Aucun';
+          var outputFilesStr = task.output_files && task.output_files.length > 0
+            ? task.output_files.map(f => typeof f === 'string' ? f : f.name || f.path || JSON.stringify(f)).join(', ')
+            : 'Aucun';
+
+          var modalContent = `
+            <div class="row">
+              <div class="col-md-6">
+                <div class="task-detail-item"><strong>ID:</strong> <span style="color: #00D4FF;">${task.task_id || task.id}</span></div>
+                <div class="task-detail-item"><strong>Nom:</strong> <span style="color: #FFFFFF;">${task.name}</span></div>
+                <div class="task-detail-item"><strong>Statut:</strong> <span class="badge badge-${task.status}">${task.status}</span></div>
+                <div class="task-detail-item"><strong>Progression:</strong>
+                  <div class="d-flex align-items-center mt-2">
+                    <div class="progress me-2" style="width: 100px; height: 8px; background: rgba(0, 180, 240, 0.2); border-radius: 4px;">
+                      <div class="progress-bar" style="width: ${task.progress}%; background: linear-gradient(90deg, #00B0F0, #00D4FF);"></div>
+                    </div>
+                    <span style="color: #00FF88;">${task.progress}%</span>
+                  </div>
+                </div>
+                <div class="task-detail-item"><strong>Tentatives:</strong> <span style="color: #94A3B8;">${task.attempts || 0}</span></div>
+                <div class="task-detail-item"><strong>Priorité:</strong> <span style="color: #94A3B8;">${task.execution_priority || 0}</span></div>
+              </div>
+              <div class="col-md-6">
+                <div class="task-detail-item"><strong>Image Docker:</strong> <span style="color: #94A3B8;">${dockerImage}</span></div>
+                <div class="task-detail-item"><strong>Container ID:</strong> <span style="color: #94A3B8; font-size: 0.85rem;">${task.container_id ? task.container_id.substring(0, 12) + '...' : 'N/A'}</span></div>
+                <div class="task-detail-item"><strong>Workflow:</strong> <span style="color: #94A3B8;">${task.workflow_id || 'N/A'}</span></div>
+                <div class="task-detail-item"><strong>Créé le:</strong> <span style="color: #94A3B8;">${task.created_at ? new Date(task.created_at).toLocaleString() : 'N/A'}</span></div>
+                <div class="task-detail-item"><strong>Terminé le:</strong> <span style="color: #94A3B8;">${task.end_date ? new Date(task.end_date).toLocaleString() : 'En cours'}</span></div>
+              </div>
+            </div>
+            <hr style="border-color: rgba(0, 180, 240, 0.2); margin: 1rem 0;">
+            <div class="task-detail-item"><strong>Commande:</strong><br><code style="color: #FFA500; background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 4px; display: block; margin-top: 8px; word-break: break-all;">${task.command || 'N/A'}</code></div>
+            <div class="task-detail-item"><strong>Fichiers d'entrée:</strong> <span style="color: #94A3B8;">${inputFilesStr}</span></div>
+            <div class="task-detail-item"><strong>Fichiers de sortie:</strong> <span style="color: #94A3B8;">${outputFilesStr}</span></div>
+            ${task.error_message ? `<div class="task-detail-item" style="border-left-color: #FF4444;"><strong>Erreur:</strong> <span style="color: #FF4444;">${task.error_message}</span></div>` : ''}
+          `;
+          $('#taskDetailContent').html(modalContent);
+          $('#taskDetailModal').modal('show');
+        },
+        error: function(xhr) {
+          Toastify({
+            text: 'Erreur lors du chargement des détails',
+            duration: 3000,
+            gravity: 'top',
+            position: 'right',
+            style: { background: 'linear-gradient(135deg, rgba(220, 38, 38, 0.9) 0%, rgba(185, 28, 28, 0.9) 100%)' }
+          }).showToast();
+        }
+      });
+    });
+
     const reloadTasks = () => {
       $.ajax({
         url: '/tasks/',
@@ -768,18 +944,31 @@
           var tbody = $('#tasks-table-body');
           tbody.empty();
           if (data.length === 0) {
-            tbody.append('<tr><td colspan="4" class="text-center" style="color: #00B0F0; padding: 2rem;"><i class="fas fa-inbox fa-3x mb-3" style="opacity: 0.5;"></i><div>Aucune tâche en cours</div></td></tr>');
+            tbody.append('<tr><td colspan="5" class="text-center" style="color: #00B0F0; padding: 2rem;"><i class="fas fa-inbox fa-3x mb-3" style="opacity: 0.5;"></i><div>Aucune tâche en cours</div></td></tr>');
           } else {
             data.forEach(task => {
+              const taskId = task.task_id || task.id;
+              const isRunning = task.status === 'running' || task.status === 'progress';
+              const isPaused = task.status === 'paused';
+              const isFinished = ['completed', 'complete', 'failed', 'terminate', 'error', 'stopped'].includes(task.status);
               tbody.append(`
-                <tr data-task-id="${task.id}">
-                  <td>${task.name}</td>
-                  <td><span class="text-muted" id="status-${task.id}">${task.status}</span></td>
-                  <td><span id="progress-${task.id}">${task.progress}%</span></td>
+                <tr data-task-id="${taskId}" style="color: #FFFFFF !important;">
+                  <td style="color: #00D4FF; font-weight: 600;">${task.name}</td>
+                  <td style="color: #94A3B8; font-size: 0.85rem; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${task.command || ''}">${(task.command || 'N/A').substring(0, 30)}${task.command && task.command.length > 30 ? '...' : ''}</td>
+                  <td><span class="badge badge-${task.status}" id="status-${taskId}">${task.status}</span></td>
+                  <td style="color: #FFFFFF;">
+                    <div class="d-flex align-items-center">
+                      <div class="progress me-2" style="width: 80px; height: 8px; background: rgba(0, 180, 240, 0.2); border-radius: 4px;">
+                        <div class="progress-bar" role="progressbar" style="width: ${task.progress}%; background: linear-gradient(90deg, #00B0F0, #00D4FF);" id="progress-bar-${taskId}"></div>
+                      </div>
+                      <span id="progress-${taskId}">${task.progress}%</span>
+                    </div>
+                  </td>
                   <td>
-                    <button class="btn btn-sm btn-warning pause-btn me-1" ${task.status !== "running" ? 'disabled' : ''}><i class="fa fa-pause"></i></button>
-                    <button class="btn btn-sm btn-success resume-btn me-1" ${task.status !== 'paused' ? 'disabled' : ''}><i class="fa fa-play"></i></button>
-                    <button class="btn btn-sm btn-danger stop-btn" ${task.status !== "failed" && task.status !== "complete" && task.status !== "terminate" && task.status !== "error" ? 'disabled' : ''}><i class="fa fa-stop"></i></button>
+                    <button class="btn btn-sm btn-warning pause-btn me-1" ${!isRunning ? 'disabled' : ''} title="Pause"><i class="fa fa-pause"></i></button>
+                    <button class="btn btn-sm btn-success resume-btn me-1" ${!isPaused ? 'disabled' : ''} title="Reprendre"><i class="fa fa-play"></i></button>
+                    <button class="btn btn-sm btn-danger stop-btn" ${isFinished ? 'disabled' : ''} title="Arrêter"><i class="fa fa-stop"></i></button>
+                    <button class="btn btn-sm btn-info details-btn ms-1" data-task-id="${taskId}" title="Détails"><i class="fa fa-info"></i></button>
                   </td>
                 </tr>
               `);
@@ -850,17 +1039,17 @@
             $('#tasks-table-body').append(`
               <tr data-task-id="${data.data.task_id}">
                 <td>${data.data.name}</td>
-                <td><span class="text-muted" id="status-${data.data.task_id}">${data.data.status}</span></td>
+                <td><span class="badge badge-${data.data.status}" id="status-${data.data.task_id}">${data.data.status}</span></td>
                 <td><span id="progress-${data.data.task_id}">${data.data.progress || 0}%</span></td>
                 <td>
-                  <button class="btn btn-sm btn-warning pause-btn me-1" ${data.data.status !== "running" ? 'disabled' : ''}><i class="fa fa-pause"></i></button>
-                  <button class="btn btn-sm btn-success resume-btn me-1" ${data.data.status !== 'paused' ? 'disabled' : ''}><i class="fa fa-play"></i></button>
-                  <button class="btn btn-sm btn-danger stop-btn" ${data.data.status !== "failed" && data.data.status !== "complete" && data.data.status !== "terminate" && data.data.status !== "error" ? 'disabled' : ''}><i class="fa fa-stop"></i></button>
+                  <button class="btn btn-sm btn-warning pause-btn me-1" ${data.data.status !== "running" ? 'disabled' : ''} title="Pause"><i class="fa fa-pause"></i></button>
+                  <button class="btn btn-sm btn-success resume-btn me-1" ${data.data.status !== 'paused' ? 'disabled' : ''} title="Reprendre"><i class="fa fa-play"></i></button>
+                  <button class="btn btn-sm btn-danger stop-btn" ${data.data.status === "complete" || data.data.status === "failed" || data.data.status === "terminate" || data.data.status === "error" ? 'disabled' : ''} title="Arrêter"><i class="fa fa-stop"></i></button>
                 </td>
               </tr>
             `);
           } else {
-            row.find('span[id^="status-"]').text(data.data.status);
+            row.find('span[id^="status-"]').text(data.data.status).attr('class', 'badge badge-' + data.data.status);
             if (data.data.progress !== undefined) {
               row.find('span[id^="progress-"]').text(data.data.progress + '%');
             }
@@ -869,7 +1058,7 @@
             }
             row.find('.pause-btn').prop('disabled', data.data.status !== 'running');
             row.find('.resume-btn').prop('disabled', data.data.status !== 'paused');
-            row.find('.stop-btn').prop('disabled', !['failed', 'complete', 'terminate', 'error'].includes(data.data.status));
+            row.find('.stop-btn').prop('disabled', ['failed', 'complete', 'terminate', 'error'].includes(data.data.status));
           }
         } else if (data.type === 'send_add_task') {
           console.log("Nouvelle tâche ou découpage terminé", data);

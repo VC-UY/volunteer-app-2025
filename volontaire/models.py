@@ -316,6 +316,9 @@ class Task(models.Model):
     output_data = models.JSONField(null=True, blank=True)
     docker_information = models.JSONField(null=True, blank=True)
 
+    # Chemin local des fichiers d'entrée téléchargés
+    local_input_path = models.CharField(max_length=500, null=True, blank=True)
+
     # New field to store Docker container ID
     container_id = models.CharField(max_length=255, null=True, blank=True)
 

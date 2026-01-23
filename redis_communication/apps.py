@@ -218,9 +218,11 @@ def auth_volunteer_flow():
         )
         if success:
             logger.info("Volontaire authentifié avec succès")
-            if not os.path.exists('.volunteer'):
-                os.makedirs('.volunteer')
-            with open('.volunteer/volunteer_auth_info.json', 'w') as f:
+            # Utiliser DATA_BASE_DIR pour supporter les instances multiples
+            auth_dir = os.path.join(DATA_BASE_DIR, 'auth')
+            os.makedirs(auth_dir, exist_ok=True)
+            auth_file = os.path.join(auth_dir, 'volunteer_auth_info.json')
+            with open(auth_file, 'w') as f:
                 json.dump({
                     'token': data.get('token'),
                     'refresh_token': data.get('refresh_token'),
@@ -228,6 +230,7 @@ def auth_volunteer_flow():
                     'password': full_info['password'],  # Ajouté pour le rafraîchissement
                     'last_login': time.time()
                 }, f)
+            logger.info(f"Auth info sauvegardée dans {auth_file}")
             logger.debug("Volontaire authentifié avec succès")
             from .task_handlers import TaskManager
             task_manager = TaskManager.get_instance()
@@ -322,9 +325,11 @@ def auth_volunteer_flow():
             )
             if success:
                 logger.info("Volontaire authentifié avec succès")
-                if not os.path.exists('.volunteer'):
-                    os.makedirs('.volunteer')
-                with open('.volunteer/volunteer_auth_info.json', 'w') as f:
+                # Utiliser DATA_BASE_DIR pour supporter les instances multiples
+                auth_dir = os.path.join(DATA_BASE_DIR, 'auth')
+                os.makedirs(auth_dir, exist_ok=True)
+                auth_file = os.path.join(auth_dir, 'volunteer_auth_info.json')
+                with open(auth_file, 'w') as f:
                     json.dump({
                         'token': data.get('token'),
                         'refresh_token': data.get('refresh_token'),
@@ -332,7 +337,18 @@ def auth_volunteer_flow():
                         'password': full_info['password'],  # Ajouté pour le rafraîchissement
                         'last_login': time.time()
                     }, f)
-                logger.debug("Volontaire authentifié avec succès")
+                logger.info(f"Auth info sauvegardée dans {auth_file}")
+
+                # FIX: Démarrer le TaskManager pour les nouveaux volontaires
+                volunteer_info_updated = MachineInfo.objects.get_last_inserted()
+                if volunteer_info_updated and volunteer_info_updated.volunteer_id:
+                    from .task_handlers import TaskManager
+                    task_manager = TaskManager.get_instance()
+                    task_manager.start(volunteer_info_updated.volunteer_id)
+                    logger.info(f"TaskManager démarré pour le nouveau volontaire {volunteer_info_updated.volunteer_id}")
+                else:
+                    logger.warning("Impossible de démarrer le TaskManager : volunteer_id introuvable")
+
                 return True
                 
             else:

@@ -14,16 +14,38 @@ from .message import Message
 logger = logging.getLogger(__name__)
 
 # Déterminer le répertoire de base pour les données
-# En production (systemd avec WorkingDirectory=/opt/volunteer-app), utiliser /opt/volunteer-app/data
-# En développement, utiliser le répertoire data de l'application
+# Supporte plusieurs instances via VOLUNTEER_INSTANCE_ID ou VOLUNTEER_PORT
+def _get_instance_suffix():
+    """Retourne un suffixe unique pour l'instance (basé sur le port ou l'ID)."""
+    instance_id = os.environ.get('VOLUNTEER_INSTANCE_ID')
+    if instance_id:
+        return f"_{instance_id}"
+
+    port = os.environ.get('VOLUNTEER_PORT')
+    if port:
+        return f"_{port}"
+
+    return ""  # Instance par défaut (pas de suffixe)
+
+
 def _get_data_base_dir():
     """Retourne le répertoire de base pour stocker les données."""
+    instance_suffix = _get_instance_suffix()
+
     # Option 1: Variable d'environnement explicite
     if os.environ.get('VOLUNTEER_DATA_DIR'):
-        return os.environ.get('VOLUNTEER_DATA_DIR')
-    
+        base = os.environ.get('VOLUNTEER_DATA_DIR')
+        # Ajouter le suffixe d'instance si nécessaire
+        if instance_suffix and not base.endswith(instance_suffix):
+            base = f"{base}{instance_suffix}"
+        try:
+            os.makedirs(base, exist_ok=True)
+            return base
+        except (OSError, IOError):
+            pass
+
     # Option 2: Répertoire /opt/volunteer-app/data (production)
-    opt_data_dir = '/opt/volunteer-app/data'
+    opt_data_dir = f'/opt/volunteer-app/data{instance_suffix}'
     try:
         os.makedirs(opt_data_dir, exist_ok=True)
         # Vérifier si on peut écrire
@@ -34,9 +56,12 @@ def _get_data_base_dir():
         return opt_data_dir
     except (OSError, IOError):
         pass  # Continuer avec les autres options
-    
+
     # Option 3: Répertoire data dans l'application (développement)
-    app_data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
+    app_data_dir = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        f'data{instance_suffix}'
+    )
     try:
         os.makedirs(app_data_dir, exist_ok=True)
         test_file = os.path.join(app_data_dir, '.write_test')
@@ -46,10 +71,10 @@ def _get_data_base_dir():
         return app_data_dir
     except (OSError, IOError):
         pass
-    
+
     # Option 4: Répertoire temporaire (dernier recours)
     import tempfile
-    return tempfile.mkdtemp(prefix='volunteer-app-')
+    return tempfile.mkdtemp(prefix=f'volunteer-app{instance_suffix}-')
 
 DATA_BASE_DIR = _get_data_base_dir()
 
@@ -57,9 +82,12 @@ DATA_BASE_DIR = _get_data_base_dir()
 RESPONSES_DIR = os.path.join(DATA_BASE_DIR, 'temp_data')
 os.makedirs(RESPONSES_DIR, exist_ok=True)
 
-# Répertoire pour stocker les informations du volontaire
-VOLUNTEER_DIR = '.volunteer'
-# Le répertoire est déjà créé par RESPONSES_DIR
+# Répertoire pour stocker les informations du volontaire (utilise DATA_BASE_DIR pour supporter les instances multiples)
+VOLUNTEER_DIR = os.path.join(DATA_BASE_DIR, 'auth')
+os.makedirs(VOLUNTEER_DIR, exist_ok=True)
+
+# Log du répertoire utilisé pour le debug
+logger.info(f"Répertoire de données volontaire: {DATA_BASE_DIR}")
 
 def save_response(request_id: str, response: Dict[str, Any]):
     """

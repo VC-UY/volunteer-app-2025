@@ -1,7 +1,7 @@
-from django.urls import path 
-from .views import ( 
-    home, 
-    handle_task_action, 
+from django.urls import path
+from .views import (
+    home,
+    handle_task_action,
     save_preferences,
     preferences_list,
     MachineInfoView,
@@ -10,6 +10,7 @@ from .views import (
     delete_preference,
     delete_preferences,
     tasks,
+    task_details,
     AgentStatusView,
     AgentControlView,
     )
@@ -26,6 +27,8 @@ urlpatterns = [
     # API État machine (temps réel)
     path('api/machine/state/', MachineStateView.as_view(), name='machine-state'),
     
+    # Détails d'une tâche (AVANT la route action pour éviter le conflit)
+    path('api/task/<str:task_id>/details/', task_details, name='task_details'),
     # Gestion des actios sur conteneur
     path('api/task/<str:task_id>/<str:action>/', handle_task_action, name='handle_task_action'),
     # ------Gestion des preferences

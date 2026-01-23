@@ -250,7 +250,8 @@ class TaskManager:
             return
         
         # Vérifier si la tâche est en cours d'exécution
-        if task.status in ['in_progress', 'pending', 'started']:
+        # Statuts normalisés: 'pending', 'progress', 'Running', 'paused', 'completed', 'failed', 'cancelled'
+        if task.status in ['in_progress', 'pending', 'started', 'progress', 'Running']:
             # Arrêter le processus
             if self.task_process and self.current_task and self.current_task.id == task.id:
                 try:
@@ -722,20 +723,48 @@ class TaskManager:
         try:
             # Récupérer la tâche
             task = Task.objects.get(task_id=task_id)
-            
-            
+
+
             # Arrêter le conteneur Docker si nécessaire
             docker_manager = DockerManager.get_instance()
             docker_manager.stop_task(task_id)
-            
+
+            # Attendre un peu pour que les fichiers Docker soient synchronisés
+            import time
+            time.sleep(1)
+
             # Déterminer le chemin des fichiers de sortie
             output_dir = os.path.join(TASKS_DIR, str(task.task_id), 'output')
             if not os.path.exists(output_dir):
                 os.makedirs(output_dir, exist_ok=True)
-            
+
+            # Récupérer les fichiers de sortie depuis task.output_data ou lister le répertoire
+            output_files = []
+            if task.output_data and 'files' in task.output_data:
+                output_files = task.output_data['files']
+                logger.info(f"Fichiers de sortie depuis task.output_data: {output_files}")
+
+            # Si pas de fichiers dans output_data, lister le répertoire
+            if not output_files:
+                output_files = [f for f in os.listdir(output_dir) if os.path.isfile(os.path.join(output_dir, f))]
+                logger.info(f"Fichiers de sortie depuis le répertoire: {output_files}")
+
+            # Log pour debug - liste détaillée des fichiers
+            if os.path.exists(output_dir):
+                files_with_sizes = []
+                for f in os.listdir(output_dir):
+                    filepath = os.path.join(output_dir, f)
+                    if os.path.isfile(filepath):
+                        files_with_sizes.append(f"{f} ({os.path.getsize(filepath)} bytes)")
+                logger.info(f"Contenu du répertoire de sortie {output_dir}: {files_with_sizes}")
+            else:
+                logger.warning(f"Le répertoire de sortie {output_dir} n'existe pas!")
+
+            logger.info(f"Fichiers à servir: {output_files}")
+
             # Démarrer le serveur de fichiers pour cette tâche
             port = start_task_file_server(task_id, output_dir)
-            
+
             # Envoyer une notification de complétion avec les informations du serveur de fichiers
             from redis_communication.utils import get_volunteer_auth_token
             from redis_communication.utils import get_local_ip
@@ -749,7 +778,7 @@ class TaskManager:
                     'host': get_local_ip(),  # Utiliser l'adresse IP du volontaire en production
                     'port': port,
                     'path': '/files/',
-                    'output_files': [f for f in os.listdir(output_dir) if os.path.isfile(os.path.join(output_dir, f))]
+                    'output_files': output_files
                 }
             },
             str(uuid.uuid4()),
@@ -885,13 +914,19 @@ class TaskManager:
         try:
             # Récupérer l'instance unique de DockerManager
             docker_manager = DockerManager.get_instance()
-            
+            from volontaire.docker_manager import DockerNotAvailableError, DockerImageNotFoundError
+
             # Récupérer les informations Docker
             docker_info = task.docker_information or {}
             image_name = docker_info.get("name") or docker_info.get("image_name")
-            
+
             if not image_name:
                 raise ValueError("Nom d'image Docker manquant dans les informations de la tâche")
+
+            # Ajouter le tag à l'image si présent
+            image_tag = docker_info.get("tag")
+            if image_tag:
+                image_name = f"{image_name}:{image_tag}"
             
             # Définir les limites de ressources
             cpu_limit = docker_info.get("cpu_limit", 1.0)  # Par défaut, 1 CPU
@@ -909,18 +944,20 @@ class TaskManager:
             output_dir.mkdir(parents=True, exist_ok=True)
             volumes[str(output_dir)] = {'bind': '/output', 'mode': 'rw'}
             
-            # Démarrer le conteneur Docker
-            logger.error(f"Démarrage du conteneur Docker pour la tâche {task.task_id} avec l'image {image_name}")
+            # Démarrer le conteneur Docker avec working_dir=/input pour que les fichiers d'entrée soient accessibles
+            logger.info(f"Démarrage du conteneur Docker pour la tâche {task.task_id} avec l'image {image_name}")
+            logger.info(f"Volumes montés: {volumes}")
             container = docker_manager.run_container(
                 image_name=image_name,
                 task_id=task.task_id,
                 cpu_limit=cpu_limit,
                 mem_limit=mem_limit,
-                volumes=volumes, 
+                volumes=volumes,
+                working_dir='/input',  # Le conteneur démarre dans /input où les fichiers sont montés
             )
             
             if not container:
-                raise Exception(f"Impossible de démarrer le conteneur Docker pour la tâche {task.task_id}")
+                raise DockerNotAvailableError(f"Impossible de démarrer le conteneur Docker pour la tâche {task.task_id}")
             
             # Démarrer le monitoring de progression dans un thread séparé
             import threading
@@ -942,9 +979,15 @@ class TaskManager:
             logs = container.logs().decode('utf-8', errors='replace')
             stdout = logs
             stderr = ""
-            
+
+            # Log les logs du conteneur pour debug
+            logger.info(f"=== LOGS DU CONTENEUR {task.task_id} ===")
+            logger.info(f"Logs (derniers 2000 chars): {logs[-2000:] if len(logs) > 2000 else logs}")
+            logger.info(f"=== FIN LOGS ===")
+
             # Vérifier le code de retour
             exit_code = container.attrs.get('State', {}).get('ExitCode', -1)
+            logger.info(f"Code de sortie du conteneur: {exit_code}")
             
             if exit_code == 0:
                 from channels.layers import get_channel_layer
@@ -971,7 +1014,17 @@ class TaskManager:
                 
                 # Collecter les fichiers de sortie
                 output_files = self._collect_output_files(task)
-                
+                logger.info(f"Fichiers de sortie collectés pour {task.task_id}: {output_files}")
+
+                # Lister le contenu du répertoire de sortie pour debug
+                import os
+                output_dir = os.path.join(TASKS_DIR, str(task.task_id), 'output')
+                if os.path.exists(output_dir):
+                    all_files = os.listdir(output_dir)
+                    logger.info(f"Contenu complet du répertoire {output_dir}: {all_files}")
+                else:
+                    logger.warning(f"Le répertoire de sortie {output_dir} n'existe pas!")
+
                 # Marquer la tâche comme terminée
                 task.status = 'completed'
                 task.end_date = timezone.now()
@@ -1044,6 +1097,39 @@ class TaskManager:
                 self._send_task_failure(task, error)
                 
                 logger.error(f"Tâche {task.task_id} échouée: {error}")
+        except (DockerNotAvailableError, DockerImageNotFoundError) as docker_error:
+            # Erreur Docker spécifique - marquer avec un type d'erreur clair
+            error = str(docker_error)
+            error_type = 'docker'
+
+            task.status = 'failed'
+            task.end_date = timezone.now()
+            task.error_message = error
+            task.save()
+
+            # Notifier le frontend de l'échec Docker
+            from channels.layers import get_channel_layer
+            from asgiref.sync import async_to_sync
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                "task_updates",
+                {
+                    "type": "send_task_update",
+                    "data": {
+                        "event": "error",
+                        "task_id": task.task_id,
+                        "name": task.name,
+                        "status": task.status,
+                        "error_message": error,
+                        "error_type": error_type,
+                    }
+                }
+            )
+
+            # Envoyer une notification d'échec avec le type d'erreur
+            self._send_task_failure(task, error, error_type=error_type)
+
+            logger.error(f"Erreur Docker pour la tâche {task.task_id}: {error}")
         except Exception as e:
             # Erreur lors de l'exécution
             error = f"Erreur lors de l'exécution: {str(e)}"
@@ -1204,11 +1290,14 @@ class TaskManager:
         # Récupérer les informations du serveur de fichiers
         file_server = task.input_data.get('file_server', {})
         base_url = file_server.get('base_url')
-        
+        server_path = file_server.get('path', '')  # Chemin additionnel sur le serveur (ex: /files/input_xxx/)
+
         if not base_url:
             logger.error(f"URL du serveur de fichiers manquante pour la tâche {task.task_id}")
             return False
-        
+
+        logger.info(f"Serveur de fichiers: base_url={base_url}, path={server_path}")
+
         # Récupérer la liste des fichiers à télécharger
         files = task.input_data.get('files', [])
         
@@ -1257,7 +1346,15 @@ class TaskManager:
                 # Si c'est une chaîne, utiliser directement
                 file_path = file_info
                 
-            file_url = f"{base_url}/{file_path}"
+            # Construire l'URL complète avec le chemin du serveur
+            # server_path peut être vide ou contenir un chemin comme "/files/input_xxx/"
+            if server_path:
+                # S'assurer que le chemin se termine par /
+                if not server_path.endswith('/'):
+                    server_path = server_path + '/'
+                file_url = f"{base_url}{server_path}{file_path}"
+            else:
+                file_url = f"{base_url}/{file_path}"
             
             # Déterminer le chemin local
             local_path = input_dir / Path(file_path).name
@@ -1265,23 +1362,48 @@ class TaskManager:
             try:
                 # Télécharger le fichier
                 logger.info(f"Téléchargement du fichier {file_url} vers {local_path}")
-                response = requests.get(file_url, stream=True)
+                response = requests.get(file_url, stream=True, timeout=30)
                 response.raise_for_status()
-                
+
                 # Écrire le fichier sur le disque
                 with open(local_path, 'wb') as f:
                     for chunk in response.iter_content(chunk_size=8192):
                         f.write(chunk)
-                
+
                 downloaded_files.append({
                     'remote_path': file_path,
                     'local_path': str(local_path)
                 })
-                
-               
-                
+
             except Exception as e:
-                logger.error(f"Erreur lors du téléchargement du fichier {file_url}: {e}")
+                logger.warning(f"Échec téléchargement via proxy {file_url}: {e}")
+
+                # Fallback: essayer l'URL originale si disponible (quand le proxy est inaccessible)
+                original_base_url = file_server.get('_original_base_url')
+                if original_base_url:
+                    try:
+                        # Construire l'URL originale (sans le path du proxy)
+                        fallback_url = f"{original_base_url}/{file_path}"
+                        logger.info(f"Tentative fallback vers URL originale: {fallback_url}")
+
+                        response = requests.get(fallback_url, stream=True, timeout=30)
+                        response.raise_for_status()
+
+                        with open(local_path, 'wb') as f:
+                            for chunk in response.iter_content(chunk_size=8192):
+                                f.write(chunk)
+
+                        downloaded_files.append({
+                            'remote_path': file_path,
+                            'local_path': str(local_path)
+                        })
+                        logger.info(f"Fichier téléchargé via fallback: {fallback_url}")
+                        continue  # Succès, passer au fichier suivant
+
+                    except Exception as fallback_error:
+                        logger.error(f"Échec fallback {fallback_url}: {fallback_error}")
+
+                logger.error(f"Impossible de télécharger le fichier {file_path}")
                 
                 # Créer un événement d'erreur
                 from django.apps import apps
@@ -1326,23 +1448,39 @@ class TaskManager:
     def _collect_output_files(self, task):
         """
         Collecte les fichiers de sortie d'une tâche.
-        
+
         Args:
             task: Tâche pour laquelle collecter les fichiers
-            
+
         Returns:
             list: Liste des noms de fichiers de sortie
         """
         output_dir = os.path.join(TASKS_DIR, str(task.task_id), 'output')
         os.makedirs(output_dir, exist_ok=True)
-        
-        # Lister tous les fichiers dans le répertoire de sortie
-        output_files = []
-        for filename in os.listdir(output_dir):
-            if os.path.isfile(os.path.join(output_dir, filename)):
-                output_files.append(filename)
-        
-        return output_files
+
+        # Attendre que les fichiers Docker soient synchronisés (max 10 secondes)
+        max_wait = 10
+        wait_interval = 0.5
+        waited = 0
+
+        while waited < max_wait:
+            # Lister tous les fichiers dans le répertoire de sortie
+            output_files = []
+            for filename in os.listdir(output_dir):
+                if os.path.isfile(os.path.join(output_dir, filename)):
+                    output_files.append(filename)
+
+            if output_files:
+                logger.info(f"Fichiers de sortie collectés pour la tâche {task.task_id}: {output_files}")
+                return output_files
+
+            # Attendre un peu et réessayer
+            time.sleep(wait_interval)
+            waited += wait_interval
+            logger.debug(f"Attente des fichiers de sortie pour la tâche {task.task_id}... ({waited}s)")
+
+        logger.warning(f"Aucun fichier de sortie trouvé pour la tâche {task.task_id} après {max_wait}s dans {output_dir}")
+        return []
     
     def _send_task_status_update(self, task):
         """

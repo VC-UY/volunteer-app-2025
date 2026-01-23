@@ -227,32 +227,39 @@ def handle_task_action(request, action, task_id):
             from redis_communication.task_handlers import TaskManager
             task_manager = TaskManager.get_instance()
             task = Task.objects.get(task_id=task_id)
+
             if action == 'pause':
                 task_manager.pause_task(task_id)
                 task.status = 'paused'
-            elif action == 'replay':
+                task.save()
+            elif action in ['resume', 'replay']:  # Accepter les deux
                 task_manager.resume_task(task_id)
                 task.status = 'running'
-            elif action == 'suspend':
+                task.save()
+            elif action in ['stop', 'suspend']:  # Accepter les deux
                 task_manager.stop_task(task_id)
-                task.status = 'suspended'
+                task.status = 'stopped'
+                task.save()
             elif action == 'delete':
                 task_manager.stop_task(task_id)
                 task.delete()
                 return JsonResponse({'message': 'Tâche supprimée'}, status=200)
             elif action == 'limit_cpu':
-                cpu_quota = int(request.POST.get('cpu_quota', 50000))  # ex: 50000 = 5% CPU
+                cpu_quota = int(request.POST.get('cpu_quota', 50000))
                 task_manager.update_limits(task_id, cpu_quota=cpu_quota)
             elif action == 'limit_ram':
-                mem_limit = request.POST.get('mem_limit', '500m')  # ex: "500m", "1g"
+                mem_limit = request.POST.get('mem_limit', '500m')
                 task_manager.update_limits(task_id, mem_limit=mem_limit)
             else:
-                return JsonResponse({'error': 'Action inconnue'}, status=400)
+                return JsonResponse({'error': f'Action inconnue: {action}'}, status=400)
+
             return JsonResponse({'message': f'Action {action} effectuée'}, status=200)
-        
+
         except Task.DoesNotExist:
-            return JsonResponse({'error': 'Tâche non trouvée'}, status=404)
-    
+            return JsonResponse({'error': f'Tâche {task_id} non trouvée'}, status=404)
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+
     return JsonResponse({'error': 'Méthode non autorisée'}, status=405)
 
 
@@ -306,6 +313,14 @@ def home(request):
         last_progress = task.progress_events.order_by('-timestamp').first()
         task.progress = last_progress.percentage if last_progress else 0
 
+        # Ajouter la commande depuis docker_information ou parameters
+        command = None
+        if task.docker_information:
+            command = task.docker_information.get('command', task.docker_information.get('cmd'))
+        if not command and task.parameters:
+            command = task.parameters.get('command')
+        task.command = command
+
     context = {
         'machine': machine,
         'etat': etat,
@@ -317,12 +332,71 @@ def home(request):
 
 
 def tasks(request):
-    tasks = Task.objects.all().order_by('-start_date')
-    
-    for task in tasks:
+    tasks_list = Task.objects.all().order_by('-start_date')
+
+    result = []
+    for task in tasks_list:
         last_progress = task.progress_events.order_by('-timestamp').first()
-        task.progress = last_progress.percentage if last_progress else 0
-    return JsonResponse([{ "id": task.task_id, "progress": task.progress, "name": task.name, "status": task.status } for task in tasks], safe=False)
+        progress = last_progress.percentage if last_progress else 0
+
+        # Récupérer la commande depuis docker_information ou parameters
+        command = None
+        if task.docker_information:
+            command = task.docker_information.get('command', task.docker_information.get('cmd'))
+        if not command and task.parameters:
+            command = task.parameters.get('command')
+
+        result.append({
+            "id": task.task_id,
+            "task_id": task.task_id,
+            "progress": progress,
+            "name": task.name,
+            "status": task.status,
+            "command": command
+        })
+    return JsonResponse(result, safe=False)
+
+
+def task_details(request, task_id):
+    """Récupère les détails complets d'une tâche"""
+    try:
+        task = Task.objects.get(task_id=task_id)
+        last_progress = task.progress_events.order_by('-timestamp').first()
+        progress = last_progress.percentage if last_progress else 0
+
+        # Récupérer les fichiers d'entrée et sortie
+        input_files = task.input_data.get('files', []) if task.input_data else []
+        output_files = task.output_data.get('files', []) if task.output_data else []
+
+        # Récupérer la commande depuis docker_information ou parameters
+        command = None
+        if task.docker_information:
+            command = task.docker_information.get('command', task.docker_information.get('cmd'))
+        if not command and task.parameters:
+            command = task.parameters.get('command')
+
+        return JsonResponse({
+            'task_id': task.task_id,
+            'name': task.name,
+            'status': task.status,
+            'progress': progress,
+            'command': command,
+            'docker_info': task.docker_information,
+            'input_files': input_files,
+            'output_files': output_files,
+            'workflow_id': str(task.workflow.workflow_id) if task.workflow else None,
+            'created_at': task.start_date.isoformat() if task.start_date else None,
+            'end_date': task.end_date.isoformat() if task.end_date else None,
+            'error_message': task.error_message,
+            'execution_priority': task.execution_priority,
+            'attempts': task.attempts,
+            'container_id': task.container_id,
+            'local_input_path': task.local_input_path,
+        })
+    except Task.DoesNotExist:
+        return JsonResponse({'error': f'Tâche {task_id} non trouvée'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 
 # ---------------------------  Gestion des preferences -----------------  

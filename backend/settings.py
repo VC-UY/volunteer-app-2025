@@ -16,6 +16,29 @@ from pathlib import Path
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# ============================================================================
+# CONFIGURATION MULTI-INSTANCES
+# ============================================================================
+# Permet de lancer plusieurs volontaires sur la même machine
+# Variables d'environnement supportées:
+#   - VOLUNTEER_PORT: Port du serveur (défaut: 8003)
+#   - VOLUNTEER_INSTANCE_ID: Identifiant unique de l'instance
+#   - VOLUNTEER_DATA_DIR: Répertoire de données personnalisé
+# ============================================================================
+
+VOLUNTEER_PORT = int(os.environ.get('VOLUNTEER_PORT', 8003))
+VOLUNTEER_INSTANCE_ID = os.environ.get('VOLUNTEER_INSTANCE_ID', '')
+
+# Générer un suffixe pour les fichiers si une instance est spécifiée
+def _get_instance_suffix():
+    if VOLUNTEER_INSTANCE_ID:
+        return f"_{VOLUNTEER_INSTANCE_ID}"
+    if VOLUNTEER_PORT != 8003:
+        return f"_{VOLUNTEER_PORT}"
+    return ""
+
+INSTANCE_SUFFIX = _get_instance_suffix()
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
@@ -91,15 +114,18 @@ CHANNEL_LAYERS = {
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
-# La base de données est dans data/ pour être accessible en écriture par systemd
-# (ProtectSystem=strict nécessite des chemins explicites dans ReadWritePaths)
+# La base de données est dans data{INSTANCE_SUFFIX}/ pour supporter les instances multiples
+# Chaque instance a sa propre base de données SQLite
+DATA_DIR = BASE_DIR / f'data{INSTANCE_SUFFIX}'
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'data' / 'db.sqlite3',
+        'NAME': DATA_DIR / 'db.sqlite3',
         'OPTIONS': {
             'timeout': 30,  # Augmente le délai d'attente pour les connexions à la base de données
-            'check_same_thread': False,  # Permet l'accès à la base de données depuis plusieurs threads   
+            'check_same_thread': False,  # Permet l'accès à la base de données depuis plusieurs threads
         }
     }
 }

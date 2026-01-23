@@ -18,8 +18,8 @@ logger = logging.getLogger(__name__)
 
 def get_volunteer_auth_token():
     """Récupère le token d'authentification du volontaire depuis le fichier de configuration."""
-    # Utiliser le même répertoire que auth_client.py
-    auth_file = os.path.join('.volunteer', 'volunteer_auth_info.json')
+    # Utiliser DATA_BASE_DIR pour supporter les instances multiples
+    auth_file = os.path.join(DATA_BASE_DIR, 'auth', 'volunteer_auth_info.json')
     try:
         with open(auth_file, 'r') as f:
             data = json.load(f)
@@ -144,8 +144,8 @@ def format_timestamp(timestamp: float) -> str:
 
 def get_volunteer_id():
     """Récupère l'ID du volontaire depuis le fichier de configuration."""
-    # Utiliser le même répertoire que auth_client.py
-    info_file = os.path.join('.volunteer', 'volunteer_info.json')
+    # Utiliser DATA_BASE_DIR pour supporter les instances multiples
+    info_file = os.path.join(DATA_BASE_DIR, 'auth', 'volunteer_info.json')
     try:
         with open(info_file, 'r') as f:
             data = json.load(f)
