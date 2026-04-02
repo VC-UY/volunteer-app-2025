@@ -1,0 +1,56 @@
+\usepackage[utf8]{inputenc}
+\usepackage[french]{babel}
+\usepackage{graphicx}
+
+%----------------------------------------------
+% Black and White Beamer theme
+\usecolortheme{beaver}
+\usetheme{Frankfurt}
+
+% Frame titles - black background, white text
+\setbeamercolor{frametitle}{fg=white, bg=black}
+
+% Block titles - black background, white text
+\setbeamercolor{block title}{fg=white, bg=black}
+\setbeamercolor{block body}{fg=black, bg=white}
+
+% Title page
+\setbeamercolor{title}{fg=white, bg=black}
+\setbeamercolor{author}{fg=black, bg=white}
+\setbeamercolor{institute}{fg=black, bg=white}
+\setbeamercolor{date}{fg=black, bg=white}
+
+% Navigation and items
+\setbeamertemplate{navigation symbols}{}
+\setbeamercovered{transparent}
+\setbeamercolor{item}{fg=black}
+\setbeamercolor{section in toc}{fg=black}
+
+% Section frames in header/footer
+\setbeamercolor{section in head/foot}{fg=white, bg=black}
+
+%----------------------------------------------
+% Custom commands
+\newcommand{\mysection}[1]{\section{#1}\SectionFrame}
+
+\newcommand{\Front}{
+\begin{frame}
+    \maketitle
+\end{frame}
+}
+
+\newcommand{\overview}{\begin{frame}{Sommaire}
+\tableofcontents
+\end{frame}}
+
+\newcommand{\SectionFrame}{\begin{frame}{}
+    \begin{center}
+        {\Huge \secname}
+    \end{center}
+\end{frame}}
+
+\newcommand{\Ending}[1]{\begin{frame}{}
+    \begin{center}
+        {\Huge #1}
+    \end{center}
+\end{frame}}

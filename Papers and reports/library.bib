@@ -1,0 +1,75 @@
+@techReport{Keating2024,
+   abstract = {Serverless computing simplifies deployment and scaling by abstracting infrastructure management, yet it faces a persistent challenge in the form of cold start latency. Each time a new container instance is initiated to handle incoming requests, initialization delays can degrade application performance. This paper explores lightweight containerization techniques-such as micro-VMs, unikernels, and optimized image layering-to minimize cold start overhead. By analyzing various approaches that balance startup speed, resource efficiency, and isolation, this study highlights strategies that can enhance responsiveness and reliability in serverless environments.},
+   author = {Layla Keating},
+   keywords = {Keyword Serverless computing,cold start latency,containerization,lightweight virtualization,micro-VM,performance optimization,unikernel},
+   title = {LIGHTWEIGHT CONTAINERIZATION TECHNIQUES TO MINIMIZE COLD STARTS},
+   year = {2024}
+}
+@inproceedings{Anderson2006,
+   abstract = {Volunteer computing is a form of distributed computing in which the general public volunteers processing and storage to scientific research projects. BOINC, a middleware system for volunteer computing, is currently used by about 20 projects, to which 300,000 volunteers and 450,000 computers supply 350 TeraFLOPS of processing power. A BOINC client program runs on the volunteered hosts and manages the execution of applications. Together with a library linked to applications, it implements a runtime system providing process management, graphics control, checkpointing, file access, and other functions. This runtime system must handle widely varying applications, must provide features and properties desired by volunteers, and must work on many platforms. This paper describes the problems in designing a runtime system having these properties, and how these problems are solved in BOINC. © 2006 IEEE.},
+   author = {David P. Anderson and Carl Christensen and Bruce Allen},
+   doi = {10.1145/1188455.1188586},
+   isbn = {0769527000},
+   booktitle = {Proceedings of the 2006 ACM/IEEE Conference on Supercomputing, SC'06},
+   title = {Designing a runtime system for volunteer computing},
+   year = {2006}
+}
+@inproceedings{Xavier2014,
+   abstract = {Virtualization as a platform for resource-intensive applications, such as MapReduce (MR), has been the subject of many studies in the last years, as it has brought benefits such as better manageability, overall resource utilization, security and scalability. Nevertheless, because of the performance overheads, virtualization has traditionally been avoided in computing environments where performance is a critical factor. In this context, container-based virtualization can be considered a lightweight alternative to the traditional hypervisor-based virtualization systems. In fact, there is a trend towards using containers in MR clusters in order to provide resource sharing and performance isolation (e.g., Mesos and YARN). However, there are still no studies evaluating the performance overhead of the current container-based systems and their ability to provide performance isolation when running MR applications. In this work, we conducted experiments to effectively compare and contrast the current container-based systems (Linux VServer, OpenVZ and Linux Containers (LXC)) in terms of performance and manageability when running on MR clusters. Our results showed that although all container-based systems reach a near-native performance for MapReduce workloads, LXC is the one that offers the best relationship between performance and management capabilities (specially regarding to performance isolation). © 2014 IEEE.},
+   author = {Miguel Gomes Xavier and Marcelo Veiga Neves and Cesar Augusto Fonticielha De Rose},
+   doi = {10.1109/PDP.2014.78},
+   booktitle = {Proceedings - 2014 22nd Euromicro International Conference on Parallel, Distributed, and Network-Based Processing, PDP 2014},
+   keywords = {Container-based virtualization,High performance computing,MapReduce},
+   pages = {299-306},
+   publisher = {IEEE Computer Society},
+   title = {A performance comparison of container-based virtualization systems for MapReduce clusters},
+   year = {2014}
+}
+@article{Vermaa2022,
+   abstract = {Containerization is a technique for the lightweight virtualization of programmes in cloud computing, which leads to the widespread use of cloud computing. It has a positive impact on both the development and deployment of software. Containers can be divided into two groups based on their setup. The Application Container and the System Container are two types of containers. A container is a user-space that is contained within another container, while a system container is a user-space that is contained within another container. This study compares and contrasts several container architectures and their organisation in micro-hosting environments for containers.},
+   author = {Satya Bhushan Vermaa and Brijesh Pandeyb and Bineet Kumar Gupta},
+   doi = {10.14201/adcaij.28351},
+   issn = {22552863},
+   issue = {4},
+   journal = {Advances in Distributed Computing and Artificial Intelligence Journal},
+   keywords = {Cloud Computing,Containerization,Docker,LXC,Storage},
+   pages = {395-409},
+   publisher = {University of Salamanca},
+   title = {Containerization and its Architectures: A Study},
+   volume = {11},
+   year = {2022}
+}
+@article{Wang2023,
+   abstract = {Container-based virtualization has become increasingly popular as a lightweight alternative to hypervisor-based virtualization in cloud computing. Isolation is a fundamental property for consistent and reliable performance for cloud environment. However, the isolation between containers is much weaker than virtual machines as containers on the same host share one underlying host kernel. Existing works have mainly focused on the isolation problems at physical resources (e.g. CPU) level and almost not discussed with kernel resources (e.g. lock). In this paper, we perform a study to quantify kernel resource isolation for containers with a new microbenchmark, KRIBench. Then we describe kernel resource isolation issues and identify several kernel resources competition behind the poor isolation. Furthermore, we design and implement Valve, a general and flexible system that reduces kernel resources competition through limiting usage of system calls. Valve adopts Pareto-based container identification to locate misbehaving containers and supply–demand model to manage usage of system calls. The evaluation results demonstrate that our system can effectively enhance the kernel resource isolation for containers with negligible performance overhead.},
+   author = {Kun Wang and Song Wu and Kun Suo and Yijie Liu and Hang Huang and Zhuo Huang and Hai Jin},
+   doi = {10.1016/j.future.2022.11.018},
+   issn = {0167739X},
+   journal = {Future Generation Computer Systems},
+   keywords = {Cloud computing,Container,Isolation,Kernel resource,Performance interference,System call},
+   month = {4},
+   pages = {218-229},
+   publisher = {Elsevier B.V.},
+   title = {Characterizing and optimizing Kernel resource isolation for containers},
+   volume = {141},
+   year = {2023}
+}
+@article{Li2023,
+   abstract = {With the emergence of cloud-native computing, serverless computing has become a popular way to deploy intensive applications due to its scalability and flexibility, and it has been increasingly applied in the field of big data processing on service platforms. Currently, the development momentum of cloud-native computing is strong, and serverless computing has become more attractive to the growing number of Internet services. However, how to more effectively address the issues of container resource usage and service startup time for serverless computing remains a huge challenge when exploring its potential. Our research is based on the complete life cycle of serverless functions and improves the performance of serverless computing by changing the original method of exchanging space for time or time for space. We focus on how to shorten the cold-start time of serverless computing while maximizing the usage of container resources. The research innovation is the dynamic control of functions and container pools, which mainly includes three aspects. First, we create a container pool with the classification identification based on the usage rate of functions. Then, we use namespace technology to achieve container resource reuse in the security isolated state. Next, we adaptively match the correspondence between functions and reusable container resources through system resource monitoring. Finally, the test results prove that converting the remaining space resources of the container into a prewarm container for new functions can effectively reduce the resource waste caused by idle function-containers, and container resource reuse can further shorten the cold-start time while ensuring the safety and isolation of functions. Compared to other open-source serverless platforms, our solution can reduce the cold-start time of general function calls to less than 20 ms and improve the ability to alleviate cold starts by 90% without enabling container prewarming.},
+   author = {Bin Li and Yuzhuo Zhan and Shenghan Ren},
+   doi = {10.3390/electronics12112515},
+   issn = {20799292},
+   issue = {11},
+   journal = {Electronics (Switzerland)},
+   keywords = {cold-start,container resources reuse,functions safety isolation,serverless computing},
+   month = {6},
+   publisher = {MDPI},
+   title = {A Fast Cold-Start Solution: Container Space Reuse Based on Resource Isolation},
+   volume = {12},
+   year = {2023}
+}
+@techReport{,
+   abstract = {Container-based virtualization provides lightweight mechanisms for process isolation and resource control that are essential for maintaining a high degree of multi-tenancy in Function-as-a-Service (FaaS) platforms, where compute functions are instantiated on-demand and exist only as long as their execution is active. This model is especially advantageous for Edge computing environments, where hardware resources are limited due to physical space constraints. Despite their many advantages, state-of-the-art container runtimes still suffer from startup delays of several hundred milliseconds. This delay adversely impacts user experience for existing human-in-the-loop applications and quickly erodes the low latency response times required by emerging machine-in-the-loop IoT and Edge computing applications utilizing FaaS. In turn, it causes developers of these applications to employ unsanctioned workarounds that artificially extend the lifetime of their functions, resulting in wasted platform resources. In this paper, we provide an exploration of the cause of this startup delay and insight on how container-based virtualization might be made more efficient for FaaS scenarios at the Edge. Our results show that a small number of container startup operations account for the majority of cold start time, that several of these operations have room for improvement, and that startup time is largely bound by the underlying operating system mechanisms that are the building blocks for containers. We draw on our detailed analysis to provide guidance toward developing a container runtime for Edge computing environments and demonstrate how making a few key improvements to the container creation process can lead to a 20% reduction in cold start time.},
+   author = {Adam Hall and Umakishore Ramachandran},
+   keywords = {Edge Computing,FaaS,Index Terms-Containers,Runtime,Server-less},
+   title = {Opportunities for Optimizing the Container Runtime}
+}

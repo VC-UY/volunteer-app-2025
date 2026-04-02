@@ -1,0 +1,201 @@
+\documentclass[9pt]{beamer}
+%-----------------
+% by Abolfazl Chaman Motlagh 
+% September 2023
+%-----------------
+
+\input{settings}
+
+\title[Title Short]{Thème: \\ MISE EN PLACE D'UN RUNTIME POUR L'EXECUTION DE CALCULS SUR MACHINES VOLONTAIRES DANS UN ENVIRONNEMENT A RESSOURCES LIMITÉES}
+\author[Name]{ Rapport de travail hebdomadaire\texorpdfstring{\\}{and}[1ex] {\small Par NGNAPA NGOULE Ashley}}
+\institute[SUT]{Department d'informatique, Université de Yaoundé 1}
+\date[]{21 Novembre 2025}
+
+\begin{document}
+\Front
+\overview
+%----------------------------------------------
+\mysection{Les tâches de la semaine}
+\begin{frame}{Les taches a faire}
+
+Le travail de cette semaine s'est articulé au tours des points suivants
+    \begin{itemize}[<+->]
+        \vspace{5mm}
+        \item La lecture et le résumé de l'article "Exploring the support of HPC in a container runtime environment"
+        \vspace{5mm}
+        \item La lecture et le résumé de l'article "An Ultra-lightweight Container that Maximizes memory Sharing and Minimizes the Runtime Environment"
+        \vspace{5mm}
+        \item L'implementation de fonctionnalités sur l'application volontaire
+            \begin{itemize}[<.->]
+                \item Ajout de la Gestion des clients
+                \item ajout de la Validation des clients
+                \end{itemize}        
+    \end{itemize}
+\end{frame}
+%----------------------------------------------
+\mysection{An Ultra-lightweight Container that Maximizes memory Sharing and Minimizes the Runtime Environment}
+\begin{frame}{Objectif et source de l'article}
+    \begin{block}{Objectif de l'article}
+Cet article de recherche se concentre sur la conception et l'implémentation d'un conteneur ultra-léger visant à maximiser le partage de la mémoire et à minimiser l'environnement d'exécution
+    \end{block}
+    \title{Source et année de publication} 
+    Cet article rédigé par Liqing Zhang date de 2019 et a été publié dans le journal International Journal of Science 
+\end{frame}
+
+
+\begin{frame}{Contexte et enjeux}
+ L'article s'inscrit dans le contexte de l'essor de la technologie des conteneurs qui a transformé les centres de données. l'article identifie des lacunes importantes de Docker, notamment la redondance du volume des images et le manque d'efficacité dans le partage des ressources. 
+  l'enjeu principal était de dépasser les limitations de Docker en matière de redondance de la mémoire et du stockage et de securité
+\end{frame}
+
+
+\begin{frame}{Question de recherche}
+La question de recherche ici  est comment concevoir et implémenter une nouvelle architecture de conteneur ultra-léger capable de maximiser le partage des ressources  et de minimiser l'environnement d'exécution nécessaire
+\end{frame}
+
+
+ \begin{frame}{Etat de l'art}
+ les auteurs ont réalisé une serie de lectures pour arriver a leurs fins 
+\begin{itemize}[<+->]
+    \item la comparaison VM vs conteneurs 
+    \item les travaux de paul merge et al. : L'existence de ces problèmes (redondance du volume et manque d'efficacité du partage des ressources) a été l'enjeu principal à résoudre
+    \item  Ferreira J. B. et Cello M. et al. qui ont confirmé l'importance critique et l'impact du partage des librairies.  Ils ont conçu REG pour maximiser le partage des ressources mémoire de l'hôte entre les conteneurs
+    \item  Concept Unikernel qui a inspiré les auteurs a  abandonner le concept d'image au profit d'une approche où l'application (le code lui-même) est l'image 
+\end{itemize}
+\end{frame}
+
+
+\begin{frame}{Solution proposée}
+La solution proposée dans cet article est la conception et l'implémentation d'un moteur de gestion de conteneurs appelé REG(Runtime environment generation)
+\begin{itemize}
+    \item conçu sur une architecture client/serveur 
+    \item Objectifs de maximiser le partage de la memoire et minimiser la taille de l'environnmement 
+    \item granularité réduite
+    \item 
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Architecture}
+
+\begin{itemize}
+    \item conçu sur une architecture client/serveur 
+    \item Utilise les mechanismes de Namespaces et Cgroups pour l'isolation des ressources 
+    \item Elimine le concept d'image.
+    \item dispose du REG register, engine et client
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Architecture}
+\includegraphics[Architectures comparison]{img/Img3.png}
+\end{frame}
+\begin{frame}{Architecture}
+\includegraphics[Architectures of REG]{img/img4.png}
+\end{frame}
+\begin{frame}{Les etapes de genration de REG}
+\begin{itemize}
+    \item generation de la strucutre de fichiers
+    \item obtention du runtime 
+    \item Liaison du runtime et le
+\end{itemize}
+\end{frame}
+
+% \begin{frame}{appréciation generale de la solution, et mon point de vue }
+% \end{frame}
+%---------------------------------------------
+\mysection{Singularity}
+\begin{frame}{Objectif et source de l'article}
+    \begin{block}{Objectif de l'article}
+Cet article de recherche se concentre sur la conception et l'implémentation d'un conteneur ultra-léger visant à maximiser le partage de la mémoire et à minimiser l'environnement d'exécution
+    \end{block}
+    \title{Source et année de publication} 
+    Cet article rédigé par Liqing Zhang date de 2019 et a été publié dans le journal International Journal of Science 
+\end{frame}
+
+
+\begin{frame}{Contexte et enjeux}
+ L'article s'inscrit dans le contexte de l'essor de la technologie des conteneurs qui a transformé les centres de données. l'article identifie des lacunes importantes de Docker, notamment la redondance du volume des images et le manque d'efficacité dans le partage des ressources. 
+  l'enjeu principal était de dépasser les limitations de Docker en matière de redondance de la mémoire et du stockage et de securité
+\end{frame}
+
+
+\begin{frame}{Question de recherche}
+La question de recherche ici  est comment concevoir et implémenter une nouvelle architecture de conteneur ultra-léger capable de maximiser le partage des ressources  et de minimiser l'environnement d'exécution nécessaire
+\end{frame}
+
+
+ \begin{frame}{Etat de l'art}
+ les auteurs ont réalisé une serie de lectures pour arriver a leurs fins 
+\begin{itemize}[<+->]
+    \item la comparaison VM vs conteneurs 
+    \item les travaux de paul merge et al. : L'existence de ces problèmes (redondance du volume et manque d'efficacité du partage des ressources) a été l'enjeu principal à résoudre
+    \item  Ferreira J. B. et Cello M. et al. qui ont confirmé l'importance critique et l'impact du partage des librairies.  Ils ont conçu REG pour maximiser le partage des ressources mémoire de l'hôte entre les conteneurs
+    \item  Concept Unikernel qui a inspiré les auteurs a  abandonner le concept d'image au profit d'une approche où l'application (le code lui-même) est l'image 
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Solution proposée}
+La solution propos´ee dans cet article est la conception et l’impl´ementation d’un
+moteur de gestion de conteneurs appel´e REG(Runtime environment generation)
+\begin{itemize}
+    \item con¸cu sur une architecture client/serveur
+    \item Objectifs de maximiser le partage de la memoire et minimiser la taille de
+l’environnmemen
+\item granularit´e r´eduite
+\end{itemize}
+\end{frame}
+\begin{frame}{architecture}
+    \item con¸cu sur une architecture client/serveur
+    \item Utilise les mechanismes de Namespaces et Cgroups pour l’isolation des
+ressource
+    \item Elimine le concept d’image
+    \item dispose du REG register, engine et client
+\end{frame}
+
+\begin{frame}{architecture}
+\includegraphics[architectures comparées]{img/Img3.png}
+\end{frame}
+\begin{frame}{architecture}
+\includegraphics[architecture de REG]{img/img4.png}
+\end{frame}
+  
+\begin{frame}{Benchmarks, resultats et commentaires}
+
+L'article compare le moteur de gestion de conteneurs ultra-léger REG (runtime environment generation) à la technologie de conteneurs dominante, Docker, en se concentrant sur trois principaux critères d'évaluation. Les tests sont donc réalisés sur 5 softwares tres utilisés: Python, Nodejs, Mysql, Nginx, Tomcat
+\begin{itemize}
+    \item Volume de l'Image (Image Volume): Ce critère mesure l'empreinte disque de l'environnement nécessaire au fonctionnement du conteneur.\\ Resultat: Les cinq images construites par REG ont réduit l'empreinte disque en moyenne de 18  pour cent par rapport à la taille de l'image Docker
+    \item  Temps de Démarrage (Startup Time): Les tests ont inclus des démarrages individuels et un scénario de « tempête de démarrage » (startup storm).\\ Resultats: Le temps de démarrage moyen du conteneur Docker était de 405 ms, tandis que celui de REG était de 373 ms, ce qui représente une réduction de 7,9 pour cent pour REG. Dans ce scénario de tempête de démarrage, le temps de démarrage moyen de REG (405 ms) était 51 pour cent plus rapide que celui de Docker (827 ms) 
+    \item Empreinte Mémoire: Ce critère est essentiel pour vérifier l'efficacité du partage maximal de la mémoire, l'objectif principal de REG.\\Resultats: Dans l'environnement à grande échelle, REG a permis une réduction moyenne de l'utilisation de la mémoire de 47,6 pour cent par rapport à Docker
+\end{itemize}
+\end{frame}
+
+
+% \begin{frame}{appréciation generale de la solution, et mon point de vue }
+% \end{frame}
+
+\mysection{Explication du mechanisme de fonctionnement des methodes d'isolation sous linux}
+
+\mysection{L'isolation sous windows}
+
+
+\mysection{Les tâches à faire}
+\begin{frame}{Les taches a faire}
+
+Pour la semaine prochaine
+    \begin{itemize}[<+->]
+        \vspace{5mm}
+        \item  Termine La lecture et le résumé de l'article "An Ultra-lightweight Container that Maximizes memory Sharing and Minimizes the Runtime Environment"         
+        \vspace{5mm}
+        \item La lecture et le résumé de l'article sur singularity
+        \vspace{5mm}
+        \item proposer une architecture du runtime a créer. 
+        \vspace{5mm}
+        \item continuer l'apprentissage du langage rust. 
+    \end{itemize}
+\end{frame}
+%----------------------------------------------
+% \References 
+% \pagestyle{empty}
+\Ending{Merci !!!} % Thank You Page
+% uncomment next line to include references
+
+\end{document}
