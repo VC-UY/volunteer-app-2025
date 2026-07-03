@@ -1,5 +1,4 @@
 volontaire/task_docker_img/image-docker.tar
-# Ignore the Docker image file
 volontaire/task_docker_img/image-docker.tar.gz
 bib.elt
 Dockerfile
@@ -8,3 +7,9 @@ __pycache__
 *.pyc
 *.pyo
 *.pyd
+.env
+venv/
+volontaire/venv/
+volontaire/.env
+volontaire/.volunteer/
+volontaire/db.sqlite3

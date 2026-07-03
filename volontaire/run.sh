@@ -38,4 +38,5 @@ python3 manage.py makemigrations
 python3 manage.py migrate
 
 echo "✅ Lancement du serveur ASGI avec Daphne..."
-daphne -b 0.0.0.0 -p 8002 backend.asgi:application
+VOLUNTEER_PORT="${VOLUNTEER_API_PORT:-8003}"
+daphne -b 0.0.0.0 -p "${VOLUNTEER_PORT}" backend.asgi:application
