@@ -2,7 +2,7 @@ name: Deploy Volunteer App
 
 on:
   push:
-    branches: [version3.0, main, master]
+    branches: [master]
   workflow_dispatch:
 
 jobs:
