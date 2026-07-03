@@ -30,4 +30,6 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
-            test -f /opt/vc-uy/VL/volunteer-app-2025/README.md && echo "Volunteer app synced"
+            test -f /opt/vc-uy/VL/volunteer-app-2025/home.html
+            test -f /opt/vc-uy/VL/volunteer-app-2025/volontaire/static/logo.svg
+            echo "Volunteer app synced"
