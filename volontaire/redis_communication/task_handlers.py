@@ -705,7 +705,8 @@ class TaskManager:
     
     def complete_task(self, task_id):
         """
-        Marque une tâche comme terminée et démarre un serveur de fichiers pour les fichiers de sortie.
+        Marque une tâche comme terminée, pousse les sorties vers le manager,
+        puis notifie la completion (fallback serveur de fichiers local).
         
         Args:
             task_id: ID de la tâche terminée
@@ -732,25 +733,70 @@ class TaskManager:
             output_dir = os.path.join(TASKS_DIR, str(task.task_id), 'output')
             if not os.path.exists(output_dir):
                 os.makedirs(output_dir, exist_ok=True)
-            
-            # Démarrer le serveur de fichiers pour cette tâche
-            port = start_task_file_server(task_id, output_dir)
+
+            output_files = [
+                f for f in os.listdir(output_dir)
+                if os.path.isfile(os.path.join(output_dir, f))
+            ]
+
+            # Preferer l'upload HTTP vers le manager (fonctionne derriere NAT / Docker)
+            uploaded = False
+            upload_url = None
+            if isinstance(task.input_data, dict):
+                upload_url = task.input_data.get('result_upload_url')
+            if upload_url and output_files:
+                try:
+                    import requests
+                    files_payload = []
+                    opened = []
+                    for name in output_files:
+                        handle = open(os.path.join(output_dir, name), 'rb')
+                        opened.append(handle)
+                        files_payload.append(('files', (name, handle)))
+                    response = requests.post(upload_url, files=files_payload, timeout=120)
+                    for handle in opened:
+                        handle.close()
+                    if response.status_code < 300:
+                        uploaded = True
+                        logger.info(
+                            "Sorties de la tache %s poussees vers %s (%s)",
+                            task_id,
+                            upload_url,
+                            response.status_code,
+                        )
+                    else:
+                        logger.error(
+                            "Echec upload sorties tache %s: HTTP %s %s",
+                            task_id,
+                            response.status_code,
+                            response.text[:300],
+                        )
+                except Exception as upload_error:
+                    logger.error("Erreur upload sorties tache %s: %s", task_id, upload_error)
+
+            file_server_info = {
+                'uploaded': uploaded,
+                'output_files': output_files,
+            }
+            if not uploaded:
+                # Fallback: serveur de fichiers local (LAN uniquement)
+                port = start_task_file_server(task_id, output_dir)
+                from redis_communication.utils import get_local_ip
+                file_server_info.update({
+                    'host': get_local_ip(),
+                    'port': port,
+                    'path': '/files/',
+                })
             
             # Envoyer une notification de complétion avec les informations du serveur de fichiers
             from redis_communication.utils import get_volunteer_auth_token
-            from redis_communication.utils import get_local_ip
             self.redis_client.publish('task/status', {
                 'task_id': task.task_id,
                 'volunteer_id': self.volunteer_id,
                 'workflow_id': task.workflow.workflow_id if hasattr(task, 'workflow') and task.workflow else None,
                 'status': 'completed',
                 'timestamp': datetime.now().isoformat(),
-                'file_server': {
-                    'host': get_local_ip(),  # Utiliser l'adresse IP du volontaire en production
-                    'port': port,
-                    'path': '/files/',
-                    'output_files': [f for f in os.listdir(output_dir) if os.path.isfile(os.path.join(output_dir, f))]
-                }
+                'file_server': file_server_info,
             },
             str(uuid.uuid4()),
             get_volunteer_auth_token(),
@@ -888,27 +934,39 @@ class TaskManager:
             
             # Récupérer les informations Docker
             docker_info = task.docker_information or {}
-            image_name = docker_info.get("name") or docker_info.get("image_name")
-            
+            image_name = (
+                docker_info.get("image_name")
+                or docker_info.get("name")
+                or docker_info.get("image")
+            )
+            tag = docker_info.get("tag", "latest")
+            if image_name and ":" not in image_name:
+                image_name = f"{image_name}:{tag}"
+
             if not image_name:
                 raise ValueError("Nom d'image Docker manquant dans les informations de la tâche")
-            
+
             # Définir les limites de ressources
             cpu_limit = docker_info.get("cpu_limit", 1.0)  # Par défaut, 1 CPU
             mem_limit = docker_info.get("memory_limit", "1g")  # Par défaut, 1GB
-            
+
+            import os
+            from pathlib import Path
+
             # Préparer les volumes pour monter les fichiers d'entrée/sortie
             volumes = {}
             if hasattr(task, 'local_input_path') and task.local_input_path:
-                volumes[task.local_input_path] = {'bind': '/input', 'mode': 'ro'}
-            
+                # Monter le dossier parent du fichier d'entree pour exposer data.pkl / scenario.xml
+                input_path = task.local_input_path
+                if os.path.isfile(input_path):
+                    input_path = os.path.dirname(input_path)
+                volumes[input_path] = {'bind': '/input', 'mode': 'ro'}
+
             # Créer un répertoire de sortie
-            import os
-            from pathlib import Path
             output_dir = Path(f"{TASKS_DIR}/{task.task_id}/output")
             output_dir.mkdir(parents=True, exist_ok=True)
             volumes[str(output_dir)] = {'bind': '/output', 'mode': 'rw'}
-            
+
             # Démarrer le conteneur Docker
             logger.error(f"Démarrage du conteneur Docker pour la tâche {task.task_id} avec l'image {image_name}")
             container = docker_manager.run_container(
@@ -916,7 +974,7 @@ class TaskManager:
                 task_id=task.task_id,
                 cpu_limit=cpu_limit,
                 mem_limit=mem_limit,
-                volumes=volumes, 
+                volumes=volumes,
             )
             
             if not container:
