@@ -1155,57 +1155,74 @@
         setTimeout(setupWebSocket, 2000);
       };
 
-      ws.onerror = function(error) {
-        console.error('WebSocket error:', error);
+      ws.onerror = function() {
+        $('#ws-badge').html('<span class="status-dot off"></span>Erreur WS');
       };
 
       ws.onmessage = function(e) {
-        var data = JSON.parse(e.data);
-        console.log('Message WebSocket reçu:', e);
-        
+        var data;
+        try { data = JSON.parse(e.data); } catch (err) { return; }
         const type = data.type;
-
-        if (type === 'send_task_progress' || type === 'send_task_update') {
-          var row = $('#tasks-table-body tr[data-task-id="' + data.data.task_id + '"]');
-          if (row.length === 0) {
-            $('#tasks-table-body').append(`
-              <tr data-task-id="${data.data.task_id}">
-                <td>${data.data.name}</td>
-                <td><span class="badge badge-${data.data.status}" id="status-${data.data.task_id}">${data.data.status}</span></td>
-                <td><span id="progress-${data.data.task_id}">${data.data.progress || 0}%</span></td>
-                <td>
-                  <button class="btn btn-sm btn-warning pause-btn me-1" ${data.data.status !== "running" ? 'disabled' : ''} title="Pause"><i class="fa fa-pause"></i></button>
-                  <button class="btn btn-sm btn-success resume-btn me-1" ${data.data.status !== 'paused' ? 'disabled' : ''} title="Reprendre"><i class="fa fa-play"></i></button>
-                  <button class="btn btn-sm btn-danger stop-btn" ${data.data.status === "complete" || data.data.status === "failed" || data.data.status === "terminate" || data.data.status === "error" ? 'disabled' : ''} title="Arrêter"><i class="fa fa-stop"></i></button>
-                </td>
-              </tr>
-            `);
-          } else {
-            row.find('span[id^="status-"]').text(data.data.status).attr('class', 'badge badge-' + data.data.status);
-            if (data.data.progress !== undefined) {
-              row.find('span[id^="progress-"]').text(data.data.progress + '%');
-            }
-            if (data.data.status === 'complete') {
-              row.find('span[id^="progress-"]').text('100%');
-            }
-            row.find('.pause-btn').prop('disabled', data.data.status !== 'running');
-            row.find('.resume-btn').prop('disabled', data.data.status !== 'paused');
-            row.find('.stop-btn').prop('disabled', ['failed', 'complete', 'terminate', 'error'].includes(data.data.status));
+        if (!type || type === 'pong' || type === 'connection_established') {
+          if (type === 'connection_established') {
+            $('#ws-badge').html('<span class="status-dot on"></span>Temps réel OK');
           }
-        } else if (data.type === 'send_add_task') {
-          console.log("Nouvelle tâche ou découpage terminé", data);
+          return;
+        }
+
+        const payload = data.data || {};
+        if (type === 'send_task_progress' || type === 'send_task_update' || type === 'send_task_status_change') {
+          const taskId = payload.task_id;
+          if (!taskId) { reloadTasks(); return; }
+          var row = $('#tasks-table-body tr[data-task-id="' + taskId + '"]');
+          if (row.length === 0) {
+            reloadTasks();
+            return;
+          }
+          const st = (payload.status || '').toLowerCase();
+          row.attr('data-status', st);
+          row.find('span[id^="status-"]').text(statusLabel(payload.status)).attr('class', 'badge badge-' + payload.status);
+          if (payload.progress !== undefined) {
+            const p = payload.progress;
+            row.find('span[id^="progress-"]').text(p + '%');
+            row.find('.progress-bar').css('width', p + '%');
+          }
+          if (st === 'complete' || st === 'completed') {
+            row.find('span[id^="progress-"]').text('100%');
+            row.find('.progress-bar').css('width', '100%');
+          }
+          const isRunning = ['running', 'progress', 'started'].includes(st);
+          const isPaused = st === 'paused';
+          const isFinished = ['failed', 'complete', 'completed', 'terminate', 'error', 'stopped'].includes(st);
+          row.find('.pause-btn').prop('disabled', !isRunning);
+          row.find('.resume-btn').prop('disabled', !isPaused);
+          row.find('.stop-btn').prop('disabled', isFinished);
           reloadTasks();
-          Toastify({
-            text: 'Nouvelle tâche récupérée: ' + data.data?.name,
-            duration: 2000,
-            gravity: 'top',
-            position: 'right',
-            style: {
-              background: 'linear-gradient(135deg, rgba(0, 255, 136, 0.9) 0%, rgba(0, 200, 100, 0.9) 100%)',
-            }
-          }).showToast();
+        } else if (type === 'send_add_task') {
+          reloadTasks();
+          if (payload.name) {
+            Toastify({
+              text: 'Nouvelle tâche: ' + payload.name,
+              duration: 2500,
+              gravity: 'top',
+              position: 'right',
+              style: {
+                background: 'linear-gradient(135deg, rgba(0, 255, 136, 0.9) 0%, rgba(0, 200, 100, 0.9) 100%)',
+              }
+            }).showToast();
+          }
+        } else if (type === 'send_task_deleted') {
+          reloadTasks();
         }
       };
+
+      // Keepalive ping
+      if (window._wsPingTimer) clearInterval(window._wsPingTimer);
+      window._wsPingTimer = setInterval(function() {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'ping' }));
+        }
+      }, 25000);
     }
 
     setupWebSocket();
