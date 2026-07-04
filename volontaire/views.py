@@ -302,30 +302,53 @@ from django.db.models import Prefetch
 
 
 def home(request):
-    # Dernière info machine
-    machine = MachineInfo.objects.order_by('-last_update').first()
+    from volontaire.preferences_payload import build_preferences_payload, is_available_now
+
+    machine = getattr(MachineInfo.objects, "get_last_inserted", lambda: None)()
+    if not machine:
+        machine = MachineInfo.objects.order_by('-last_update').first()
     etat = EtatMachine.objects.filter(machine=machine).order_by('-timestamp').first() if machine else None
     preferences = PreferenceModel.objects.filter(machine=machine).first() if machine else None
+    pref_summary = build_preferences_payload()
+    available_now = is_available_now(pref_summary)
 
-    # Toutes les tâches, avec progression la plus récente
     tasks = Task.objects.all().order_by('-start_date')
+    counts = {
+        'total': tasks.count(),
+        'running': 0,
+        'pending': 0,
+        'completed': 0,
+        'failed': 0,
+    }
     for task in tasks:
         last_progress = task.progress_events.order_by('-timestamp').first()
-        task.progress = last_progress.percentage if last_progress else 0
-
-        # Ajouter la commande depuis docker_information ou parameters
-        command = None
-        if task.docker_information:
-            command = task.docker_information.get('command', task.docker_information.get('cmd'))
-        if not command and task.parameters:
+        task.progress = last_progress.percentage if last_progress else (
+            100 if task.status in ('completed', 'complete') else 0
+        )
+        command = getattr(task, 'command', None)
+        if not command and task.docker_information:
+            command = task.docker_information.get('command') or task.docker_information.get('cmd')
+        if not command and isinstance(task.parameters, dict):
             command = task.parameters.get('command')
-        task.command = command
+        task.command = command or '—'
+        st = (task.status or '').lower()
+        if st in ('running', 'progress', 'started'):
+            counts['running'] += 1
+        elif st in ('pending', 'queued', 'assigned'):
+            counts['pending'] += 1
+        elif st in ('completed', 'complete'):
+            counts['completed'] += 1
+        elif st in ('failed', 'error', 'terminate', 'stopped'):
+            counts['failed'] += 1
 
     context = {
         'machine': machine,
         'etat': etat,
         'preferences': preferences,
+        'pref_summary': pref_summary,
+        'available_now': available_now,
         'tasks': tasks,
+        'counts': counts,
     }
     return render(request, 'home.html', context)
 
