@@ -332,14 +332,17 @@ def home(request):
             command = task.parameters.get('command')
         task.command = command or '—'
         st = (task.status or '').lower()
-        if st in ('running', 'progress', 'started'):
+        if st in ('running', 'progress', 'started', 'in_progress'):
             counts['running'] += 1
-        elif st in ('pending', 'queued', 'assigned'):
+        elif st in ('pending', 'queued', 'assigned', 'created', 'accepted'):
             counts['pending'] += 1
         elif st in ('completed', 'complete'):
             counts['completed'] += 1
-        elif st in ('failed', 'error', 'terminate', 'stopped'):
+        elif st in ('failed', 'error', 'terminate', 'stopped', 'cancelled', 'canceled'):
             counts['failed'] += 1
+        else:
+            # Statut inconnu : compter en attente pour ne pas fausser le total
+            counts['pending'] += 1
 
     context = {
         'machine': machine,

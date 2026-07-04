@@ -1086,7 +1086,8 @@
     });
 
     const STATUS_LABELS = {
-      pending: 'En attente', queued: 'En file', assigned: 'Assignée',
+      pending: 'En attente', queued: 'En file', assigned: 'Assignée', created: 'En attente',
+      accepted: 'Acceptée', in_progress: 'En cours',
       running: 'En cours', progress: 'En cours', started: 'Démarrée',
       paused: 'En pause', completed: 'Terminée', complete: 'Terminée',
       failed: 'Échouée', error: 'Erreur', stopped: 'Arrêtée', terminate: 'Terminée',
@@ -1099,10 +1100,11 @@
       let running = 0, pending = 0, completed = 0, failed = 0;
       (data || []).forEach(t => {
         const s = (t.status || '').toLowerCase();
-        if (['running', 'progress', 'started'].includes(s)) running++;
-        else if (['pending', 'queued', 'assigned'].includes(s)) pending++;
+        if (['running', 'progress', 'started', 'in_progress'].includes(s)) running++;
+        else if (['pending', 'queued', 'assigned', 'created', 'accepted'].includes(s)) pending++;
         else if (['completed', 'complete'].includes(s)) completed++;
-        else if (['failed', 'error', 'terminate', 'stopped'].includes(s)) failed++;
+        else if (['failed', 'error', 'terminate', 'stopped', 'cancelled', 'canceled'].includes(s)) failed++;
+        else pending++;
       });
       $('#stat-total').text((data || []).length);
       $('#stat-running').text(running);
@@ -1117,8 +1119,8 @@
         const st = ($(this).data('status') || '').toLowerCase();
         const text = $(this).text().toLowerCase();
         let show = true;
-        if (currentFilter === 'running') show = ['running', 'progress', 'started'].includes(st);
-        else if (currentFilter === 'pending') show = ['pending', 'queued', 'assigned'].includes(st);
+        if (currentFilter === 'running') show = ['running', 'progress', 'started', 'in_progress'].includes(st);
+        else if (currentFilter === 'pending') show = ['pending', 'queued', 'assigned', 'created', 'accepted'].includes(st);
         else if (currentFilter === 'completed') show = ['completed', 'complete'].includes(st);
         else if (currentFilter === 'failed') show = ['failed', 'error', 'terminate', 'stopped'].includes(st);
         if (q && text.indexOf(q) === -1) show = false;

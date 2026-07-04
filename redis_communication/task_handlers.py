@@ -252,24 +252,52 @@ class TaskManager:
             Task = apps.get_model('volontaire', 'Task')
             existing_task = Task.objects.filter(task_id=task_id).first()
             if existing_task:
-                logger.warning(f"Tâche {task_id} déjà reçue, statut actuel: {existing_task.status}")
-                
-                continue
-
-            # Créer une nouvelle tâche
-            task = Task(
-                task_id=str(task_id),
-                name=task_data.get('name', 'Tâche sans nom'),
-                workflow=workflow,
-                command=task_data.get('command'),
-                parameters=task_data.get('parameters', {}),
-                status='pending',
-                input_data=task_data.get('input_data', {}),
-                estimated_execution_time=task_data.get('estimated_execution_time', 0),
-                input_data_size=task_data.get('input_data_size', 0),
-                docker_information=task_data.get('docker_information', {}),
-            )
-            task.save()
+                st = (existing_task.status or '').lower()
+                if st in ('completed', 'complete', 'in_progress', 'running', 'started'):
+                    logger.info(
+                        "Tâche %s déjà %s — pas de réexécution",
+                        task_id,
+                        existing_task.status,
+                    )
+                    continue
+                logger.info(
+                    "Tâche %s déjà reçue (statut %s) — mise à jour et reprise",
+                    task_id,
+                    existing_task.status,
+                )
+                existing_task.name = task_data.get('name', existing_task.name)
+                existing_task.workflow = workflow
+                existing_task.command = task_data.get('command', existing_task.command)
+                existing_task.parameters = task_data.get('parameters', existing_task.parameters or {})
+                existing_task.status = 'assigned'
+                existing_task.input_data = task_data.get('input_data', existing_task.input_data or {})
+                existing_task.estimated_execution_time = task_data.get(
+                    'estimated_execution_time', existing_task.estimated_execution_time or 0
+                )
+                existing_task.input_data_size = task_data.get(
+                    'input_data_size', existing_task.input_data_size or 0
+                )
+                existing_task.docker_information = task_data.get(
+                    'docker_information', existing_task.docker_information or {}
+                )
+                existing_task.end_date = None
+                existing_task.save()
+                task = existing_task
+            else:
+                # Créer une nouvelle tâche
+                task = Task(
+                    task_id=str(task_id),
+                    name=task_data.get('name', 'Tâche sans nom'),
+                    workflow=workflow,
+                    command=task_data.get('command'),
+                    parameters=task_data.get('parameters', {}),
+                    status='assigned',
+                    input_data=task_data.get('input_data', {}),
+                    estimated_execution_time=task_data.get('estimated_execution_time', 0),
+                    input_data_size=task_data.get('input_data_size', 0),
+                    docker_information=task_data.get('docker_information', {}),
+                )
+                task.save()
 
 
 
