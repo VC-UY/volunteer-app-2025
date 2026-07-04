@@ -773,22 +773,38 @@
             
             <div class="form-group resources mb-4">
               <div>
-                <label for="cpu"><i class="fas fa-microchip me-2"></i>CPU (%):</label>
-                <input type="number" id="cpu" min="1" max="100" value="100">
+                <label for="cpu"><i class="fas fa-microchip me-2"></i>CPU max (%):</label>
+                <input type="number" id="cpu" min="1" max="100" value="80">
               </div>
               <div>
-                <label for="ram"><i class="fas fa-memory me-2"></i>RAM (GB):</label>
-                <input type="number" id="ram" min="1" value="16">
+                <label for="ram"><i class="fas fa-memory me-2"></i>RAM offerte (Go):</label>
+                <input type="number" id="ram" min="1" value="8">
               </div>
               <div>
-                <label for="maxTime"><i class="fas fa-hourglass-half me-2"></i>Temps max (min):</label>
-                <input type="number" id="maxTime" min="1" value="60">
+                <label for="disk"><i class="fas fa-hdd me-2"></i>Disque offert (Go):</label>
+                <input type="number" id="disk" min="1" value="20">
               </div>
+              <div>
+                <label for="maxTime"><i class="fas fa-hourglass-half me-2"></i>Durée max tâche (min, 0=illimité):</label>
+                <input type="number" id="maxTime" min="0" value="0">
+              </div>
+            </div>
+
+            <div class="form-group mb-4">
+              <label><i class="fas fa-flask me-2"></i>Types de calcul acceptés:</label>
+              <div class="d-flex flex-wrap gap-2 mt-2">
+                <label class="day-label"><input type="checkbox" class="type-checkbox" value="OPEN_MALARIA" checked> OpenMalaria</label>
+                <label class="day-label"><input type="checkbox" class="type-checkbox" value="ML_TRAINING" checked> ML Training</label>
+                <label class="day-label"><input type="checkbox" class="type-checkbox" value="MATRIX_ADDITION"> Matrices (+)</label>
+                <label class="day-label"><input type="checkbox" class="type-checkbox" value="MATRIX_MULTIPLICATION"> Matrices (×)</label>
+                <label class="day-label"><input type="checkbox" class="type-checkbox" value="CUSTOM"> Custom</label>
+              </div>
+              <small style="color:#94A3B8;">Le Manager n'assignera que ces types pendant vos créneaux.</small>
             </div>
             
             <div class="form-group mb-3">
               <button type="button" class="btn btn-outline-primary w-100" onclick="addTimeSlot()">
-                <i class="fas fa-plus me-2"></i> Ajouter ce créneau
+                <i class="fas fa-plus me-2"></i> Ajouter ce créneau horaire
               </button>
             </div>
             
@@ -1102,7 +1118,20 @@
       fetch('/preferences/')
         .then(response => response.json())
         .then(data => {
-          currentPreferences = data;
+          if (Array.isArray(data)) {
+            currentPreferences = data;
+          } else {
+            currentPreferences = data.slots || [];
+            const summary = data.summary || {};
+            if (summary.cpu_max_utilisation) document.getElementById('cpu').value = summary.cpu_max_utilisation;
+            if (summary.max_ram_gb) document.getElementById('ram').value = summary.max_ram_gb;
+            if (summary.max_disk_gb) document.getElementById('disk').value = summary.max_disk_gb;
+            if (summary.duree_max_execution !== undefined) document.getElementById('maxTime').value = summary.duree_max_execution;
+            const types = (summary.types_calcul_autorises || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+            document.querySelectorAll('.type-checkbox').forEach(cb => {
+              cb.checked = types.length === 0 || types.includes(cb.value);
+            });
+          }
           renderPrefs();
         })
         .catch(e => {
@@ -1116,14 +1145,19 @@
       const endTime = document.getElementById('endTime').value;
       const cpu = document.getElementById('cpu').value;
       const ram = document.getElementById('ram').value;
+      const disk = document.getElementById('disk').value;
       const maxTime = document.getElementById('maxTime').value;
       
       if (!startTime || !endTime) {
         alert('Veuillez spécifier les heures de début et de fin.');
         return;
       }
+      if (startTime >= endTime) {
+        alert("L'heure de début doit être avant l'heure de fin.");
+        return;
+      }
       
-      tempTimeSlots.push({startTime, endTime, cpu, ram, maxTime});
+      tempTimeSlots.push({startTime, endTime, cpu, ram, disk, maxTime});
       renderTimeSlots();
     }
 
@@ -1143,8 +1177,9 @@
           <div>
             <strong>${slot.startTime} - ${slot.endTime}</strong> | 
             <span style="color: #00B0F0;">CPU: ${slot.cpu}%</span> | 
-            <span style="color: #00B0F0;">RAM: ${slot.ram}GB</span> | 
-            <span style="color: #00B0F0;">Max: ${slot.maxTime}min</span>
+            <span style="color: #00B0F0;">RAM: ${slot.ram}Go</span> | 
+            <span style="color: #00B0F0;">Disque: ${slot.disk || '?'}Go</span> | 
+            <span style="color: #00B0F0;">Max: ${slot.maxTime || 0}min</span>
           </div>
           <button type='button' class='btn btn-sm btn-danger' onclick='removeTimeSlot(${index})'>
             <i class='fas fa-trash-alt'></i>
@@ -1160,10 +1195,10 @@
     }
 
     function savePreferences() {
-      const selectedDays = Array.from(document.querySelectorAll('.day-checkbox:checked')).map(cb => cb.value);
+      const selectedDays = Array.from(document.querySelectorAll('.day-checkbox:checked')).map(cb => cb.value.toLowerCase());
       
       if (selectedDays.length === 0) {
-        alert('Veuillez sélectionner au moins un jour.');
+        alert('Veuillez sélectionner au moins un jour (semaine et/ou weekend).');
         return;
       }
       
@@ -1171,6 +1206,12 @@
         alert('Veuillez ajouter au moins un créneau horaire.');
         return;
       }
+
+      const types = Array.from(document.querySelectorAll('.type-checkbox:checked')).map(cb => cb.value).join(',');
+      const cpu = parseInt(document.getElementById('cpu').value, 10) || 80;
+      const ram = parseInt(document.getElementById('ram').value, 10) || 4;
+      const disk = parseInt(document.getElementById('disk').value, 10) || 10;
+      const maxTime = parseInt(document.getElementById('maxTime').value, 10) || 0;
       
       const allPrefs = [];
       selectedDays.forEach(day => {
@@ -1179,14 +1220,22 @@
             day,
             startTime: slot.startTime,
             endTime: slot.endTime,
-            cpu: slot.cpu,
-            ram: slot.ram,
-            maxTime: slot.maxTime
+            cpu: slot.cpu || cpu,
+            ram: slot.ram || ram,
+            disk: slot.disk || disk,
+            maxTime: slot.maxTime || maxTime
           });
         });
       });
       
-      const payload = { preferences: allPrefs };
+      const payload = {
+        preferences: allPrefs,
+        cpu_max_utilisation: cpu,
+        max_ram_gb: ram,
+        max_disk_gb: disk,
+        duree_max_execution: maxTime,
+        types_calcul_autorises: types,
+      };
       
       fetch('/save_preferences/', {
         method: 'POST',
@@ -1200,14 +1249,16 @@
       .then(data => {
         if (data.success) {
           Toastify({
-            text: 'Préférences enregistrées avec succès',
-            duration: 2000,
+            text: 'Préférences enregistrées — le Manager les respectera à l\'assignation',
+            duration: 3000,
             gravity: 'top',
             position: 'right',
             style: {
               background: 'linear-gradient(135deg, rgba(0, 255, 136, 0.9) 0%, rgba(0, 200, 100, 0.9) 100%)',
             }
           }).showToast();
+          tempTimeSlots = [];
+          renderTimeSlots();
           loadPreferences();
           var modalEl = bootstrap.Modal.getInstance(document.getElementById('prefModal'));
           if (modalEl) modalEl.hide();
@@ -1255,11 +1306,11 @@
           row.appendChild(timeCell);
           
           const resourceCell = document.createElement('td');
-          resourceCell.innerHTML = `<span style="color: #00B0F0;">CPU: ${pref.cpu}%</span> | <span style="color: #00B0F0;">RAM: ${pref.ram}GB</span> | <span style="color: #00B0F0;">Max: ${pref.maxTime}min</span>`;
+          resourceCell.innerHTML = `<span style="color: #00B0F0;">CPU: ${pref.cpu}%</span> | <span style="color: #00B0F0;">RAM: ${pref.ram}Go</span> | <span style="color: #00B0F0;">Disque: ${pref.disk || '?'}Go</span> | <span style="color: #00B0F0;">Max: ${pref.maxTime || 0}min</span>`;
           row.appendChild(resourceCell);
           
           const actionCell = document.createElement('td');
-          actionCell.innerHTML = `<button class="btn btn-sm btn-danger" onclick="deletePreference(${pref.id || pref.index})"><i class="fas fa-trash-alt"></i></button>`;
+          actionCell.innerHTML = `<button class="btn btn-sm btn-danger" onclick="deletePreferenceSlot(${pref.id || pref.index})"><i class="fas fa-trash-alt"></i></button>`;
           row.appendChild(actionCell);
           
           table.appendChild(row);
@@ -1267,33 +1318,26 @@
       });
     }
 
-    function deletePreference(id) {
-      if (!confirm("Voulez-vous vraiment supprimer cette préférence ?")) return;
-      
-      fetch(`/preferences/delete/${id}/`, {
-        method: 'DELETE',
-        headers: {
-          'X-CSRFToken': getCookie('csrftoken'),
-          'Content-Type': 'application/json',
-        }
-      })
-      .then(response => {
-        if (response.ok) {
-          loadPreferences();
-          Toastify({
-            text: 'Préférence supprimée',
-            duration: 2000,
-            gravity: 'top',
-            position: 'right',
-            style: {
-              background: 'linear-gradient(135deg, rgba(0, 255, 136, 0.9) 0%, rgba(0, 200, 100, 0.9) 100%)',
-            }
-          }).showToast();
-        } else {
-          alert("Erreur lors de la suppression");
-        }
-      })
-      .catch(() => alert("Erreur lors de la suppression"));
+    function deletePreferenceSlot(index) {
+      if (!confirm("Supprimer ce créneau ?")) return;
+      const next = currentPreferences.filter((_, i) => i !== index);
+      if (next.length === 0) {
+        fetch('/preferences/delete/', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+          body: JSON.stringify({action: 'delete_all'})
+        }).then(() => loadPreferences());
+        return;
+      }
+      // Re-sauver sans le créneau
+      tempTimeSlots = next.map(p => ({
+        startTime: p.startTime, endTime: p.endTime, cpu: p.cpu, ram: p.ram, disk: p.disk, maxTime: p.maxTime
+      }));
+      // cocher les jours restants
+      document.querySelectorAll('.day-checkbox').forEach(cb => {
+        cb.checked = next.some(p => (p.day || '').toLowerCase() === cb.value.toLowerCase());
+      });
+      savePreferences();
     }
 
     // Charger à l'affichage

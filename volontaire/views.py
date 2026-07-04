@@ -412,55 +412,101 @@ from .models import PreferenceModel, JourDisponible, PlageHoraire, MachineInfo
 from datetime import time
 
 
-@csrf_exempt  # ou utiliser @require_POST et inclure @csrf_protect avec le token
+@csrf_exempt
 def save_preferences(request):
     if request.method == 'POST':
         try:
+            from volontaire.preferences_payload import (
+                normalize_day,
+                save_preferences_file,
+                _machine_resources,
+            )
+
             data = json.loads(request.body)
+            machine = getattr(MachineInfo.objects, "get_last_inserted", lambda: None)()
+            if not machine:
+                machine = MachineInfo.objects.first()
 
-            # Récupérer la machine courante
-            machine = MachineInfo.objects.first()
-
-            # Créer ou mettre à jour les préférences
             if machine:
-                pref, created = PreferenceModel.objects.get_or_create(machine=machine)
+                pref, _created = PreferenceModel.objects.get_or_create(machine=machine)
             else:
-                # Si pas de machine, créer/récupérer une préférence sans machine
                 pref = PreferenceModel.objects.filter(machine__isnull=True).first()
                 if not pref:
                     pref = PreferenceModel.objects.create()
-                created = False
 
-            # Mettre à jour les champs simples
-            pref.cpu_max_utilisation = data.get('cpu_max_utilisation', 80)
-            pref.ram_max_utilisation = data.get('ram_max_utilisation', 80)
-            pref.disk_max_utilisation = data.get('disk_max_utilisation', 90)
-            pref.duree_max_execution = data.get('duree_max_execution', 0)
-            pref.notification_email = data.get('notification_email', False)
-            pref.priorite_min_acceptee = data.get('priorite_min_acceptee', 0)
-            pref.types_calcul_autorises = data.get('types_calcul_autorises', "")
-            pref.pauseActiviteUser = data.get('pauseActiviteUser', False)
-            pref.playInactiviteUser = data.get('playInactiviteUser', 0)
+            slots = data.get("preferences") or []
+            # Ressources: top-level ou premier créneau
+            first = slots[0] if slots else {}
+            cpu_pct = int(data.get("cpu_max_utilisation") or first.get("cpu") or 80)
+            ram_gb = int(data.get("max_ram_gb") or first.get("ram") or 4)
+            disk_gb = int(data.get("max_disk_gb") or first.get("disk") or 10)
+            max_time = int(data.get("duree_max_execution") or first.get("maxTime") or 0)
+            types_ok = data.get("types_calcul_autorises") or first.get("types") or ""
 
+            machine_res = _machine_resources()
+            max_cpu_cores = int(
+                data.get("max_cpu_cores")
+                or max(1, int(machine_res["cpu_cores"] * (cpu_pct / 100.0)))
+            )
+
+            pref.cpu_max_utilisation = max(1, min(100, cpu_pct))
+            pref.ram_max_utilisation = ram_gb  # stocke aussi la RAM offerte (Go)
+            pref.disk_max_utilisation = disk_gb
+            pref.duree_max_execution = max(0, max_time)
+            pref.notification_email = bool(data.get("notification_email", False))
+            pref.priorite_min_acceptee = int(data.get("priorite_min_acceptee", 0) or 0)
+            pref.types_calcul_autorises = types_ok
+            pref.pauseActiviteUser = bool(data.get("pauseActiviteUser", False))
+            pref.playInactiviteUser = int(data.get("playInactiviteUser", 0) or 0)
             pref.save()
 
-            # Nettoyer les anciens jours et créneaux
             pref.jours.all().delete()
-
-            # Ajouter les jours et plages horaires
-            for jour_data in data.get("preferences", []):
-                jour_nom = jour_data["day"]
+            schedule = []
+            for jour_data in slots:
+                jour_nom = normalize_day(jour_data.get("day") or jour_data.get("jour") or "")
+                if not jour_nom:
+                    continue
                 jour_obj = JourDisponible.objects.create(preference=pref, jour=jour_nom)
+                start_s = jour_data.get("startTime") or jour_data.get("start") or "00:00"
+                end_s = jour_data.get("endTime") or jour_data.get("end") or "23:59"
+                heure_debut = time.fromisoformat(start_s)
+                heure_fin = time.fromisoformat(end_s)
+                PlageHoraire.objects.create(
+                    jour=jour_obj, heure_debut=heure_debut, heure_fin=heure_fin
+                )
+                schedule.append(
+                    {"day": jour_nom, "start": start_s[:5], "end": end_s[:5]}
+                )
 
-                heure_debut = time.fromisoformat(jour_data["startTime"])
-                heure_fin = time.fromisoformat(jour_data["endTime"])
+            payload = {
+                "cpu_max_utilisation": pref.cpu_max_utilisation,
+                "max_cpu_cores": max_cpu_cores,
+                "max_ram_gb": ram_gb,
+                "max_disk_gb": disk_gb,
+                "duree_max_execution": pref.duree_max_execution,
+                "priorite_min_acceptee": pref.priorite_min_acceptee,
+                "types_calcul_autorises": pref.types_calcul_autorises or "",
+                "schedule": schedule,
+                "machine_cpu_cores": machine_res["cpu_cores"],
+                "machine_ram_mb": machine_res["ram_mb"],
+                "machine_disk_gb": machine_res["disk_gb"],
+            }
+            save_preferences_file(payload)
 
-                PlageHoraire.objects.create(jour=jour_obj, heure_debut=heure_debut, heure_fin=heure_fin)
+            # Publier immédiatement un heartbeat avec les nouvelles préférences
+            try:
+                from redis_communication.task_handlers import TaskManager
 
-            return JsonResponse({"success": True, "message": "Préférences enregistrées."})
-        
+                tm = TaskManager.get_instance()
+                if tm.volunteer_id:
+                    tm._send_heartbeat()
+            except Exception:
+                pass
+
+            return JsonResponse({"success": True, "message": "Préférences enregistrées.", "preferences": payload})
+
         except Exception as e:
-            return JsonResponse({"success": False, "error": str(e)})
+            return JsonResponse({"success": False, "error": str(e)}, status=400)
 
     return JsonResponse({"error": "Méthode non autorisée."}, status=405)
 
@@ -508,21 +554,32 @@ def delete_preference(request, id):
 
 
 def preferences_list(request):
-    # Ici, filtrage par machine ou utilisateur si besoin
+    from volontaire.preferences_payload import build_preferences_payload, load_preferences_file
+
+    payload = load_preferences_file() or build_preferences_payload()
+    schedule = payload.get("schedule") or []
     prefs = []
-    for pref in PreferenceModel.objects.all():
-        for jour in pref.jours.all():
-            for plage in jour.plages.all():
-                prefs.append({
-                    "id": plage.id,  # L'id utilisé pour la suppression
-                    "day": jour.jour,
-                    "startTime": plage.heure_debut.strftime('%H:%M'),
-                    "endTime": plage.heure_fin.strftime('%H:%M'),
-                    # Ajoute ici cpu/ram/maxTime si tu les stockes dans PlageHoraire ou ailleurs
-                    "cpu": getattr(plage, "cpu", 100),  # à adapter
-                    "ram": getattr(plage, "ram", 16),   # à adapter
-                    "maxTime": getattr(plage, "max_time", 60)  # à adapter
-                })
-    return JsonResponse(prefs, safe=False)
+    for index, slot in enumerate(schedule):
+        prefs.append(
+            {
+                "id": index,
+                "day": slot.get("day"),
+                "startTime": slot.get("start"),
+                "endTime": slot.get("end"),
+                "cpu": payload.get("cpu_max_utilisation", 80),
+                "ram": payload.get("max_ram_gb", 4),
+                "disk": payload.get("max_disk_gb", 10),
+                "maxTime": payload.get("duree_max_execution", 0),
+                "types": payload.get("types_calcul_autorises", ""),
+            }
+        )
+    # Inclure aussi le résumé global pour l'UI
+    return JsonResponse(
+        {
+            "slots": prefs,
+            "summary": payload,
+        },
+        safe=False,
+    )
 
 
