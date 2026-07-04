@@ -103,8 +103,9 @@ class RedisClient:
         Initialise ou réinitialise la connexion Redis avec socket keepalive.
         """
         try:
-            # Créer le client Redis avec socket keepalive
-            self.redis = redis.Redis(
+            # Créer le client Redis avec socket keepalive.
+            # protocol=2 (RESP2) obligatoire: le proxy coordinateur ne gere pas HELLO/RESP3.
+            redis_kwargs = dict(
                 host=self.host,
                 port=self.port,
                 db=self.db,
@@ -115,10 +116,22 @@ class RedisClient:
                     socket.TCP_KEEPINTVL: 10,
                     socket.TCP_KEEPCNT: 3
                 },
-                socket_connect_timeout=5,
-                socket_timeout=5,
-                health_check_interval=0  # Désactiver le health check automatique
+                socket_connect_timeout=10,
+                socket_timeout=30,
+                health_check_interval=0,  # Désactiver le health check automatique
+                # Evite CLIENT SETINFO: le proxy le filtre sans repondre (timeout)
+                lib_name=None,
+                lib_version=None,
             )
+            try:
+                self.redis = redis.Redis(protocol=2, **redis_kwargs)
+            except TypeError:
+                redis_kwargs.pop('lib_name', None)
+                redis_kwargs.pop('lib_version', None)
+                try:
+                    self.redis = redis.Redis(protocol=2, **redis_kwargs)
+                except TypeError:
+                    self.redis = redis.Redis(**redis_kwargs)
 
             # Ne pas faire de PING initial car le proxy nécessite une authentification JWT
             # self.redis.ping()
@@ -216,8 +229,9 @@ class RedisClient:
                 else:
                     logger.debug(f"Déjà abonné au canal Redis: {channel}")
             except Exception as e:
+                # Ne pas marquer la connexion comme morte: le publish utilise un autre
+                # socket, et le proxy peut renvoyer des erreurs non-fatales au SUBSCRIBE.
                 logger.error(f"Erreur lors de l'abonnement à {channel}: {e}")
-                self.connected = False
         
         return True
     

@@ -145,37 +145,49 @@ def _parse_size_to_bytes( size_str):
 
 def collect_full_volunteer_info(existing_info=None):
     """Collecte toutes les informations du volontaire via l'agent"""
-    static_data = get_machine_info()
+    static_data = get_machine_info() or {}
     logger.info(f"Données statiques collectées via l'agent: OS={static_data.get('os', {}).get('nom')}, CPU={static_data.get('cpu', {}).get('coeurs_logiques')} cores")
     
     from .utils import get_local_ip
     ip_address = get_local_ip()
-    hostname = static_data.get('os', {}).get('hostname', socket.gethostname())
-    cpu_cores = int(static_data.get('cpu', {}).get('coeurs_logiques', 1))
-    
-    # Conversion mémoire RAM
-    total_memory_str = static_data.get('memoire', {}).get('ram', {}).get('total', '1 GB')
-    try:
-        if 'GB' in total_memory_str:
-            ram_mb = float(total_memory_str.split(' ')[0]) * 1024
-        elif 'MB' in total_memory_str:
-            ram_mb = float(total_memory_str.split(' ')[0])
-        else:
-            ram_mb = 1024  # Default 1GB
-    except:
-        ram_mb = 1024
+    hostname = static_data.get('os', {}).get('hostname') or socket.gethostname()
+    cpu_cores = int(static_data.get('cpu', {}).get('coeurs_logiques') or 0)
 
-    # Conversion disque
-    total_disk_str = static_data.get('disque', {}).get('total', '10 GB')
-    try:
-        if 'GB' in total_disk_str:
-            disk_gb = float(total_disk_str.split(' ')[0])
-        elif 'TB' in total_disk_str:
-            disk_gb = float(total_disk_str.split(' ')[0]) * 1024
-        else:
-            disk_gb = 10  # Default 10GB
-    except:
-        disk_gb = 10
+    # Fallback psutil si l'agent n'a pas fourni les ressources
+    if cpu_cores < 1 or not static_data.get('memoire'):
+        try:
+            import psutil
+            cpu_cores = max(cpu_cores, psutil.cpu_count(logical=True) or 2)
+            ram_mb = psutil.virtual_memory().total / (1024 * 1024)
+            disk_gb = psutil.disk_usage('/').total / (1024 ** 3)
+        except Exception:
+            cpu_cores = max(cpu_cores, 2)
+            ram_mb = 4096
+            disk_gb = 50
+    else:
+        # Conversion mémoire RAM
+        total_memory_str = static_data.get('memoire', {}).get('ram', {}).get('total', '1 GB')
+        try:
+            if 'GB' in total_memory_str:
+                ram_mb = float(total_memory_str.split(' ')[0]) * 1024
+            elif 'MB' in total_memory_str:
+                ram_mb = float(total_memory_str.split(' ')[0])
+            else:
+                ram_mb = 4096
+        except Exception:
+            ram_mb = 4096
+
+        # Conversion disque
+        total_disk_str = static_data.get('disque', {}).get('total', '50 GB')
+        try:
+            if 'GB' in total_disk_str:
+                disk_gb = float(total_disk_str.split(' ')[0])
+            elif 'TB' in total_disk_str:
+                disk_gb = float(total_disk_str.split(' ')[0]) * 1024
+            else:
+                disk_gb = 50
+        except Exception:
+            disk_gb = 50
     
     username = (existing_info.username if existing_info and hasattr(existing_info, 'username') and existing_info.username else f"volunteer_{uuid.uuid4().hex[:8]}")
     password = (existing_info.password if existing_info and hasattr(existing_info, 'password') and existing_info.password else uuid.uuid4().hex)
@@ -450,6 +462,9 @@ class RedisAppConfig(AppConfig):
             # Importer ici pour éviter les importations circulaires
             from .client import RedisClient
             from .handlers import DEFAULT_HANDLERS
+
+            # Auth d'abord (RPC dedie), AVANT le client singleton qui peut saturer le proxy
+            auth_volunteer_flow()
             
             # Récupérer ou créer l'instance du client
             self.redis_client = RedisClient.get_instance()
@@ -459,10 +474,6 @@ class RedisAppConfig(AppConfig):
             # Enregistrer les gestionnaires par défaut
             for channel, handler in DEFAULT_HANDLERS.items():
                 self.redis_client.subscribe(channel, handler)
-            
-            # Démarrer le flux d'authentification du volontaire
-            auth_volunteer_flow()
-
             
             # Démarrer les threads de communication
             if self.redis_client and self.redis_client.running:

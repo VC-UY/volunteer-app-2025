@@ -51,6 +51,7 @@ class TaskManager:
         self.current_task = None
         self.task_process = None
         self.task_thread = None
+        self.heartbeat_thread = None
         self.running = False           
     
     def start(self, volunteer_id):
@@ -60,18 +61,67 @@ class TaskManager:
         Args:
             volunteer_id: ID du volontaire
         """
-        if self.running:
-            logger.warning("Le gestionnaire de tâches est déjà en cours d'exécution")
-            return
-        
         self.volunteer_id = str(volunteer_id)
+        if self.running:
+            logger.warning(
+                "Le gestionnaire de tâches est déjà en cours d'exécution (volunteer_id=%s)",
+                self.volunteer_id,
+            )
+            # Republier un heartbeat même si déjà démarré
+            self._send_heartbeat()
+            return
         self.running = True
         
         # S'abonner aux canaux de tâches
         self.redis_client.subscribe('task/assignment', self.handle_task_assignment)
         self.redis_client.subscribe('task/cancel', self.handle_task_cancel)
+
+        # Présence: heartbeat immédiat puis périodique
+        self._send_heartbeat()
+        self.heartbeat_thread = threading.Thread(
+            target=self._heartbeat_loop,
+            name=f"volunteer-heartbeat-{self.volunteer_id[:8]}",
+            daemon=True,
+        )
+        self.heartbeat_thread.start()
         
         logger.info(f"Gestionnaire de tâches démarré pour le volontaire {volunteer_id}")
+
+    def _send_heartbeat(self):
+        """Signale au manager/coordinateur que ce volontaire est en ligne."""
+        if not self.volunteer_id:
+            return
+        try:
+            from redis_communication.utils import get_volunteer_auth_token
+            import uuid as _uuid
+            payload = {
+                "volunteer_id": self.volunteer_id,
+                "status": "busy" if self.current_task else "available",
+                "timestamp": timezone.now().isoformat(),
+            }
+            token = get_volunteer_auth_token()
+            self.redis_client.publish(
+                "volunteer/heartbeat",
+                payload,
+                str(_uuid.uuid4()),
+                token,
+                "request",
+            )
+            # Alias historique
+            self.redis_client.publish(
+                "coord/heartbeat",
+                payload,
+                str(_uuid.uuid4()),
+                token,
+                "request",
+            )
+        except Exception as exc:
+            logger.warning("Echec heartbeat volontaire: %s", exc)
+
+    def _heartbeat_loop(self):
+        while self.running:
+            self._send_heartbeat()
+            time.sleep(20)
     
     def stop(self):
         """
@@ -84,6 +134,24 @@ class TaskManager:
             try:
                 self.task_process.terminate()
             except:
+                pass
+
+        # Signaler la déconnexion
+        if self.volunteer_id:
+            try:
+                from redis_communication.utils import get_volunteer_auth_token
+                import uuid as _uuid
+                self.redis_client.publish(
+                    "volunteer/disconnect",
+                    {
+                        "volunteer_id": self.volunteer_id,
+                        "timestamp": timezone.now().isoformat(),
+                    },
+                    str(_uuid.uuid4()),
+                    get_volunteer_auth_token(),
+                    "request",
+                )
+            except Exception:
                 pass
         
         # Se désabonner des canaux
@@ -763,24 +831,64 @@ class TaskManager:
 
             logger.info(f"Fichiers à servir: {output_files}")
 
-            # Démarrer le serveur de fichiers pour cette tâche
-            port = start_task_file_server(task_id, output_dir)
+            # Preferer l'upload HTTP vers le manager (fonctionne derriere NAT / Docker)
+            uploaded = False
+            upload_url = None
+            if isinstance(task.input_data, dict):
+                upload_url = task.input_data.get('result_upload_url')
+            if upload_url and output_files:
+                try:
+                    import requests
+                    files_payload = []
+                    opened = []
+                    for name in output_files:
+                        handle = open(os.path.join(output_dir, name), 'rb')
+                        opened.append(handle)
+                        files_payload.append(('files', (name, handle)))
+                    response = requests.post(upload_url, files=files_payload, timeout=120)
+                    for handle in opened:
+                        handle.close()
+                    if response.status_code < 300:
+                        uploaded = True
+                        logger.info(
+                            "Sorties de la tache %s poussees vers %s (%s)",
+                            task_id,
+                            upload_url,
+                            response.status_code,
+                        )
+                    else:
+                        logger.error(
+                            "Echec upload sorties tache %s: HTTP %s %s",
+                            task_id,
+                            response.status_code,
+                            response.text[:300],
+                        )
+                except Exception as upload_error:
+                    logger.error("Erreur upload sorties tache %s: %s", task_id, upload_error)
+
+            file_server_info = {
+                'uploaded': uploaded,
+                'output_files': output_files,
+            }
+            if not uploaded:
+                # Fallback: serveur de fichiers local (LAN uniquement)
+                port = start_task_file_server(task_id, output_dir)
+                from redis_communication.utils import get_local_ip
+                file_server_info.update({
+                    'host': get_local_ip(),
+                    'port': port,
+                    'path': '/files/',
+                })
 
             # Envoyer une notification de complétion avec les informations du serveur de fichiers
             from redis_communication.utils import get_volunteer_auth_token
-            from redis_communication.utils import get_local_ip
             self.redis_client.publish('task/status', {
                 'task_id': task.task_id,
                 'volunteer_id': self.volunteer_id,
                 'workflow_id': task.workflow.workflow_id if hasattr(task, 'workflow') and task.workflow else None,
                 'status': 'completed',
                 'timestamp': datetime.now().isoformat(),
-                'file_server': {
-                    'host': get_local_ip(),  # Utiliser l'adresse IP du volontaire en production
-                    'port': port,
-                    'path': '/files/',
-                    'output_files': output_files
-                }
+                'file_server': file_server_info,
             },
             str(uuid.uuid4()),
             get_volunteer_auth_token(),
@@ -919,34 +1027,43 @@ class TaskManager:
 
             # Récupérer les informations Docker
             docker_info = task.docker_information or {}
-            image_name = docker_info.get("name") or docker_info.get("image_name")
+            image_name = (
+                docker_info.get("image_name")
+                or docker_info.get("name")
+                or docker_info.get("image")
+            )
+            tag = docker_info.get("tag", "latest")
+            if image_name and ":" not in image_name:
+                image_name = f"{image_name}:{tag}"
 
             if not image_name:
                 raise ValueError("Nom d'image Docker manquant dans les informations de la tâche")
-
-            # Ajouter le tag à l'image si présent
-            image_tag = docker_info.get("tag")
-            if image_tag:
-                image_name = f"{image_name}:{image_tag}"
             
             # Définir les limites de ressources
             cpu_limit = docker_info.get("cpu_limit", 1.0)  # Par défaut, 1 CPU
             mem_limit = docker_info.get("memory_limit", "1g")  # Par défaut, 1GB
             
             # Préparer les volumes pour monter les fichiers d'entrée/sortie
-            volumes = {}
-            if hasattr(task, 'local_input_path') and task.local_input_path:
-                volumes[task.local_input_path] = {'bind': '/input', 'mode': 'ro'}
-            
-            # Créer un répertoire de sortie
             import os
             from pathlib import Path
+            volumes = {}
+            if hasattr(task, 'local_input_path') and task.local_input_path:
+                input_path = task.local_input_path
+                if os.path.isfile(input_path):
+                    input_path = os.path.dirname(input_path)
+                volumes[input_path] = {'bind': '/input', 'mode': 'ro'}
+            
+            # Créer un répertoire de sortie
             output_dir = Path(f"{TASKS_DIR}/{task.task_id}/output")
             output_dir.mkdir(parents=True, exist_ok=True)
             volumes[str(output_dir)] = {'bind': '/output', 'mode': 'rw'}
             
-            # Démarrer le conteneur Docker avec working_dir=/input pour que les fichiers d'entrée soient accessibles
-            logger.info(f"Démarrage du conteneur Docker pour la tâche {task.task_id} avec l'image {image_name} et la commande {task.command}")
+            # Ne pas passer command: les images demo ont un ENTRYPOINT.
+            # Sinon Docker fait ENTRYPOINT + command = "python script.py python script.py" (exit 2).
+            logger.info(
+                f"Démarrage du conteneur Docker pour la tâche {task.task_id} "
+                f"avec l'image {image_name} (ENTRYPOINT image)"
+            )
             logger.info(f"Volumes montés: {volumes}")
             container = docker_manager.run_container(
                 image_name=image_name,
@@ -954,8 +1071,8 @@ class TaskManager:
                 cpu_limit=cpu_limit,
                 mem_limit=mem_limit,
                 volumes=volumes,
-                working_dir='/input',  # Le conteneur démarre dans /input où les fichiers sont montés
-                command=task.command
+                working_dir='/app',
+                command=None,
             )
             
             if not container:
