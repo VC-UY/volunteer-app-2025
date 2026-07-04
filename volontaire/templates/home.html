@@ -514,34 +514,80 @@
       color: #00D4FF;
     }
     
-    /* Preferences Table */
-    #prefsTable {
-      background: rgba(0, 180, 240, 0.05);
-      border: 1px solid rgba(0, 180, 240, 0.2);
-      border-radius: 12px;
-      overflow: hidden;
-      color: #FFFFFF;
+    /* Créneaux — cartes (pas de table Bootstrap = pas de fond blanc) */
+    #prefsList {
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
     }
-    
-    #prefsTable th {
-      background: linear-gradient(135deg, rgba(0, 180, 240, 0.15) 0%, rgba(0, 212, 255, 0.1) 100%);
+    .slot-card {
+      background: rgba(15, 23, 42, 0.65);
+      border: 1px solid rgba(0, 180, 240, 0.28);
+      border-radius: 12px;
+      padding: 0.75rem 0.9rem;
+      color: #E2E8F0;
+    }
+    .slot-card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      margin-bottom: 0.45rem;
+    }
+    .slot-day {
+      display: inline-block;
+      background: rgba(0, 212, 255, 0.15);
+      border: 1px solid rgba(0, 212, 255, 0.35);
       color: #00D4FF;
       font-weight: 700;
-      letter-spacing: 0.3px;
-      padding: 0.75rem;
-      border: none;
-      text-transform: uppercase;
       font-size: 0.8rem;
+      text-transform: capitalize;
+      padding: 0.2rem 0.55rem;
+      border-radius: 8px;
     }
-    
-    #prefsTable td {
-      padding: 0.75rem;
-      border-bottom: 1px solid rgba(0, 180, 240, 0.1);
-      color: #FFFFFF;
+    .slot-time {
+      color: #94A3B8;
+      font-size: 0.85rem;
+      font-weight: 600;
     }
-    
-    #prefsTable strong {
-      color: #00D4FF;
+    .slot-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+    }
+    .slot-tag {
+      background: rgba(0, 180, 240, 0.12);
+      border: 1px solid rgba(0, 180, 240, 0.25);
+      color: #7DD3FC;
+      font-size: 0.72rem;
+      padding: 0.15rem 0.45rem;
+      border-radius: 6px;
+      white-space: nowrap;
+    }
+    .slot-empty {
+      text-align: center;
+      color: #64748B;
+      font-size: 0.85rem;
+      padding: 1rem 0.5rem;
+      border: 1px dashed rgba(0, 180, 240, 0.25);
+      border-radius: 12px;
+    }
+    .btn-slot-del {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: #FCA5A5;
+      border-radius: 8px;
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+    .btn-slot-del:hover {
+      background: rgba(239, 68, 68, 0.35);
+      color: #fff;
     }
     
     /* Status Badges */
@@ -680,7 +726,7 @@
           <i class="fas fa-edit me-1"></i> Configurer préférences
         </button>
         <h6 class="mt-2"><i class="fas fa-calendar-alt me-2"></i>Créneaux</h6>
-        <table id="prefsTable" class="table table-sm mt-2"></table>
+        <div id="prefsList" class="mt-2"></div>
       </aside>
       
       <main class="col-lg-9">
@@ -1421,51 +1467,42 @@
     }
 
     function renderPrefs() {
-      const table = document.getElementById('prefsTable');
-      table.innerHTML = '<tr><th>Jour</th><th>Plage horaire</th><th>Ressources</th><th>Action</th></tr>';
-      
+      const list = document.getElementById('prefsList');
+      if (!list) return;
+      list.innerHTML = '';
+
       if (!currentPreferences || currentPreferences.length === 0) {
-        const emptyRow = document.createElement('tr');
-        emptyRow.innerHTML = '<td colspan="4" class="text-center" style="color: #00B0F0; padding: 1rem;">Aucune préférence enregistrée</td>';
-        table.appendChild(emptyRow);
+        list.innerHTML = '<div class="slot-empty">Aucun créneau configuré.<br>Cliquez sur « Configurer préférences ».</div>';
         return;
       }
-      
-      const groupedPrefs = {};
-      currentPreferences.forEach((pref, index) => {
-        const day = pref.day;
-        if (!groupedPrefs[day]) groupedPrefs[day] = [];
-        groupedPrefs[day].push({...pref, index});
+
+      const dayOrder = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche'];
+      const sorted = [...currentPreferences].sort((a, b) => {
+        const da = dayOrder.indexOf((a.day || '').toLowerCase());
+        const db = dayOrder.indexOf((b.day || '').toLowerCase());
+        return (da === -1 ? 99 : da) - (db === -1 ? 99 : db);
       });
-      
-      Object.keys(groupedPrefs).sort().forEach(day => {
-        const prefs = groupedPrefs[day];
-        const rowspan = prefs.length;
-        
-        prefs.forEach((pref, idx) => {
-          const row = document.createElement('tr');
-          
-          if (idx === 0) {
-            const dayCell = document.createElement('td');
-            dayCell.rowSpan = rowspan;
-            dayCell.innerHTML = `<strong>${day}</strong>`;
-            row.appendChild(dayCell);
-          }
-          
-          const timeCell = document.createElement('td');
-          timeCell.innerHTML = `${pref.startTime} - ${pref.endTime}`;
-          row.appendChild(timeCell);
-          
-          const resourceCell = document.createElement('td');
-          resourceCell.innerHTML = `<span style="color: #00B0F0;">CPU: ${pref.cpu}%</span> | <span style="color: #00B0F0;">RAM: ${pref.ram}Go</span> | <span style="color: #00B0F0;">Disque: ${pref.disk || '?'}Go</span> | <span style="color: #00B0F0;">Max: ${pref.maxTime || 0}min</span>`;
-          row.appendChild(resourceCell);
-          
-          const actionCell = document.createElement('td');
-          actionCell.innerHTML = `<button class="btn btn-sm btn-danger" onclick="deletePreferenceSlot(${pref.id || pref.index})"><i class="fas fa-trash-alt"></i></button>`;
-          row.appendChild(actionCell);
-          
-          table.appendChild(row);
-        });
+
+      sorted.forEach((pref, index) => {
+        const day = (pref.day || '—');
+        const card = document.createElement('div');
+        card.className = 'slot-card';
+        card.innerHTML = `
+          <div class="slot-card-top">
+            <span class="slot-day">${day}</span>
+            <span class="slot-time">${pref.startTime || '—'} – ${pref.endTime || '—'}</span>
+            <button type="button" class="btn-slot-del" onclick="deletePreferenceSlot(${typeof pref.id === 'number' ? pref.id : index})" title="Supprimer">
+              <i class="fas fa-trash-alt"></i>
+            </button>
+          </div>
+          <div class="slot-tags">
+            <span class="slot-tag">CPU ${pref.cpu ?? '—'}%</span>
+            <span class="slot-tag">RAM ${pref.ram ?? '—'} Go</span>
+            <span class="slot-tag">Disque ${pref.disk ?? '—'} Go</span>
+            <span class="slot-tag">${pref.maxTime ? ('Max ' + pref.maxTime + ' min') : 'Durée libre'}</span>
+          </div>
+        `;
+        list.appendChild(card);
       });
     }
 
