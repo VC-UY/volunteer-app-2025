@@ -94,10 +94,24 @@ class TaskManager:
         try:
             from redis_communication.utils import get_volunteer_auth_token
             import uuid as _uuid
+            from volontaire.preferences_payload import (
+                build_preferences_payload,
+                is_available_now,
+            )
+
+            prefs = build_preferences_payload()
+            available_now = is_available_now(prefs) and not self.current_task
             payload = {
                 "volunteer_id": self.volunteer_id,
-                "status": "busy" if self.current_task else "available",
+                "status": "busy" if self.current_task else ("available" if available_now else "offline"),
                 "timestamp": timezone.now().isoformat(),
+                "preferences": prefs,
+                "resources": {
+                    "cpu_cores": prefs.get("max_cpu_cores") or prefs.get("machine_cpu_cores") or 1,
+                    "memory_mb": int((prefs.get("max_ram_gb") or 1) * 1024),
+                    "disk_space_mb": int((prefs.get("max_disk_gb") or 1) * 1024),
+                    "gpu": False,
+                },
             }
             token = get_volunteer_auth_token()
             self.redis_client.publish(
@@ -190,6 +204,12 @@ class TaskManager:
         
         logger.info(f"{len(volunteer_tasks)} tâches assignées au volontaire {self.volunteer_id}")
 
+        from volontaire.preferences_payload import (
+            build_preferences_payload,
+            task_matches_preferences,
+        )
+        prefs = build_preferences_payload()
+
         # Creer le workflow s'il n'existe pas
         from django.apps import apps
         Workflow = apps.get_model('volontaire', 'Workflow')
@@ -200,6 +220,32 @@ class TaskManager:
         # Traiter chaque tâche assignée à ce volontaire
         for task_data in volunteer_tasks:
             task_id = task_data.get('task_id')
+
+            ok, reason = task_matches_preferences(task_data, prefs)
+            if not ok:
+                logger.warning(
+                    "Tâche %s refusée (préférences): %s", task_id, reason
+                )
+                try:
+                    from redis_communication.utils import get_volunteer_auth_token
+                    import uuid as _uuid
+                    self.redis_client.publish(
+                        "task/status",
+                        {
+                            "task_id": str(task_id),
+                            "volunteer_id": self.volunteer_id,
+                            "workflow_id": workflow_id,
+                            "status": "failed",
+                            "error_type": "preference_mismatch",
+                            "error_message": reason,
+                        },
+                        str(_uuid.uuid4()),
+                        get_volunteer_auth_token(),
+                        "request",
+                    )
+                except Exception:
+                    pass
+                continue
             
             # Vérifier si la tâche existe déjà
             from django.apps import apps
