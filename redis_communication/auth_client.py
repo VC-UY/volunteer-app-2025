@@ -266,90 +266,30 @@ def login_volunteer(username: str, password: str,
     Returns:
         Tuple contenant un booléen indiquant le succès et les données de réponse
     """
-    from .client import RedisClient
-    from .exceptions import ChannelError, TimeoutError
-    import time
-    import uuid
-    import json
     from datetime import datetime
-    
+    from .proxy_rpc import proxy_request_response
+
     logger.info(f"Authentification du volontaire avec username {username}")
-    
-    # Générer un ID de requête unique
-    request_id = str(uuid.uuid4())
-    
-    # Préparer les données de la requête
+
     request_data = {
         'action': 'login',
         'username': username,
         'password': password,
-        'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
-    
-    
-    # Créer un gestionnaire de réponse
-    response_received = False
-    response_data = {}
-    
-    # Fonction de rappel pour traiter la réponse
-    def handle_response(channel: str, message: Message):
-        if message.request_id == request_id:
-            # Enregistrer la réponse
-            save_response(request_id, message.data)
-            
-            # Appeler le callback si fourni
-            if callback:
-                callback(message.data)
-            
-            # Se désabonner du canal
-            client.unsubscribe('auth/volunteer_login_response', handle_response)
-    
-    # S'abonner au canal de réponse
-    client = RedisClient.get_instance()
-    client.subscribe('auth/volunteer_login_response', handle_response)
-    
-    try:
-        # Vérifier que les données peuvent être sérialisées en JSON
-        try:
-            json.dumps(request_data)
-        except (TypeError, ValueError) as e:
-            logger.error(f"Erreur de sérialisation JSON: {e}")
-            logger.error("Nettoyage des données pour éviter les erreurs de sérialisation")
-            # Si la sérialisation échoue, supprimer les informations détaillées de la machine
-            if 'machine_info' in request_data:
-                del request_data['machine_info']
-        
-        # Publier la requête
-        client.publish('auth/volunteer_login', request_data, request_id=request_id)
-        
-        # Attendre la réponse
-        start_time = time.time()
-        
-        while time.time() - start_time < timeout:
-            response = get_response(request_id)
-            if response:
-                # Supprimer la réponse du fichier
-                delete_response(request_id)
-                
-                # Vérifier le statut
-                status = response.get('response', {}).get('status')
-                if status == 'success':
-                    return True, response.get('response', {})
-                else:
-                    return False, response.get('response', {})
-            
-            # Attendre un peu avant de vérifier à nouveau
-            time.sleep(0.1)
-        
-        # Timeout
-        logger.error(f"Timeout lors de l'authentification de {username}")
-        return False, {'status': 'error', 'message': 'Timeout'}
-        
-    except Exception as e:
-        logger.error(f"Erreur lors de l'authentification du volontaire: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
-        return False, {'status': 'error', 'message': str(e)}
+    success, response_data = proxy_request_response(
+        'auth/volunteer_login',
+        'auth/volunteer_login_response',
+        request_data,
+        sender_id=username,
+        timeout=float(timeout),
+    )
+    if success:
+        if callback:
+            callback(response_data)
+        return True, response_data
+    logger.error(f"Timeout/echec login volontaire {username}: {response_data}")
+    return False, response_data
 
 
 def clean_machine_info(machine_info: Dict[str, Any]) -> Dict[str, Any]:
