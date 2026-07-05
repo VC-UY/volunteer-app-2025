@@ -1332,6 +1332,10 @@
     }
 
     function showToast(msg, ok) {
+      if (typeof Toastify === 'undefined') {
+        alert(msg);
+        return;
+      }
       Toastify({
         text: msg,
         duration: 2800,
@@ -1577,16 +1581,34 @@
       savePreferences();
     }
 
-    // Charger à l'affichage + boutons préférences
-    window.addEventListener('DOMContentLoaded', function() {
+    function initPreferenceUi() {
       loadPreferences();
 
       const btnAdd = document.getElementById('btnAddTimeSlot');
       const btnSave = document.getElementById('btnSavePreferences');
-      if (btnAdd) btnAdd.addEventListener('click', addTimeSlot);
-      if (btnSave) btnSave.addEventListener('click', savePreferences);
-
+      const prefForm = document.getElementById('preferenceForm');
       const prefModal = document.getElementById('prefModal');
+
+      if (btnAdd) {
+        btnAdd.addEventListener('click', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          addTimeSlot();
+        });
+      }
+      if (btnSave) {
+        btnSave.addEventListener('click', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          savePreferences();
+        });
+      }
+      if (prefForm) {
+        prefForm.addEventListener('submit', function(e) {
+          e.preventDefault();
+          savePreferences();
+        });
+      }
       if (prefModal) {
         prefModal.addEventListener('show.bs.modal', initPreferenceModalDefaults);
       }
@@ -1594,7 +1616,13 @@
       window.addTimeSlot = addTimeSlot;
       window.savePreferences = savePreferences;
       window.removeTimeSlot = removeTimeSlot;
-    });
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initPreferenceUi);
+    } else {
+      initPreferenceUi();
+    }
   </script>
 </body>
 </html>

@@ -3,10 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Application volontaire VolunSys-UY1, partagez la puissance de votre machine pour le calcul scientifique distribue.">
-  <meta name="keywords" content="VolunSys, volontaire, calcul distribue, machine volontaire">
-  <link rel="icon" type="image/svg+xml" href="/static/logo.svg">
-  <title>VolunSys-UY1 | Application Volontaire</title>
+  <title>VolunSys — Volontaire</title>
   <!-- Bootstrap 5 -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
@@ -212,18 +209,21 @@
     .table tbody tr {
       border-bottom: 1px solid rgba(0, 180, 240, 0.1);
       transition: all 0.3s ease;
+      color: #FFFFFF !important;
+      background: transparent !important;
     }
-    
+
     .table tbody tr:hover {
-      background: rgba(0, 180, 240, 0.05);
+      background: rgba(0, 180, 240, 0.05) !important;
       transform: translateX(5px);
     }
-    
+
     .table tbody td {
-      color: #FFFFFF;
-      border: none;
+      color: #FFFFFF !important;
+      border: none !important;
       padding: 1rem;
       vertical-align: middle;
+      background: transparent !important;
     }
     
     .table tbody td .text-muted {
@@ -414,8 +414,80 @@
     /* Resources */
     .resources {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(2, 1fr);
       gap: 1rem;
+    }
+    .stat-card {
+      background: linear-gradient(135deg, rgba(0, 32, 96, 0.7) 0%, rgba(0, 20, 64, 0.7) 100%);
+      border: 1px solid rgba(0, 180, 240, 0.3);
+      border-radius: 14px;
+      padding: 1rem 1.25rem;
+      text-align: center;
+    }
+    .stat-card .num { font-size: 1.6rem; font-weight: 800; color: #00D4FF; }
+    .stat-card .lbl { font-size: 0.75rem; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.04em; }
+    .pref-summary {
+      background: rgba(0, 180, 240, 0.08);
+      border: 1px solid rgba(0, 180, 240, 0.25);
+      border-radius: 12px;
+      padding: 0.75rem 1rem;
+      font-size: 0.85rem;
+      margin-bottom: 1rem;
+    }
+    .pref-summary div { margin-bottom: 0.35rem; color: #CBD5E1; }
+    .pref-summary strong { color: #00D4FF; }
+    .status-dot {
+      display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px;
+    }
+    .status-dot.on { background: #00FF88; box-shadow: 0 0 8px #00FF88; }
+    .status-dot.off { background: #FF4444; }
+    .filter-btn {
+      background: rgba(0, 180, 240, 0.1);
+      border: 1px solid rgba(0, 180, 240, 0.3);
+      color: #00D4FF;
+      border-radius: 10px;
+      padding: 0.35rem 0.85rem;
+      font-size: 0.85rem;
+      margin-right: 0.35rem;
+      cursor: pointer;
+    }
+    .filter-btn.active {
+      background: linear-gradient(135deg, #00B0F0, #00D4FF);
+      color: #001440;
+      font-weight: 700;
+    }
+    .modal-content {
+      background: linear-gradient(180deg, #0A1929 0%, #0D1F2D 100%) !important;
+      border: 1px solid rgba(0, 180, 240, 0.35) !important;
+      color: #FFF !important;
+    }
+    .modal-header, .modal-footer { border-color: rgba(0, 180, 240, 0.2) !important; }
+    .modal-title { color: #00D4FF !important; }
+    .form-group label { color: #CBD5E1; font-weight: 600; margin-bottom: 0.35rem; display: block; }
+    .form-group input[type="time"], .form-group input[type="number"] {
+      width: 100%;
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid rgba(0, 180, 240, 0.3);
+      color: #FFF;
+      border-radius: 10px;
+      padding: 0.5rem 0.75rem;
+    }
+    .day-checkbox { display: none; }
+    .days-container { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+    .day-label {
+      background: rgba(0, 180, 240, 0.08);
+      border: 1px solid rgba(0, 180, 240, 0.3);
+      border-radius: 10px;
+      padding: 0.4rem 0.75rem;
+      cursor: pointer;
+      color: #CBD5E1;
+      font-size: 0.85rem;
+    }
+    .day-checkbox:checked + .day-label {
+      background: rgba(0, 212, 255, 0.2);
+      border-color: #00D4FF;
+      color: #00D4FF;
+      font-weight: 700;
     }
     
     /* Time Slots */
@@ -442,34 +514,80 @@
       color: #00D4FF;
     }
     
-    /* Preferences Table */
-    #prefsTable {
-      background: rgba(0, 180, 240, 0.05);
-      border: 1px solid rgba(0, 180, 240, 0.2);
-      border-radius: 12px;
-      overflow: hidden;
-      color: #FFFFFF;
+    /* Créneaux — cartes (pas de table Bootstrap = pas de fond blanc) */
+    #prefsList {
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
     }
-    
-    #prefsTable th {
-      background: linear-gradient(135deg, rgba(0, 180, 240, 0.15) 0%, rgba(0, 212, 255, 0.1) 100%);
+    .slot-card {
+      background: rgba(15, 23, 42, 0.65);
+      border: 1px solid rgba(0, 180, 240, 0.28);
+      border-radius: 12px;
+      padding: 0.75rem 0.9rem;
+      color: #E2E8F0;
+    }
+    .slot-card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      margin-bottom: 0.45rem;
+    }
+    .slot-day {
+      display: inline-block;
+      background: rgba(0, 212, 255, 0.15);
+      border: 1px solid rgba(0, 212, 255, 0.35);
       color: #00D4FF;
       font-weight: 700;
-      letter-spacing: 0.3px;
-      padding: 0.75rem;
-      border: none;
-      text-transform: uppercase;
       font-size: 0.8rem;
+      text-transform: capitalize;
+      padding: 0.2rem 0.55rem;
+      border-radius: 8px;
     }
-    
-    #prefsTable td {
-      padding: 0.75rem;
-      border-bottom: 1px solid rgba(0, 180, 240, 0.1);
-      color: #FFFFFF;
+    .slot-time {
+      color: #94A3B8;
+      font-size: 0.85rem;
+      font-weight: 600;
     }
-    
-    #prefsTable strong {
-      color: #00D4FF;
+    .slot-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+    }
+    .slot-tag {
+      background: rgba(0, 180, 240, 0.12);
+      border: 1px solid rgba(0, 180, 240, 0.25);
+      color: #7DD3FC;
+      font-size: 0.72rem;
+      padding: 0.15rem 0.45rem;
+      border-radius: 6px;
+      white-space: nowrap;
+    }
+    .slot-empty {
+      text-align: center;
+      color: #64748B;
+      font-size: 0.85rem;
+      padding: 1rem 0.5rem;
+      border: 1px dashed rgba(0, 180, 240, 0.25);
+      border-radius: 12px;
+    }
+    .btn-slot-del {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: #FCA5A5;
+      border-radius: 8px;
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+    .btn-slot-del:hover {
+      background: rgba(239, 68, 68, 0.35);
+      color: #fff;
     }
     
     /* Status Badges */
@@ -491,10 +609,40 @@
       border: 1px solid rgba(220, 38, 38, 0.3);
     }
     
-    .badge-pending { 
+    .badge-pending {
       background: linear-gradient(135deg, rgba(0, 212, 255, 0.2) 0%, rgba(0, 180, 240, 0.1) 100%);
       color: #00D4FF;
       border: 1px solid rgba(0, 212, 255, 0.3);
+    }
+
+    .badge-complete, .badge-completed {
+      background: linear-gradient(135deg, rgba(0, 255, 136, 0.2) 0%, rgba(0, 200, 100, 0.1) 100%);
+      color: #00FF88;
+      border: 1px solid rgba(0, 255, 136, 0.3);
+    }
+
+    .badge-assigned {
+      background: linear-gradient(135deg, rgba(138, 43, 226, 0.2) 0%, rgba(75, 0, 130, 0.1) 100%);
+      color: #DA70D6;
+      border: 1px solid rgba(138, 43, 226, 0.3);
+    }
+
+    .badge-error, .badge-failed {
+      background: linear-gradient(135deg, rgba(220, 38, 38, 0.2) 0%, rgba(185, 28, 28, 0.1) 100%);
+      color: #FF4444;
+      border: 1px solid rgba(220, 38, 38, 0.3);
+    }
+
+    .badge-terminate {
+      background: linear-gradient(135deg, rgba(128, 128, 128, 0.2) 0%, rgba(64, 64, 64, 0.1) 100%);
+      color: #AAAAAA;
+      border: 1px solid rgba(128, 128, 128, 0.3);
+    }
+
+    .badge-downloading {
+      background: linear-gradient(135deg, rgba(255, 193, 7, 0.2) 0%, rgba(255, 165, 0, 0.1) 100%);
+      color: #FFC107;
+      border: 1px solid rgba(255, 193, 7, 0.3);
     }
     
     /* Scrollbar */
@@ -532,10 +680,14 @@
 <body>
   <nav class="navbar navbar-expand-lg navbar-dark">
     <div class="container-fluid px-4">
-      <a class="navbar-brand fw-bold" href="#"><i class="fa fa-hands-helping me-2"></i>VolunteerApp</a>
-      <div class="d-flex align-items-center gap-3">
-        <span class="text-white"><i class="fa fa-server"></i> <span id="machine-hostname">{% if machine %}{{ machine.hostname }}{% else %}Non configuré{% endif %}</span></span>
-        <span class="badge" id="machine-status"></span>
+      <a class="navbar-brand fw-bold" href="#"><i class="fa fa-hands-helping me-2"></i>VolunSys Volontaire</a>
+      <div class="d-flex align-items-center gap-3 flex-wrap">
+        <span class="text-white"><i class="fa fa-server me-1"></i><span id="machine-hostname">{% if machine %}{{ machine.hostname }}{% else %}Non configuré{% endif %}</span></span>
+        <span class="badge" id="availability-badge">
+          <span class="status-dot {% if available_now %}on{% else %}off{% endif %}"></span>
+          {% if available_now %}Disponible pour tâches{% else %}Hors créneau / indisponible{% endif %}
+        </span>
+        <span class="badge" id="ws-badge"><span class="status-dot off"></span>Temps réel…</span>
         <button class="btn btn-outline-light" data-bs-toggle="modal" data-bs-target="#prefModal">
           <i class="fa fa-cog"></i> Préférences
         </button>
@@ -543,75 +695,98 @@
     </div>
   </nav>
   
-  <div class="container-fluid">
-    <div class="row">
-      <!-- Sidebar -->
-      <aside class="col-md-3 sidebar">
+  <div class="container-fluid py-3">
+    <div class="row g-3">
+      <aside class="col-lg-3 sidebar">
         <h5><i class="fas fa-server me-2"></i>Machine</h5>
         {% if machine %}
         <div><strong>Nom :</strong> <span id="sidebar-hostname">{{ machine.hostname }}</span></div>
         <div><strong>OS :</strong> <span id="sidebar-os">{{ machine.os_name }} {{ machine.os_version }}</span></div>
-        <div><strong>CPU :</strong> <span id="sidebar-cpu">{{ machine.cpu_type }} ({{ machine.cpu_cores_physical }} cœurs, {{ machine.cpu_cores_logical }} logiques)</span></div>
+        <div><strong>CPU :</strong> <span id="sidebar-cpu">{{ machine.cpu_modele|default:"—" }} ({{ machine.cpu_cores_logical }} cœurs)</span></div>
         <div><strong>RAM :</strong> <span id="sidebar-ram">{{ machine.ram_total_human }}</span></div>
         <div><strong>Disque :</strong> <span id="sidebar-disk">{{ machine.disk_total_human }}</span></div>
-        <div><strong>Résolution :</strong> <span id="sidebar-screen">{{ machine.screen_resolution }}</span></div>
-        <div><strong>Statut :</strong> <span class="badge" id="sidebar-status">{% if etat %}{{ etat.statut_actuel }}{% else %}N/A{% endif %}</span></div>
+        <div><strong>Statut agent :</strong> <span class="badge" id="sidebar-status">{% if etat %}{{ etat.statut_actuel }}{% else %}N/A{% endif %}</span></div>
         {% else %}
         <div class="alert alert-warning" style="background: rgba(255, 193, 7, 0.1); border: 1px solid rgba(255, 193, 7, 0.3); color: #FFC107; border-radius: 10px; padding: 1rem;">
-          <i class="fas fa-exclamation-triangle me-2"></i>Aucune machine enregistrée. Veuillez lancer l'agent pour enregistrer les informations de la machine.
+          <i class="fas fa-exclamation-triangle me-2"></i>Aucune machine enregistrée. Lancez l'agent pour enregistrer la machine.
         </div>
         {% endif %}
 
-        <hr>
+        <hr style="border-color: rgba(0,180,240,0.2);">
 
-        <h6><i class="fas fa-sliders-h me-2"></i>Préférences</h6>
-        <button type="button" class="btn btn-primary w-100 mb-3" data-bs-toggle="modal" data-bs-target="#prefModal" {% if not machine %}disabled title="Veuillez d'abord enregistrer une machine"{% endif %}>
-          <i class="fas fa-plus"></i> Ajouter une préférence
+        <h6><i class="fas fa-sliders-h me-2"></i>Offre de ressources</h6>
+        <div class="pref-summary" id="pref-summary-box">
+          <div><strong>CPU offert :</strong> <span id="sum-cpu">{{ pref_summary.max_cpu_cores|default:"—" }}</span> cœurs</div>
+          <div><strong>RAM offerte :</strong> <span id="sum-ram">{{ pref_summary.max_ram_gb|default:"—" }}</span> Go</div>
+          <div><strong>Disque offert :</strong> <span id="sum-disk">{{ pref_summary.max_disk_gb|default:"—" }}</span> Go</div>
+          <div><strong>Durée max :</strong> <span id="sum-time">{% if pref_summary.duree_max_execution %}{{ pref_summary.duree_max_execution }} min{% else %}Illimitée{% endif %}</span></div>
+          <div><strong>Types :</strong> <span id="sum-types">{% if pref_summary.types_calcul_autorises %}{{ pref_summary.types_calcul_autorises }}{% else %}Tous{% endif %}</span></div>
+        </div>
+        <button type="button" class="btn btn-primary w-100 mb-3" data-bs-toggle="modal" data-bs-target="#prefModal">
+          <i class="fas fa-edit me-1"></i> Configurer préférences
         </button>
-        <table id="prefsTable" class="table table-sm mt-2"></table>
+        <h6 class="mt-2"><i class="fas fa-calendar-alt me-2"></i>Créneaux</h6>
+        <div id="prefsList" class="mt-2"></div>
       </aside>
       
-      <!-- Main Content -->
-      <main class="col-md-9">
-        <div class="d-flex align-items-center mb-4">
-          <h4 class="me-auto"><i class="fas fa-tasks me-2"></i>Tâches</h4>
-          <input type="text" id="search-task" class="form-control w-25" placeholder="Rechercher une tâche...">
+      <main class="col-lg-9">
+        <div class="row g-3 mb-4">
+          <div class="col-6 col-md-3"><div class="stat-card"><div class="num" id="stat-total">{{ counts.total }}</div><div class="lbl">Total</div></div></div>
+          <div class="col-6 col-md-3"><div class="stat-card"><div class="num" id="stat-running" style="color:#60A5FA">{{ counts.running }}</div><div class="lbl">En cours</div></div></div>
+          <div class="col-6 col-md-3"><div class="stat-card"><div class="num" id="stat-pending" style="color:#FBBF24">{{ counts.pending }}</div><div class="lbl">En attente</div></div></div>
+          <div class="col-6 col-md-3"><div class="stat-card"><div class="num" id="stat-done" style="color:#00FF88">{{ counts.completed }}</div><div class="lbl">Terminées</div></div></div>
+        </div>
+
+        <div class="d-flex align-items-center flex-wrap gap-2 mb-3">
+          <h4 class="me-auto mb-0"><i class="fas fa-tasks me-2"></i>Tâches</h4>
+          <button type="button" class="filter-btn active" data-filter="all">Toutes</button>
+          <button type="button" class="filter-btn" data-filter="running">En cours</button>
+          <button type="button" class="filter-btn" data-filter="pending">Attente</button>
+          <button type="button" class="filter-btn" data-filter="completed">Terminées</button>
+          <button type="button" class="filter-btn" data-filter="failed">Échouées</button>
+          <input type="text" id="search-task" class="form-control" style="max-width:220px;background:rgba(15,23,42,.5);border:1px solid rgba(0,180,240,.3);color:#fff;" placeholder="Rechercher…">
+          <button type="button" class="btn btn-outline-light btn-sm" onclick="reloadTasks()" title="Actualiser"><i class="fa fa-sync"></i></button>
         </div>
         
         <div class="table-responsive">
           <table class="table align-middle" id="tasks-table">
             <thead>
               <tr>
-                <th><i class="fas fa-file-alt me-2"></i>Nom</th>
-                <th><i class="fas fa-info-circle me-2"></i>Statut</th>
-                <th><i class="fas fa-chart-line me-2"></i>Progression</th>
-                <th><i class="fas fa-cogs me-2"></i>Actions</th>
+                <th>Nom</th>
+                <th>Commande</th>
+                <th>Statut</th>
+                <th>Progression</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody id="tasks-table-body">
               {% if not tasks %}
-              <tr>
-                <td colspan="4" class="text-center" style="color: #00B0F0; padding: 2rem;">
+              <tr class="empty-row">
+                <td colspan="5" class="text-center" style="color: #00B0F0; padding: 2rem;">
                   <i class="fas fa-inbox fa-3x mb-3" style="opacity: 0.5;"></i>
-                  <div>Aucune tâche en cours</div>
+                  <div>Aucune tâche reçue pour le moment</div>
+                  <small style="color:#64748B;">Les tâches assignées par le Manager apparaîtront ici automatiquement.</small>
                 </td>
               </tr>
               {% endif %}
               {% for task in tasks %}
-              <tr data-task-id="{{ task.id }}">
-                <td>{{ task.name }}</td>
-                <td><span class="text-muted" id="status-{{ task.id }}">{{ task.status }}</span></td>
-                <td>{{ task.progress }}%</td>
+              <tr data-task-id="{{ task.task_id }}" data-status="{{ task.status|lower }}" style="color: #FFFFFF !important;">
+                <td style="color: #00D4FF; font-weight: 600;">{{ task.name }}</td>
+                <td style="color: #94A3B8; font-size: 0.85rem; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{{ task.command }}">{{ task.command|truncatechars:40 }}</td>
+                <td><span class="badge badge-{{ task.status }}" id="status-{{ task.task_id }}">{{ task.status }}</span></td>
+                <td style="color: #FFFFFF;">
+                  <div class="d-flex align-items-center">
+                    <div class="progress me-2" style="width: 80px; height: 8px; background: rgba(0, 180, 240, 0.2); border-radius: 4px;">
+                      <div class="progress-bar" role="progressbar" style="width: {{ task.progress }}%; background: linear-gradient(90deg, #00B0F0, #00D4FF);" id="progress-bar-{{ task.task_id }}"></div>
+                    </div>
+                    <span id="progress-{{ task.task_id }}">{{ task.progress }}%</span>
+                  </div>
+                </td>
                 <td>
-                  <button class="btn btn-sm btn-warning pause-btn me-1" {% if not task.can_pause %}disabled{% endif %}>
-                    <i class="fa fa-pause"></i>
-                  </button>
-                  <button class="btn btn-sm btn-success resume-btn me-1" {% if not task.can_resume %}disabled{% endif %}>
-                    <i class="fa fa-play"></i>
-                  </button>
-                  <button class="btn btn-sm btn-danger stop-btn" {% if not task.can_stop %}disabled{% endif %}>
-                    <i class="fa fa-stop"></i>
-                  </button>
+                  <button class="btn btn-sm btn-warning pause-btn me-1" {% if task.status != 'running' and task.status != 'progress' %}disabled{% endif %} title="Pause"><i class="fa fa-pause"></i></button>
+                  <button class="btn btn-sm btn-success resume-btn me-1" {% if task.status != 'paused' %}disabled{% endif %} title="Reprendre"><i class="fa fa-play"></i></button>
+                  <button class="btn btn-sm btn-danger stop-btn" {% if task.status == 'completed' or task.status == 'complete' or task.status == 'failed' or task.status == 'terminate' or task.status == 'error' or task.status == 'stopped' %}disabled{% endif %} title="Arrêter"><i class="fa fa-stop"></i></button>
+                  <button class="btn btn-sm btn-info details-btn ms-1" data-task-id="{{ task.task_id }}" title="Détails"><i class="fa fa-info"></i></button>
                 </td>
               </tr>
               {% endfor %}
@@ -622,6 +797,68 @@
     </div>
   </div>
   
+  <!-- Modal Détails de la tâche -->
+  <div class="modal fade" id="taskDetailModal" tabindex="-1" aria-labelledby="taskDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content" style="background: linear-gradient(180deg, #0A1929 0%, #0D1F2D 100%); border: 1px solid rgba(0, 180, 240, 0.3); color: #FFFFFF;">
+        <div class="modal-header" style="border-bottom: 1px solid rgba(0, 180, 240, 0.2);">
+          <h5 class="modal-title" id="taskDetailModalLabel" style="color: #00D4FF;">
+            <i class="fas fa-tasks me-2"></i>Détails de la tâche
+          </h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body" id="taskDetailContent" style="padding: 1.5rem;">
+          <div class="text-center py-4">
+            <i class="fas fa-spinner fa-spin fa-2x" style="color: #00B0F0;"></i>
+            <p class="mt-2" style="color: #94A3B8;">Chargement...</p>
+          </div>
+        </div>
+        <div class="modal-footer" style="border-top: 1px solid rgba(0, 180, 240, 0.2);">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    .task-detail-item {
+      padding: 10px 15px;
+      margin-bottom: 8px;
+      background: rgba(0, 180, 240, 0.05);
+      border-radius: 8px;
+      border-left: 3px solid #00B0F0;
+    }
+    .task-detail-item strong {
+      color: #00D4FF;
+      min-width: 140px;
+      display: inline-block;
+    }
+    .badge-running, .badge-progress {
+      background: linear-gradient(135deg, #00B0F0, #00D4FF) !important;
+      color: #FFF;
+    }
+    .badge-completed, .badge-complete {
+      background: linear-gradient(135deg, #00FF88, #00CC6A) !important;
+      color: #000;
+    }
+    .badge-failed, .badge-error {
+      background: linear-gradient(135deg, #FF4444, #CC0000) !important;
+      color: #FFF;
+    }
+    .badge-paused {
+      background: linear-gradient(135deg, #FFB800, #FF9500) !important;
+      color: #000;
+    }
+    .badge-pending, .badge-queued {
+      background: linear-gradient(135deg, #6B7280, #4B5563) !important;
+      color: #FFF;
+    }
+    .badge-stopped {
+      background: linear-gradient(135deg, #9CA3AF, #6B7280) !important;
+      color: #FFF;
+    }
+  </style>
+
   <!-- Modal Préférences -->
   <div class="modal fade" id="prefModal" tabindex="-1" aria-labelledby="prefModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
@@ -637,19 +874,19 @@
             <div class="form-group mb-4">
               <label><i class="fas fa-calendar-alt me-2"></i>Jours disponibles:</label>
               <div class="days-container">
-                <input type="checkbox" id="day-lundi" class="day-checkbox" value="Lundi">
+                <input type="checkbox" id="day-lundi" class="day-checkbox" value="lundi">
                 <label for="day-lundi" class="day-label">Lundi</label>
-                <input type="checkbox" id="day-mardi" class="day-checkbox" value="Mardi">
+                <input type="checkbox" id="day-mardi" class="day-checkbox" value="mardi">
                 <label for="day-mardi" class="day-label">Mardi</label>
-                <input type="checkbox" id="day-mercredi" class="day-checkbox" value="Mercredi">
+                <input type="checkbox" id="day-mercredi" class="day-checkbox" value="mercredi">
                 <label for="day-mercredi" class="day-label">Mercredi</label>
-                <input type="checkbox" id="day-jeudi" class="day-checkbox" value="Jeudi">
+                <input type="checkbox" id="day-jeudi" class="day-checkbox" value="jeudi">
                 <label for="day-jeudi" class="day-label">Jeudi</label>
-                <input type="checkbox" id="day-vendredi" class="day-checkbox" value="Vendredi">
+                <input type="checkbox" id="day-vendredi" class="day-checkbox" value="vendredi">
                 <label for="day-vendredi" class="day-label">Vendredi</label>
-                <input type="checkbox" id="day-samedi" class="day-checkbox" value="Samedi">
+                <input type="checkbox" id="day-samedi" class="day-checkbox" value="samedi">
                 <label for="day-samedi" class="day-label">Samedi</label>
-                <input type="checkbox" id="day-dimanche" class="day-checkbox" value="Dimanche">
+                <input type="checkbox" id="day-dimanche" class="day-checkbox" value="dimanche">
                 <label for="day-dimanche" class="day-label">Dimanche</label>
               </div>
             </div>
@@ -659,37 +896,53 @@
             <div class="form-group time-range mb-4">
               <div>
                 <label for="startTime"><i class="fas fa-clock me-2"></i>Heure début:</label>
-                <input type="time" id="startTime">
+                <input type="time" id="startTime" value="08:00">
               </div>
               <div>
                 <label for="endTime"><i class="fas fa-clock me-2"></i>Heure fin:</label>
-                <input type="time" id="endTime">
+                <input type="time" id="endTime" value="22:00">
               </div>
             </div>
             
             <div class="form-group resources mb-4">
               <div>
-                <label for="cpu"><i class="fas fa-microchip me-2"></i>CPU (%):</label>
-                <input type="number" id="cpu" min="1" max="100" value="100">
+                <label for="cpu"><i class="fas fa-microchip me-2"></i>CPU max (%):</label>
+                <input type="number" id="cpu" min="1" max="100" value="80">
               </div>
               <div>
-                <label for="ram"><i class="fas fa-memory me-2"></i>RAM (GB):</label>
-                <input type="number" id="ram" min="1" value="16">
+                <label for="ram"><i class="fas fa-memory me-2"></i>RAM offerte (Go):</label>
+                <input type="number" id="ram" min="1" value="8">
               </div>
               <div>
-                <label for="maxTime"><i class="fas fa-hourglass-half me-2"></i>Temps max (min):</label>
-                <input type="number" id="maxTime" min="1" value="60">
+                <label for="disk"><i class="fas fa-hdd me-2"></i>Disque offert (Go):</label>
+                <input type="number" id="disk" min="1" value="20">
               </div>
+              <div>
+                <label for="maxTime"><i class="fas fa-hourglass-half me-2"></i>Durée max tâche (min, 0=illimité):</label>
+                <input type="number" id="maxTime" min="0" value="0">
+              </div>
+            </div>
+
+            <div class="form-group mb-4">
+              <label><i class="fas fa-flask me-2"></i>Types de calcul acceptés:</label>
+              <div class="d-flex flex-wrap gap-2 mt-2">
+                <label class="day-label"><input type="checkbox" class="type-checkbox" value="OPEN_MALARIA" checked> OpenMalaria</label>
+                <label class="day-label"><input type="checkbox" class="type-checkbox" value="ML_TRAINING" checked> ML Training</label>
+                <label class="day-label"><input type="checkbox" class="type-checkbox" value="MATRIX_ADDITION"> Matrices (+)</label>
+                <label class="day-label"><input type="checkbox" class="type-checkbox" value="MATRIX_MULTIPLICATION"> Matrices (×)</label>
+                <label class="day-label"><input type="checkbox" class="type-checkbox" value="CUSTOM"> Custom</label>
+              </div>
+              <small style="color:#94A3B8;">Le Manager n'assignera que ces types pendant vos créneaux.</small>
             </div>
             
             <div class="form-group mb-3">
-              <button type="button" class="btn btn-outline-primary w-100" onclick="addTimeSlot()">
-                <i class="fas fa-plus me-2"></i> Ajouter ce créneau
+              <button type="button" id="btnAddTimeSlot" class="btn btn-outline-primary w-100">
+                <i class="fas fa-plus me-2"></i> Ajouter ce créneau horaire
               </button>
             </div>
             
             <div class="form-group">
-              <button type="button" class="btn btn-success w-100" onclick="savePreferences()">
+              <button type="button" id="btnSavePreferences" class="btn btn-success w-100">
                 <i class="fas fa-save me-2"></i> Enregistrer les préférences
               </button>
             </div>
@@ -729,6 +982,8 @@
               background: 'linear-gradient(135deg, rgba(0, 255, 136, 0.9) 0%, rgba(0, 200, 100, 0.9) 100%)',
             }
           }).showToast();
+          // Recharger les tâches après l'action
+          setTimeout(reloadTasks, 500);
         },
         error: function(xhr) {
           Toastify({
@@ -763,6 +1018,124 @@
       if (confirm('Arrêter cette tâche ?')) sendTaskAction(taskId, 'stop');
     });
 
+    // Gestionnaire pour le bouton détails
+    $('#tasks-table').on('click', '.details-btn', function() {
+      var taskId = $(this).data('task-id');
+      $.ajax({
+        url: '/api/task/' + taskId + '/details/',
+        type: 'GET',
+        success: function(task) {
+          // Formatage de l'image Docker
+          var dockerImage = 'N/A';
+          if (task.docker_info) {
+            dockerImage = task.docker_info.image || (task.docker_info.name + ':' + (task.docker_info.tag || 'latest'));
+          }
+
+          // Formatage des fichiers
+          var inputFilesStr = task.input_files && task.input_files.length > 0
+            ? task.input_files.map(f => typeof f === 'string' ? f : f.name || f.path || JSON.stringify(f)).join(', ')
+            : 'Aucun';
+          var outputFilesStr = task.output_files && task.output_files.length > 0
+            ? task.output_files.map(f => typeof f === 'string' ? f : f.name || f.path || JSON.stringify(f)).join(', ')
+            : 'Aucun';
+
+          var modalContent = `
+            <div class="row">
+              <div class="col-md-6">
+                <div class="task-detail-item"><strong>ID:</strong> <span style="color: #00D4FF;">${task.task_id || task.id}</span></div>
+                <div class="task-detail-item"><strong>Nom:</strong> <span style="color: #FFFFFF;">${task.name}</span></div>
+                <div class="task-detail-item"><strong>Statut:</strong> <span class="badge badge-${task.status}">${task.status}</span></div>
+                <div class="task-detail-item"><strong>Progression:</strong>
+                  <div class="d-flex align-items-center mt-2">
+                    <div class="progress me-2" style="width: 100px; height: 8px; background: rgba(0, 180, 240, 0.2); border-radius: 4px;">
+                      <div class="progress-bar" style="width: ${task.progress}%; background: linear-gradient(90deg, #00B0F0, #00D4FF);"></div>
+                    </div>
+                    <span style="color: #00FF88;">${task.progress}%</span>
+                  </div>
+                </div>
+                <div class="task-detail-item"><strong>Tentatives:</strong> <span style="color: #94A3B8;">${task.attempts || 0}</span></div>
+                <div class="task-detail-item"><strong>Priorité:</strong> <span style="color: #94A3B8;">${task.execution_priority || 0}</span></div>
+              </div>
+              <div class="col-md-6">
+                <div class="task-detail-item"><strong>Image Docker:</strong> <span style="color: #94A3B8;">${dockerImage}</span></div>
+                <div class="task-detail-item"><strong>Container ID:</strong> <span style="color: #94A3B8; font-size: 0.85rem;">${task.container_id ? task.container_id.substring(0, 12) + '...' : 'N/A'}</span></div>
+                <div class="task-detail-item"><strong>Workflow:</strong> <span style="color: #94A3B8;">${task.workflow_id || 'N/A'}</span></div>
+                <div class="task-detail-item"><strong>Créé le:</strong> <span style="color: #94A3B8;">${task.created_at ? new Date(task.created_at).toLocaleString() : 'N/A'}</span></div>
+                <div class="task-detail-item"><strong>Terminé le:</strong> <span style="color: #94A3B8;">${task.end_date ? new Date(task.end_date).toLocaleString() : 'En cours'}</span></div>
+              </div>
+            </div>
+            <hr style="border-color: rgba(0, 180, 240, 0.2); margin: 1rem 0;">
+            <div class="task-detail-item"><strong>Commande:</strong><br><code style="color: #FFA500; background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 4px; display: block; margin-top: 8px; word-break: break-all;">${task.command || 'N/A'}</code></div>
+            <div class="task-detail-item"><strong>Fichiers d'entrée:</strong> <span style="color: #94A3B8;">${inputFilesStr}</span></div>
+            <div class="task-detail-item"><strong>Fichiers de sortie:</strong> <span style="color: #94A3B8;">${outputFilesStr}</span></div>
+            ${task.error_message ? `<div class="task-detail-item" style="border-left-color: #FF4444;"><strong>Erreur:</strong> <span style="color: #FF4444;">${task.error_message}</span></div>` : ''}
+          `;
+          $('#taskDetailContent').html(modalContent);
+          $('#taskDetailModal').modal('show');
+        },
+        error: function(xhr) {
+          Toastify({
+            text: 'Erreur lors du chargement des détails',
+            duration: 3000,
+            gravity: 'top',
+            position: 'right',
+            style: { background: 'linear-gradient(135deg, rgba(220, 38, 38, 0.9) 0%, rgba(185, 28, 28, 0.9) 100%)' }
+          }).showToast();
+        }
+      });
+    });
+
+    const STATUS_LABELS = {
+      pending: 'En attente', queued: 'En file', assigned: 'Assignée', created: 'En attente',
+      accepted: 'Acceptée', in_progress: 'En cours',
+      running: 'En cours', progress: 'En cours', started: 'Démarrée',
+      paused: 'En pause', completed: 'Terminée', complete: 'Terminée',
+      failed: 'Échouée', error: 'Erreur', stopped: 'Arrêtée', terminate: 'Terminée',
+      downloading: 'Téléchargement'
+    };
+    function statusLabel(s) { return STATUS_LABELS[(s || '').toLowerCase()] || s || '—'; }
+    let currentFilter = 'all';
+
+    function updateStats(data) {
+      let running = 0, pending = 0, completed = 0, failed = 0;
+      (data || []).forEach(t => {
+        const s = (t.status || '').toLowerCase();
+        if (['running', 'progress', 'started', 'in_progress'].includes(s)) running++;
+        else if (['pending', 'queued', 'assigned', 'created', 'accepted'].includes(s)) pending++;
+        else if (['completed', 'complete'].includes(s)) completed++;
+        else if (['failed', 'error', 'terminate', 'stopped', 'cancelled', 'canceled'].includes(s)) failed++;
+        else pending++;
+      });
+      $('#stat-total').text((data || []).length);
+      $('#stat-running').text(running);
+      $('#stat-pending').text(pending);
+      $('#stat-done').text(completed);
+    }
+
+    function applyTaskFilter() {
+      const q = ($('#search-task').val() || '').toLowerCase();
+      $('#tasks-table-body tr').each(function() {
+        if ($(this).hasClass('empty-row')) return;
+        const st = ($(this).data('status') || '').toLowerCase();
+        const text = $(this).text().toLowerCase();
+        let show = true;
+        if (currentFilter === 'running') show = ['running', 'progress', 'started', 'in_progress'].includes(st);
+        else if (currentFilter === 'pending') show = ['pending', 'queued', 'assigned', 'created', 'accepted'].includes(st);
+        else if (currentFilter === 'completed') show = ['completed', 'complete'].includes(st);
+        else if (currentFilter === 'failed') show = ['failed', 'error', 'terminate', 'stopped'].includes(st);
+        if (q && text.indexOf(q) === -1) show = false;
+        $(this).toggle(show);
+      });
+    }
+
+    $('.filter-btn').on('click', function() {
+      $('.filter-btn').removeClass('active');
+      $(this).addClass('active');
+      currentFilter = $(this).data('filter');
+      applyTaskFilter();
+    });
+    $('#search-task').off('keyup').on('keyup', applyTaskFilter);
+
     const reloadTasks = () => {
       $.ajax({
         url: '/tasks/',
@@ -770,39 +1143,50 @@
         success: function(data) {
           var tbody = $('#tasks-table-body');
           tbody.empty();
-          if (data.length === 0) {
-            tbody.append('<tr><td colspan="4" class="text-center" style="color: #00B0F0; padding: 2rem;"><i class="fas fa-inbox fa-3x mb-3" style="opacity: 0.5;"></i><div>Aucune tâche en cours</div></td></tr>');
+          updateStats(data);
+          if (!data || data.length === 0) {
+            tbody.append('<tr class="empty-row"><td colspan="5" class="text-center" style="color: #00B0F0; padding: 2rem;"><i class="fas fa-inbox fa-3x mb-3" style="opacity: 0.5;"></i><div>Aucune tâche reçue</div></td></tr>');
           } else {
             data.forEach(task => {
+              const taskId = task.task_id || task.id;
+              const st = (task.status || '').toLowerCase();
+              const isRunning = st === 'running' || st === 'progress' || st === 'started';
+              const isPaused = st === 'paused';
+              const isFinished = ['completed', 'complete', 'failed', 'terminate', 'error', 'stopped'].includes(st);
+              const prog = task.progress || 0;
               tbody.append(`
-                <tr data-task-id="${task.id}">
-                  <td>${task.name}</td>
-                  <td><span class="text-muted" id="status-${task.id}">${task.status}</span></td>
-                  <td><span id="progress-${task.id}">${task.progress}%</span></td>
+                <tr data-task-id="${taskId}" data-status="${st}" style="color: #FFFFFF !important;">
+                  <td style="color: #00D4FF; font-weight: 600;">${task.name || '—'}</td>
+                  <td style="color: #94A3B8; font-size: 0.85rem; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${task.command || ''}">${(task.command || '—').substring(0, 40)}</td>
+                  <td><span class="badge badge-${task.status}" id="status-${taskId}">${statusLabel(task.status)}</span></td>
+                  <td style="color: #FFFFFF;">
+                    <div class="d-flex align-items-center">
+                      <div class="progress me-2" style="width: 80px; height: 8px; background: rgba(0, 180, 240, 0.2); border-radius: 4px;">
+                        <div class="progress-bar" role="progressbar" style="width: ${prog}%; background: linear-gradient(90deg, #00B0F0, #00D4FF);" id="progress-bar-${taskId}"></div>
+                      </div>
+                      <span id="progress-${taskId}">${prog}%</span>
+                    </div>
+                  </td>
                   <td>
-                    <button class="btn btn-sm btn-warning pause-btn me-1" ${task.status !== "running" ? 'disabled' : ''}><i class="fa fa-pause"></i></button>
-                    <button class="btn btn-sm btn-success resume-btn me-1" ${task.status !== 'paused' ? 'disabled' : ''}><i class="fa fa-play"></i></button>
-                    <button class="btn btn-sm btn-danger stop-btn" ${task.status !== "failed" && task.status !== "complete" && task.status !== "terminate" && task.status !== "error" ? 'disabled' : ''}><i class="fa fa-stop"></i></button>
+                    <button class="btn btn-sm btn-warning pause-btn me-1" ${!isRunning ? 'disabled' : ''} title="Pause"><i class="fa fa-pause"></i></button>
+                    <button class="btn btn-sm btn-success resume-btn me-1" ${!isPaused ? 'disabled' : ''} title="Reprendre"><i class="fa fa-play"></i></button>
+                    <button class="btn btn-sm btn-danger stop-btn" ${isFinished ? 'disabled' : ''} title="Arrêter"><i class="fa fa-stop"></i></button>
+                    <button class="btn btn-sm btn-info details-btn ms-1" data-task-id="${taskId}" title="Détails"><i class="fa fa-info"></i></button>
                   </td>
                 </tr>
               `);
             });
           }
+          applyTaskFilter();
         },
         error: function(xhr) {
           console.error('Erreur lors du chargement des tâches:', xhr);
-          Toastify({
-            text: 'Erreur de chargement des tâches',
-            duration: 3000,
-            gravity: 'top',
-            position: 'right',
-            style: {
-              background: 'linear-gradient(135deg, rgba(220, 38, 38, 0.9) 0%, rgba(185, 28, 28, 0.9) 100%)',
-            }
-          }).showToast();
         }
       });
     };
+
+    // Polling silencieux toutes les 5s
+    setInterval(reloadTasks, 5000);
 
     // WebSocket pour updates temps réel
     function setupWebSocket() {
@@ -811,83 +1195,82 @@
       var ws = new WebSocket(wsUrl);
 
       ws.onopen = function() {
-        console.log('WebSocket connecté');
-        Toastify({
-          text: 'Connexion WebSocket établie',
-          duration: 2000,
-          gravity: 'top',
-          position: 'right',
-          style: {
-            background: 'linear-gradient(135deg, rgba(0, 255, 136, 0.9) 0%, rgba(0, 200, 100, 0.9) 100%)',
-          }
-        }).showToast();
+        $('#ws-badge').html('<span class="status-dot on"></span>Temps réel OK');
       };
 
       ws.onclose = function() {
-        console.log('WebSocket déconnecté, tentative de reconnexion dans 0.5 secondes...');
-        Toastify({
-          text: 'Connexion WebSocket perdue, reconnexion...',
-          duration: 2000,
-          gravity: 'top',
-          position: 'right',
-          style: {
-            background: 'linear-gradient(135deg, rgba(220, 38, 38, 0.9) 0%, rgba(185, 28, 28, 0.9) 100%)',
-          }
-        }).showToast();
-        setTimeout(setupWebSocket, 500);
+        $('#ws-badge').html('<span class="status-dot off"></span>Reconnexion…');
+        setTimeout(setupWebSocket, 2000);
       };
 
-      ws.onerror = function(error) {
-        console.error('WebSocket error:', error);
+      ws.onerror = function() {
+        $('#ws-badge').html('<span class="status-dot off"></span>Erreur WS');
       };
 
       ws.onmessage = function(e) {
-        var data = JSON.parse(e.data);
-        console.log('Message WebSocket reçu:', e);
-        
+        var data;
+        try { data = JSON.parse(e.data); } catch (err) { return; }
         const type = data.type;
-
-        if (type === 'send_task_progress' || type === 'send_task_update') {
-          var row = $('#tasks-table-body tr[data-task-id="' + data.data.task_id + '"]');
-          if (row.length === 0) {
-            $('#tasks-table-body').append(`
-              <tr data-task-id="${data.data.task_id}">
-                <td>${data.data.name}</td>
-                <td><span class="text-muted" id="status-${data.data.task_id}">${data.data.status}</span></td>
-                <td><span id="progress-${data.data.task_id}">${data.data.progress || 0}%</span></td>
-                <td>
-                  <button class="btn btn-sm btn-warning pause-btn me-1" ${data.data.status !== "running" ? 'disabled' : ''}><i class="fa fa-pause"></i></button>
-                  <button class="btn btn-sm btn-success resume-btn me-1" ${data.data.status !== 'paused' ? 'disabled' : ''}><i class="fa fa-play"></i></button>
-                  <button class="btn btn-sm btn-danger stop-btn" ${data.data.status !== "failed" && data.data.status !== "complete" && data.data.status !== "terminate" && data.data.status !== "error" ? 'disabled' : ''}><i class="fa fa-stop"></i></button>
-                </td>
-              </tr>
-            `);
-          } else {
-            row.find('span[id^="status-"]').text(data.data.status);
-            if (data.data.progress !== undefined) {
-              row.find('span[id^="progress-"]').text(data.data.progress + '%');
-            }
-            if (data.data.status === 'complete') {
-              row.find('span[id^="progress-"]').text('100%');
-            }
-            row.find('.pause-btn').prop('disabled', data.data.status !== 'running');
-            row.find('.resume-btn').prop('disabled', data.data.status !== 'paused');
-            row.find('.stop-btn').prop('disabled', !['failed', 'complete', 'terminate', 'error'].includes(data.data.status));
+        if (!type || type === 'pong' || type === 'connection_established') {
+          if (type === 'connection_established') {
+            $('#ws-badge').html('<span class="status-dot on"></span>Temps réel OK');
           }
-        } else if (data.type === 'send_add_task') {
-          console.log("Nouvelle tâche ou découpage terminé", data);
+          return;
+        }
+
+        const payload = data.data || {};
+        if (type === 'send_task_progress' || type === 'send_task_update' || type === 'send_task_status_change') {
+          const taskId = payload.task_id;
+          if (!taskId) { reloadTasks(); return; }
+          var row = $('#tasks-table-body tr[data-task-id="' + taskId + '"]');
+          if (row.length === 0) {
+            reloadTasks();
+            return;
+          }
+          const st = (payload.status || '').toLowerCase();
+          row.attr('data-status', st);
+          row.find('span[id^="status-"]').text(statusLabel(payload.status)).attr('class', 'badge badge-' + payload.status);
+          if (payload.progress !== undefined) {
+            const p = payload.progress;
+            row.find('span[id^="progress-"]').text(p + '%');
+            row.find('.progress-bar').css('width', p + '%');
+          }
+          if (st === 'complete' || st === 'completed') {
+            row.find('span[id^="progress-"]').text('100%');
+            row.find('.progress-bar').css('width', '100%');
+          }
+          const isRunning = ['running', 'progress', 'started'].includes(st);
+          const isPaused = st === 'paused';
+          const isFinished = ['failed', 'complete', 'completed', 'terminate', 'error', 'stopped'].includes(st);
+          row.find('.pause-btn').prop('disabled', !isRunning);
+          row.find('.resume-btn').prop('disabled', !isPaused);
+          row.find('.stop-btn').prop('disabled', isFinished);
           reloadTasks();
-          Toastify({
-            text: 'Nouvelle tâche récupérée: ' + data.data?.name,
-            duration: 2000,
-            gravity: 'top',
-            position: 'right',
-            style: {
-              background: 'linear-gradient(135deg, rgba(0, 255, 136, 0.9) 0%, rgba(0, 200, 100, 0.9) 100%)',
-            }
-          }).showToast();
+        } else if (type === 'send_add_task') {
+          reloadTasks();
+          if (payload.name) {
+            Toastify({
+              text: 'Nouvelle tâche: ' + payload.name,
+              duration: 2500,
+              gravity: 'top',
+              position: 'right',
+              style: {
+                background: 'linear-gradient(135deg, rgba(0, 255, 136, 0.9) 0%, rgba(0, 200, 100, 0.9) 100%)',
+              }
+            }).showToast();
+          }
+        } else if (type === 'send_task_deleted') {
+          reloadTasks();
         }
       };
+
+      // Keepalive ping
+      if (window._wsPingTimer) clearInterval(window._wsPingTimer);
+      window._wsPingTimer = setInterval(function() {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'ping' }));
+        }
+      }, 25000);
     }
 
     setupWebSocket();
@@ -916,7 +1299,30 @@
       fetch('/preferences/')
         .then(response => response.json())
         .then(data => {
-          currentPreferences = data;
+          let summary = {};
+          if (Array.isArray(data)) {
+            currentPreferences = data;
+          } else {
+            currentPreferences = data.slots || [];
+            summary = data.summary || {};
+            if (summary.cpu_max_utilisation) document.getElementById('cpu').value = summary.cpu_max_utilisation;
+            if (summary.max_ram_gb) document.getElementById('ram').value = summary.max_ram_gb;
+            if (summary.max_disk_gb) document.getElementById('disk').value = summary.max_disk_gb;
+            if (summary.duree_max_execution !== undefined) document.getElementById('maxTime').value = summary.duree_max_execution;
+            const types = (summary.types_calcul_autorises || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+            document.querySelectorAll('.type-checkbox').forEach(cb => {
+              cb.checked = types.length === 0 || types.includes(cb.value);
+            });
+          }
+          if (summary.max_cpu_cores !== undefined) $('#sum-cpu').text(summary.max_cpu_cores);
+          if (summary.max_ram_gb !== undefined) $('#sum-ram').text(summary.max_ram_gb);
+          if (summary.max_disk_gb !== undefined) $('#sum-disk').text(summary.max_disk_gb);
+          if (summary.duree_max_execution !== undefined) {
+            $('#sum-time').text(summary.duree_max_execution ? (summary.duree_max_execution + ' min') : 'Illimitée');
+          }
+          if (summary.types_calcul_autorises !== undefined) {
+            $('#sum-types').text(summary.types_calcul_autorises || 'Tous');
+          }
           renderPrefs();
         })
         .catch(e => {
@@ -925,20 +1331,72 @@
         });
     }
 
+    function showToast(msg, ok) {
+      if (typeof Toastify === 'undefined') {
+        alert(msg);
+        return;
+      }
+      Toastify({
+        text: msg,
+        duration: 2800,
+        gravity: 'top',
+        position: 'right',
+        style: {
+          background: ok
+            ? 'linear-gradient(135deg, rgba(0, 255, 136, 0.9) 0%, rgba(0, 200, 100, 0.9) 100%)'
+            : 'linear-gradient(135deg, rgba(220, 38, 38, 0.9) 0%, rgba(185, 28, 28, 0.9) 100%)',
+        }
+      }).showToast();
+    }
+
+    function initPreferenceModalDefaults() {
+      document.querySelectorAll('.day-checkbox').forEach(cb => { cb.checked = true; });
+      if (!document.getElementById('startTime').value) {
+        document.getElementById('startTime').value = '08:00';
+      }
+      if (!document.getElementById('endTime').value) {
+        document.getElementById('endTime').value = '22:00';
+      }
+      renderTimeSlots();
+    }
+
     function addTimeSlot() {
       const startTime = document.getElementById('startTime').value;
       const endTime = document.getElementById('endTime').value;
       const cpu = document.getElementById('cpu').value;
       const ram = document.getElementById('ram').value;
+      const disk = document.getElementById('disk').value;
       const maxTime = document.getElementById('maxTime').value;
       
       if (!startTime || !endTime) {
-        alert('Veuillez spécifier les heures de début et de fin.');
+        showToast('Indiquez une heure de début et de fin.', false);
+        return;
+      }
+      if (startTime >= endTime) {
+        showToast("L'heure de début doit être avant l'heure de fin.", false);
         return;
       }
       
-      tempTimeSlots.push({startTime, endTime, cpu, ram, maxTime});
+      tempTimeSlots.push({startTime, endTime, cpu, ram, disk, maxTime});
       renderTimeSlots();
+      showToast('Créneau ajouté — vous pouvez en ajouter d\'autres ou enregistrer.', true);
+    }
+
+    function collectSlotsForSave() {
+      const cpu = document.getElementById('cpu').value;
+      const ram = document.getElementById('ram').value;
+      const disk = document.getElementById('disk').value;
+      const maxTime = document.getElementById('maxTime').value;
+      const startTime = document.getElementById('startTime').value;
+      const endTime = document.getElementById('endTime').value;
+
+      if (tempTimeSlots.length > 0) {
+        return tempTimeSlots.slice();
+      }
+      if (startTime && endTime && startTime < endTime) {
+        return [{ startTime, endTime, cpu, ram, disk, maxTime }];
+      }
+      return [];
     }
 
     function renderTimeSlots() {
@@ -946,7 +1404,9 @@
       container.innerHTML = '';
       
       if (tempTimeSlots.length === 0) {
-        container.innerHTML = '<p style="color: #00B0F0; text-align: center; padding: 1rem;">Aucun créneau ajouté.</p>';
+        const st = document.getElementById('startTime')?.value || '08:00';
+        const et = document.getElementById('endTime')?.value || '22:00';
+        container.innerHTML = '<p style="color: #94A3B8; text-align: center; padding: 1rem;">Aucun créneau ajouté — à l\'enregistrement, le créneau <strong style="color:#00D4FF">' + st + ' – ' + et + '</strong> sera utilisé.</p>';
         return;
       }
       
@@ -957,8 +1417,9 @@
           <div>
             <strong>${slot.startTime} - ${slot.endTime}</strong> | 
             <span style="color: #00B0F0;">CPU: ${slot.cpu}%</span> | 
-            <span style="color: #00B0F0;">RAM: ${slot.ram}GB</span> | 
-            <span style="color: #00B0F0;">Max: ${slot.maxTime}min</span>
+            <span style="color: #00B0F0;">RAM: ${slot.ram}Go</span> | 
+            <span style="color: #00B0F0;">Disque: ${slot.disk || '?'}Go</span> | 
+            <span style="color: #00B0F0;">Max: ${slot.maxTime || 0}min</span>
           </div>
           <button type='button' class='btn btn-sm btn-danger' onclick='removeTimeSlot(${index})'>
             <i class='fas fa-trash-alt'></i>
@@ -974,33 +1435,51 @@
     }
 
     function savePreferences() {
-      const selectedDays = Array.from(document.querySelectorAll('.day-checkbox:checked')).map(cb => cb.value);
+      const selectedDays = Array.from(document.querySelectorAll('.day-checkbox:checked')).map(cb => cb.value.toLowerCase());
       
       if (selectedDays.length === 0) {
-        alert('Veuillez sélectionner au moins un jour.');
+        showToast('Sélectionnez au moins un jour (Lun–Dim).', false);
         return;
       }
-      
-      if (tempTimeSlots.length === 0) {
-        alert('Veuillez ajouter au moins un créneau horaire.');
+
+      const slots = collectSlotsForSave();
+      if (slots.length === 0) {
+        showToast('Indiquez un créneau horaire valide (ex. 08:00 → 22:00).', false);
         return;
       }
+
+      const types = Array.from(document.querySelectorAll('.type-checkbox:checked')).map(cb => cb.value).join(',');
+      const cpu = parseInt(document.getElementById('cpu').value, 10) || 80;
+      const ram = parseInt(document.getElementById('ram').value, 10) || 4;
+      const disk = parseInt(document.getElementById('disk').value, 10) || 10;
+      const maxTime = parseInt(document.getElementById('maxTime').value, 10) || 0;
       
       const allPrefs = [];
       selectedDays.forEach(day => {
-        tempTimeSlots.forEach(slot => {
+        slots.forEach(slot => {
           allPrefs.push({
             day,
             startTime: slot.startTime,
             endTime: slot.endTime,
-            cpu: slot.cpu,
-            ram: slot.ram,
-            maxTime: slot.maxTime
+            cpu: slot.cpu || cpu,
+            ram: slot.ram || ram,
+            disk: slot.disk || disk,
+            maxTime: slot.maxTime || maxTime
           });
         });
       });
       
-      const payload = { preferences: allPrefs };
+      const payload = {
+        preferences: allPrefs,
+        cpu_max_utilisation: cpu,
+        max_ram_gb: ram,
+        max_disk_gb: disk,
+        duree_max_execution: maxTime,
+        types_calcul_autorises: types,
+      };
+
+      const btn = document.getElementById('btnSavePreferences');
+      if (btn) { btn.disabled = true; btn.textContent = 'Enregistrement…'; }
       
       fetch('/save_preferences/', {
         method: 'POST',
@@ -1010,110 +1489,140 @@
         },
         body: JSON.stringify(payload)
       })
-      .then(response => response.json())
-      .then(data => {
-        if (data.success) {
-          Toastify({
-            text: 'Préférences enregistrées avec succès',
-            duration: 2000,
-            gravity: 'top',
-            position: 'right',
-            style: {
-              background: 'linear-gradient(135deg, rgba(0, 255, 136, 0.9) 0%, rgba(0, 200, 100, 0.9) 100%)',
-            }
-          }).showToast();
+      .then(response => response.json().then(data => ({ ok: response.ok, data })))
+      .then(({ ok, data }) => {
+        if (ok && data.success) {
+          showToast('Préférences enregistrées — le coordinateur les respectera.', true);
+          tempTimeSlots = [];
+          renderTimeSlots();
+          if (data.preferences) {
+            const s = data.preferences;
+            $('#sum-cpu').text(s.max_cpu_cores);
+            $('#sum-ram').text(s.max_ram_gb);
+            $('#sum-disk').text(s.max_disk_gb);
+            $('#sum-time').text(s.duree_max_execution ? (s.duree_max_execution + ' min') : 'Illimitée');
+            $('#sum-types').text(s.types_calcul_autorises || 'Tous');
+          }
           loadPreferences();
           var modalEl = bootstrap.Modal.getInstance(document.getElementById('prefModal'));
           if (modalEl) modalEl.hide();
         } else {
-          alert('Erreur: ' + data.error);
+          showToast('Erreur: ' + (data.error || 'enregistrement impossible'), false);
         }
       })
-      .catch(error => alert('Erreur réseau: ' + error));
+      .catch(error => showToast('Erreur réseau: ' + error, false))
+      .finally(() => {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fas fa-save me-2"></i> Enregistrer les préférences';
+        }
+      });
     }
 
     function renderPrefs() {
-      const table = document.getElementById('prefsTable');
-      table.innerHTML = '<tr><th>Jour</th><th>Plage horaire</th><th>Ressources</th><th>Action</th></tr>';
-      
+      const list = document.getElementById('prefsList');
+      if (!list) return;
+      list.innerHTML = '';
+
       if (!currentPreferences || currentPreferences.length === 0) {
-        const emptyRow = document.createElement('tr');
-        emptyRow.innerHTML = '<td colspan="4" class="text-center" style="color: #00B0F0; padding: 1rem;">Aucune préférence enregistrée</td>';
-        table.appendChild(emptyRow);
+        list.innerHTML = '<div class="slot-empty">Aucun créneau configuré.<br>Cliquez sur « Configurer préférences ».</div>';
         return;
       }
-      
-      const groupedPrefs = {};
-      currentPreferences.forEach((pref, index) => {
-        const day = pref.day;
-        if (!groupedPrefs[day]) groupedPrefs[day] = [];
-        groupedPrefs[day].push({...pref, index});
+
+      const dayOrder = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche'];
+      const sorted = [...currentPreferences].sort((a, b) => {
+        const da = dayOrder.indexOf((a.day || '').toLowerCase());
+        const db = dayOrder.indexOf((b.day || '').toLowerCase());
+        return (da === -1 ? 99 : da) - (db === -1 ? 99 : db);
       });
-      
-      Object.keys(groupedPrefs).sort().forEach(day => {
-        const prefs = groupedPrefs[day];
-        const rowspan = prefs.length;
-        
-        prefs.forEach((pref, idx) => {
-          const row = document.createElement('tr');
-          
-          if (idx === 0) {
-            const dayCell = document.createElement('td');
-            dayCell.rowSpan = rowspan;
-            dayCell.innerHTML = `<strong>${day}</strong>`;
-            row.appendChild(dayCell);
-          }
-          
-          const timeCell = document.createElement('td');
-          timeCell.innerHTML = `${pref.startTime} - ${pref.endTime}`;
-          row.appendChild(timeCell);
-          
-          const resourceCell = document.createElement('td');
-          resourceCell.innerHTML = `<span style="color: #00B0F0;">CPU: ${pref.cpu}%</span> | <span style="color: #00B0F0;">RAM: ${pref.ram}GB</span> | <span style="color: #00B0F0;">Max: ${pref.maxTime}min</span>`;
-          row.appendChild(resourceCell);
-          
-          const actionCell = document.createElement('td');
-          actionCell.innerHTML = `<button class="btn btn-sm btn-danger" onclick="deletePreference(${pref.id || pref.index})"><i class="fas fa-trash-alt"></i></button>`;
-          row.appendChild(actionCell);
-          
-          table.appendChild(row);
-        });
+
+      sorted.forEach((pref, index) => {
+        const day = (pref.day || '—');
+        const card = document.createElement('div');
+        card.className = 'slot-card';
+        card.innerHTML = `
+          <div class="slot-card-top">
+            <span class="slot-day">${day}</span>
+            <span class="slot-time">${pref.startTime || '—'} – ${pref.endTime || '—'}</span>
+            <button type="button" class="btn-slot-del" onclick="deletePreferenceSlot(${typeof pref.id === 'number' ? pref.id : index})" title="Supprimer">
+              <i class="fas fa-trash-alt"></i>
+            </button>
+          </div>
+          <div class="slot-tags">
+            <span class="slot-tag">CPU ${pref.cpu ?? '—'}%</span>
+            <span class="slot-tag">RAM ${pref.ram ?? '—'} Go</span>
+            <span class="slot-tag">Disque ${pref.disk ?? '—'} Go</span>
+            <span class="slot-tag">${pref.maxTime ? ('Max ' + pref.maxTime + ' min') : 'Durée libre'}</span>
+          </div>
+        `;
+        list.appendChild(card);
       });
     }
 
-    function deletePreference(id) {
-      if (!confirm("Voulez-vous vraiment supprimer cette préférence ?")) return;
-      
-      fetch(`/preferences/delete/${id}/`, {
-        method: 'DELETE',
-        headers: {
-          'X-CSRFToken': getCookie('csrftoken'),
-          'Content-Type': 'application/json',
-        }
-      })
-      .then(response => {
-        if (response.ok) {
-          loadPreferences();
-          Toastify({
-            text: 'Préférence supprimée',
-            duration: 2000,
-            gravity: 'top',
-            position: 'right',
-            style: {
-              background: 'linear-gradient(135deg, rgba(0, 255, 136, 0.9) 0%, rgba(0, 200, 100, 0.9) 100%)',
-            }
-          }).showToast();
-        } else {
-          alert("Erreur lors de la suppression");
-        }
-      })
-      .catch(() => alert("Erreur lors de la suppression"));
+    function deletePreferenceSlot(index) {
+      if (!confirm("Supprimer ce créneau ?")) return;
+      const next = currentPreferences.filter((_, i) => i !== index);
+      if (next.length === 0) {
+        fetch('/preferences/delete/', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+          body: JSON.stringify({action: 'delete_all'})
+        }).then(() => loadPreferences());
+        return;
+      }
+      // Re-sauver sans le créneau
+      tempTimeSlots = next.map(p => ({
+        startTime: p.startTime, endTime: p.endTime, cpu: p.cpu, ram: p.ram, disk: p.disk, maxTime: p.maxTime
+      }));
+      // cocher les jours restants
+      document.querySelectorAll('.day-checkbox').forEach(cb => {
+        cb.checked = next.some(p => (p.day || '').toLowerCase() === cb.value.toLowerCase());
+      });
+      savePreferences();
     }
 
-    // Charger à l'affichage
-    window.addEventListener('DOMContentLoaded', function() {
+    function initPreferenceUi() {
       loadPreferences();
-    });
+
+      const btnAdd = document.getElementById('btnAddTimeSlot');
+      const btnSave = document.getElementById('btnSavePreferences');
+      const prefForm = document.getElementById('preferenceForm');
+      const prefModal = document.getElementById('prefModal');
+
+      if (btnAdd) {
+        btnAdd.addEventListener('click', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          addTimeSlot();
+        });
+      }
+      if (btnSave) {
+        btnSave.addEventListener('click', function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          savePreferences();
+        });
+      }
+      if (prefForm) {
+        prefForm.addEventListener('submit', function(e) {
+          e.preventDefault();
+          savePreferences();
+        });
+      }
+      if (prefModal) {
+        prefModal.addEventListener('show.bs.modal', initPreferenceModalDefaults);
+      }
+
+      window.addTimeSlot = addTimeSlot;
+      window.savePreferences = savePreferences;
+      window.removeTimeSlot = removeTimeSlot;
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initPreferenceUi);
+    } else {
+      initPreferenceUi();
+    }
   </script>
 </body>
 </html>
