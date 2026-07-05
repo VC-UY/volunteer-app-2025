@@ -442,7 +442,7 @@ from datetime import time
 def save_preferences(request):
     if request.method == 'POST':
         try:
-            from volontaire.preferences_payload import (
+            from .preferences_payload import (
                 normalize_day,
                 save_preferences_file,
                 _machine_resources,
@@ -580,7 +580,7 @@ def delete_preference(request, id):
 
 
 def preferences_list(request):
-    from volontaire.preferences_payload import build_preferences_payload, load_preferences_file
+    from .preferences_payload import build_preferences_payload, load_preferences_file
 
     payload = load_preferences_file() or build_preferences_payload()
     schedule = payload.get("schedule") or []
@@ -604,8 +604,7 @@ def preferences_list(request):
         {
             "slots": prefs,
             "summary": payload,
-        },
-        safe=False,
+        }
     )
 
 
