@@ -5,8 +5,10 @@ from __future__ import annotations
 import json
 from datetime import datetime, time
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 PREFS_FILE = Path(__file__).resolve().parent.parent / ".volunteer" / "preferences.json"
+SCHEDULE_TZ = ZoneInfo("Europe/Paris")
 
 DAY_ALIASES = {
     "lundi": "lundi",
@@ -88,7 +90,12 @@ def is_available_now(prefs: dict | None, when: datetime | None = None) -> bool:
     if not schedule:
         return True
 
-    when = when or datetime.now()
+    when = when or datetime.now(SCHEDULE_TZ)
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=SCHEDULE_TZ)
+    else:
+        when = when.astimezone(SCHEDULE_TZ)
+
     days = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
     today = days[when.weekday()]
     now_t = when.time().replace(second=0, microsecond=0)
