@@ -12,6 +12,18 @@ if [[ ! -f manage.py ]]; then
     exit 1
 fi
 
+# Si Docker est installé mais inaccessible dans ce shell, relancer automatiquement
+# sous le groupe docker pour éviter les PermissionError sur /var/run/docker.sock.
+if command -v docker >/dev/null 2>&1 && [[ -z "${VCUY_DOCKER_GROUP_READY:-}" ]]; then
+    if ! docker info >/dev/null 2>&1; then
+        if id -nG "$USER" | tr ' ' '\n' | grep -qx docker; then
+            echo "🔄 Relance sous le groupe docker pour activer l'accès Docker..."
+            export VCUY_RUN_DIR="$(pwd)"
+            exec sg docker -c "cd \"$VCUY_RUN_DIR\" && export VCUY_DOCKER_GROUP_READY=1 && ./run.sh"
+        fi
+    fi
+fi
+
 echo "✅ Activation de l'environnement virtuel..."
 source venv/bin/activate
 
