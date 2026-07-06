@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 def _redis_kwargs() -> dict:
     return dict(
         host=os.environ.get("COORDINATOR_HOST", "173.249.38.251"),
-        port=int(os.environ.get("COORDINATOR_PROXY_PORT", "6380")),
+        port=int(os.environ.get("COORDINATOR_PROXY_PORT", "6381")),
         db=0,
         decode_responses=True,
         protocol=2,

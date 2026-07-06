@@ -400,7 +400,19 @@ class RedisClient:
             logger.info("✅ Reconnexion réussie!")
             self.stats['reconnections'] += 1
 
-            # verifier si le le volontaire est connecté et que sont token est valide
+            # Reprise immédiate : heartbeat + écoute des assignations
+            try:
+                from redis_communication.task_handlers import TaskManager
+                tm = TaskManager.get_instance()
+                if tm.volunteer_id:
+                    if not tm.running:
+                        tm.start(tm.volunteer_id)
+                    else:
+                        tm._send_heartbeat()
+            except Exception as resume_exc:
+                logger.warning("Reprise TaskManager après reconnexion: %s", resume_exc)
+
+            # Vérifier le token d'authentification
             from redis_communication.auth_client import load_volunter_credentials
             from redis_communication.auth_client import get_volunteer_info
             import datetime
