@@ -173,11 +173,11 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Configuration Redis
-# Utiliser une variable d'environnement pour l'hôte du coordinator (défaut: 173.249.38.251)
-REDIS_PROXY_HOST = os.environ.get('COORDINATOR_HOST', '173.249.38.251')  # Hôte du proxy Redis
-REDIS_PROXY_PORT = int(os.environ.get('COORDINATOR_PROXY_PORT', '6380'))
+# Volontaires : port 6380 uniquement (proxy public). 6379 = interne serveur.
+from coordinator_defaults import COORDINATOR_HOST, COORDINATOR_PROXY_PORT, MANAGER_PUBLIC_URL
+
+REDIS_PROXY_HOST = os.environ.get('COORDINATOR_HOST', COORDINATOR_HOST)
+REDIS_PROXY_PORT = int(os.environ.get('COORDINATOR_PROXY_PORT', str(COORDINATOR_PROXY_PORT)))
 REDIS_DB = 0
 
-
-# Charger les paramètres spécifiques au proxy Redis dans l'environnement
 os.environ.setdefault('COORDINATOR_HOST', REDIS_PROXY_HOST)

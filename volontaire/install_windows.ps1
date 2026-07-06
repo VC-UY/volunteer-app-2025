@@ -1,71 +1,39 @@
- 
-# install.ps1
+# Installation volontaire VC-UY (Windows) — coordinateur déjà configuré dans settings.py
 $ErrorActionPreference = "Stop"
 
-# === Fonctions de vérification ===
+Write-Host "Preparation de l'environnement volontaire VC-UY..."
 
-function Test-Command {
-    param($cmd)
-    if (-not (Get-Command $cmd -ErrorAction SilentlyContinue)) {
-        Write-Host "❌ '$cmd' est introuvable."
-        return $false
-    }
-    return $true
+if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
+    Write-Error "Python 3.10+ est requis. Telechargez-le sur https://www.python.org/downloads/"
 }
 
-function Ensure-Package {
-    param($packageName)
-    Write-Host "📦 Vérification de $packageName..."
-    if (-not (choco list --local-only | Select-String $packageName)) {
-        Write-Host "🛠 Installation de $packageName..."
-        choco install $packageName -y
-    } else {
-        Write-Host "✅ $packageName est déjà installé."
-    }
-}
-
-# === Vérification des prérequis ===
-
-Write-Host "🔧 Préparation de l'environnement..."
-
-if (-not (Test-Command choco)) {
-    Write-Error "Chocolatey est requis pour installer les dépendances. Installe-le depuis https://chocolatey.org/install"
-    exit 1
-}
-
-Ensure-Package docker-desktop
-Ensure-Package python
-
-# === Docker ===
-
-Write-Host "🚀 Vérification du démarrage de Docker Desktop..."
-Start-Process "Docker Desktop" -ErrorAction SilentlyContinue
-Start-Sleep -Seconds 10  # Laisse Docker se lancer
-
-# Vérifie que Docker fonctionne
-if (-not (docker info | Out-Null)) {
-    Write-Host "⚠️ Docker ne semble pas encore prêt. Lance Docker Desktop manuellement et réessaie si nécessaire."
-}
-
-# === Chargement de l'image Docker ===
-if (Test-Path "task_docker_img/image-docker.tar") {
-    Write-Host "📦 Chargement de l'image Docker..."
-    docker load -i task_docker_img/image-docker.tar
+if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+    Write-Warning "Docker Desktop est requis pour executer les calculs. Installez-le si ce n'est pas fait."
 } else {
-    Write-Host "⚠️ Fichier 'task_docker_img/image-docker.tar' introuvable."
+    try { docker info | Out-Null } catch { Write-Warning "Demarrez Docker Desktop puis relancez ce script." }
 }
 
-# === Environnement virtuel ===
+New-Item -ItemType Directory -Force -Path ".volunteer\tasks", ".volunteer\temp_data" | Out-Null
 
-Write-Host "🐍 Création de l'environnement virtuel Python..."
+if (Test-Path "task_docker_img\image-docker.tar") {
+    Write-Host "Chargement de l'image Docker malaria..."
+    docker load -i task_docker_img\image-docker.tar
+}
+
+Write-Host "Creation de l'environnement virtuel Python..."
 Remove-Item -Recurse -Force venv -ErrorAction SilentlyContinue
 python -m venv venv
 . .\venv\Scripts\Activate.ps1
 
-# === Paquets Python ===
-
-Write-Host "📦 Installation des paquets Python requis..."
+Write-Host "Installation des dependances Python..."
 python -m pip install --upgrade pip
-pip install django djangorestframework docker psutil redis requests PyJWT channels daphne
+if (Test-Path "requirements.txt") {
+    pip install -r requirements.txt
+} else {
+    pip install django djangorestframework docker psutil redis requests PyJWT channels daphne
+}
 
-Write-Host "🎉 Installation terminée avec succès."
+Write-Host "Migrations..."
+python manage.py migrate
+
+Write-Host "Installation terminee."

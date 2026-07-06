@@ -150,10 +150,13 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Configuration Redis — production VC-UY (aucun .env requis)
-REDIS_PROXY_HOST = os.environ.get('COORDINATOR_HOST', '173.249.38.251')
-REDIS_PROXY_PORT = int(os.environ.get('COORDINATOR_PROXY_PORT', '6380'))
+# Volontaires : port 6380 uniquement (proxy public). 6379 = interne serveur.
+from coordinator_defaults import COORDINATOR_HOST, COORDINATOR_PROXY_PORT, MANAGER_PUBLIC_URL
+
+REDIS_PROXY_HOST = os.environ.get('COORDINATOR_HOST', COORDINATOR_HOST)
+REDIS_PROXY_PORT = int(os.environ.get('COORDINATOR_PROXY_PORT', str(COORDINATOR_PROXY_PORT)))
 REDIS_DB = 0
 
 os.environ.setdefault('COORDINATOR_HOST', REDIS_PROXY_HOST)
 os.environ.setdefault('COORDINATOR_PROXY_PORT', str(REDIS_PROXY_PORT))
-MANAGER_PUBLIC_URL = os.environ.get('MANAGER_PUBLIC_URL', 'https://manager-vc-uy.npe-techs.com')
+os.environ.setdefault('MANAGER_PUBLIC_URL', MANAGER_PUBLIC_URL)
