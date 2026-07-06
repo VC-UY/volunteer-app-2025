@@ -14,7 +14,7 @@ NC='\033[0m'
 
 # Configuration
 COORDINATOR_IP="173.249.38.251"  # IP du serveur coordinator déployé
-COORDINATOR_PORT="6380"
+COORDINATOR_PORT="6381"
 VOLUNTEER_PORT="8003"
 
 echo -e "${GREEN}======================================================${NC}"

@@ -114,6 +114,17 @@ class TaskManager:
         
         logger.info(f"Gestionnaire de tâches démarré pour le volontaire {volunteer_id}")
 
+    def _has_active_tasks(self) -> bool:
+        """True si des tâches locales sont encore en cours d'exécution."""
+        try:
+            from django.apps import apps
+            Task = apps.get_model('volontaire', 'Task')
+            return Task.objects.filter(
+                status__in=['pending', 'assigned', 'in_progress', 'running', 'started']
+            ).exists()
+        except Exception:
+            return bool(self.current_task)
+
     def _send_heartbeat(self):
         """Signale au manager/coordinateur que ce volontaire est en ligne."""
         if not self.volunteer_id:
@@ -127,10 +138,11 @@ class TaskManager:
             )
 
             prefs = build_preferences_payload()
-            available_now = is_available_now(prefs) and not self.current_task
+            busy = bool(self.current_task) or self._has_active_tasks()
+            available_now = is_available_now(prefs) and not busy
             payload = {
                 "volunteer_id": self.volunteer_id,
-                "status": "busy" if self.current_task else ("available" if available_now else "offline"),
+                "status": "busy" if busy else ("available" if available_now else "offline"),
                 "timestamp": timezone.now().isoformat(),
                 "preferences": prefs,
                 "resources": {
@@ -996,12 +1008,19 @@ class TaskManager:
                 'volunteer_id': self.volunteer_id,
                 'workflow_id': task.workflow.workflow_id if hasattr(task, 'workflow') and task.workflow else None,
                 'status': 'completed',
+                'progress': 100,
                 'timestamp': datetime.now().isoformat(),
                 'file_server': file_server_info,
             },
             str(uuid.uuid4()),
             get_volunteer_auth_token(),
             'request')
+
+            # Propager 100 % sur le canal progression (évite les régressions côté manager/coord)
+            try:
+                self._send_task_progress(task, 100)
+            except Exception:
+                pass
             
             # Notifier le frontend de la complétion
             from channels.layers import get_channel_layer
@@ -1260,6 +1279,13 @@ class TaskManager:
                 task.output_data = {'files': output_files}
                 task.actual_execution_time = (task.end_date - task.start_date).total_seconds() if task.start_date else 0
                 task.save()
+
+                TaskProgress.objects.create(
+                    task=task,
+                    progress_type='complete',
+                    percentage=100,
+                    message="Tâche terminée avec succès"
+                )
                 
                 # Notifier le frontend de la complétion
                 
@@ -1276,14 +1302,6 @@ class TaskManager:
                     }
                 )
                 
-                # Créer un événement de progression pour la complétion
-                TaskProgress.objects.create(
-                    task=task,
-                    progress_type='complete',
-                    percentage=100,
-                    message="Tâche terminée avec succès"
-                )
-
                 # Lancer le server d'ecoute pour les fichiers de sortie
                 self.complete_task(task.task_id)
                 
@@ -1420,6 +1438,10 @@ class TaskManager:
         # Boucle de surveillance de la progression
         while True:
             try:
+                task.refresh_from_db(fields=['status'])
+                if str(task.status or '').lower() in ('completed', 'complete', 'error', 'failed', 'cancelled'):
+                    break
+
                 # Récupérer l'état actuel du conteneur
                 container = docker_manager.get_container_by_task(task.task_id)
                 
@@ -1761,6 +1783,9 @@ class TaskManager:
         # Récupérer la dernière progression enregistrée
         latest_progress = TaskProgress.objects.filter(task=task).order_by('-timestamp').first()
         progress_value = latest_progress.percentage if latest_progress else 0
+        status_value = str(task.status or '').lower()
+        if status_value in ('completed', 'complete'):
+            progress_value = 100.0
         from redis_communication.utils import get_volunteer_auth_token, get_volunteer_id
         vid = self.volunteer_id or get_volunteer_id()
         try:
@@ -1787,6 +1812,8 @@ class TaskManager:
             task: Tâche pour laquelle envoyer une mise à jour
             progress: Valeur de progression actuelle
         """
+        if str(getattr(task, 'status', '') or '').lower() in ('completed', 'complete'):
+            progress = 100.0
         from redis_communication.utils import get_volunteer_auth_token
         try:
             self.redis_client.publish('task/progress', {
