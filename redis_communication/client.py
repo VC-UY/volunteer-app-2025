@@ -355,7 +355,6 @@ class RedisClient:
             return message.request_id
         except (redis.ConnectionError, redis.TimeoutError) as e:
             logger.warning(f"Publication {channel} ignorée (Redis lent/hors ligne): {e}")
-            self.connected = False
             self.stats['connection_errors'] += 1
             return None
         except Exception as e:
