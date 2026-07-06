@@ -46,7 +46,7 @@ Dans le fichier `.env` du dossier `volontaire/` :
 
 ```
 COORDINATOR_HOST=173.249.38.251
-COORDINATOR_PROXY_PORT=6381
+COORDINATOR_PROXY_PORT=6380
 ```
 
 ## Acces local

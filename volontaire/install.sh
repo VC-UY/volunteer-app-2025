@@ -67,10 +67,17 @@ rm -rf venv
 python3 -m venv venv
 source venv/bin/activate
 
+# === Environnement volontaire ===
+mkdir -p .volunteer/tasks .volunteer/temp_data
+
 # === Installation des paquets Python ===
 echo "📦 Installation des paquets Python requis..."
 pip install --upgrade pip
-pip install django djangorestframework docker psutil redis requests PyJWT channels daphne
+if [[ -f requirements.txt ]]; then
+    pip install -r requirements.txt
+else
+    pip install django djangorestframework docker psutil redis requests PyJWT channels daphne
+fi
 
 echo "🔧 Application des migrations..."
 python3 manage.py migrate

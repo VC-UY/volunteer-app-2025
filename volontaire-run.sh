@@ -14,7 +14,7 @@ NC='\033[0m'
 
 # Configuration
 COORDINATOR_IP="173.249.38.251"  # IP du serveur coordinator déployé
-COORDINATOR_PORT="6381"
+COORDINATOR_PORT="6380"
 VOLUNTEER_PORT="8003"
 
 echo -e "${GREEN}======================================================${NC}"
@@ -218,33 +218,13 @@ pip install --upgrade pip setuptools wheel
 pip install --upgrade -r requirements.txt
 
 echo -e "\n${GREEN}=== Configuration de l'application ===${NC}\n"
+echo -e "${GREEN}Coordinateur préconfiguré : ${COORDINATOR_IP}:${COORDINATOR_PORT} (aucun .env requis)${NC}"
 
-# Mettre à jour le fichier de configuration avec l'IP du coordinator
-echo -e "${YELLOW}Configuration de la connexion au coordinator...${NC}"
+mkdir -p "$VOLUNTEER_DIR/.volunteer" "$VOLUNTEER_DIR/backend/data"
 
-# Créer un fichier .env s'il n'existe pas
-ENV_FILE="$VOLUNTEER_DIR/.env"
-if [ ! -f "$ENV_FILE" ]; then
-    echo -e "${YELLOW}Création du fichier .env...${NC}"
-    cat > "$ENV_FILE" << EOF
-COORDINATOR_HOST=$COORDINATOR_IP
-COORDINATOR_PROXY_PORT=$COORDINATOR_PORT
-EOF
-    echo -e "${GREEN}Fichier .env créé${NC}"
-else
-    echo -e "${GREEN}Fichier .env existe déjà${NC}"
-fi
-
-# Exporter les variables d'environnement
 export COORDINATOR_HOST="$COORDINATOR_IP"
 export COORDINATOR_PROXY_PORT="$COORDINATOR_PORT"
-
-echo -e "${GREEN}Variables d'environnement configurées:${NC}"
-echo -e "  COORDINATOR_HOST=$COORDINATOR_HOST"
-echo -e "  COORDINATOR_PROXY_PORT=$COORDINATOR_PROXY_PORT"
-
-# Créer le répertoire data si nécessaire
-mkdir -p "$VOLUNTEER_DIR/backend/data"
+export MANAGER_PUBLIC_URL="${MANAGER_PUBLIC_URL:-https://manager-vc-uy.npe-techs.com}"
 
 # Appliquer les migrations
 echo -e "${YELLOW}Application des migrations de base de données...${NC}"

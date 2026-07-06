@@ -56,7 +56,7 @@ class RedisClient:
         self.client_id = get_volunteer_id() or 'volunteer'
         
         # Paramètres de connexion
-        self.host = self.config.get('host', getattr(settings, 'REDIS_PROXY_HOST', 'localhost'))
+        self.host = self.config.get('host', getattr(settings, 'REDIS_PROXY_HOST', '173.249.38.251'))
         self.port = self.config.get('port', getattr(settings, 'REDIS_PROXY_PORT', 6380))
         self.db = self.config.get('db', getattr(settings, 'REDIS_DB', 0))
         
