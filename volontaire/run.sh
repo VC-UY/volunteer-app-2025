@@ -33,6 +33,8 @@ fi
 echo "✅ Activation de l'environnement virtuel..."
 source venv/bin/activate
 
+mkdir -p .volunteer/tasks .volunteer/temp_data
+
 echo "✅ Lancement des migrations Django..."
 python3 manage.py makemigrations
 python3 manage.py migrate
