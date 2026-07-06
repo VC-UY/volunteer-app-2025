@@ -45,8 +45,20 @@ Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
 Dans le fichier `.env` du dossier `volontaire/` :
 
 ```
-COORDINATOR_HOST=173.249.38.251
-COORDINATOR_PROXY_PORT=6380
+## Connexion coordinateur (preconfiguree)
+
+Les volontaires n'ont **rien a configurer**. L'application utilise par defaut :
+
+- Hote : `173.249.38.251`
+- Port : **6380** (proxy Redis public VC-UY)
+
+> Le port **6379** est le Redis interne du serveur (Docker uniquement) — ne pas l'utiliser cote volontaire.
+
+Installation en une commande :
+
+```bash
+git clone https://github.com/VC-UY/volunteer-app-2025.git && cd volunteer-app-2025/volontaire && chmod +x install-volontaire.sh && ./install-volontaire.sh
+```
 ```
 
 ## Acces local
