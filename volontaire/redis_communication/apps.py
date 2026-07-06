@@ -753,13 +753,19 @@ class RedisAppConfig(AppConfig):
         """
         Initialise la connexion Redis et les threads de communication lorsque l'application démarre.
         """
-        # Ne pas exécuter en mode commande (sauf pour runserver)
         if 'runserver' not in sys.argv and 'daphne' not in sys.argv[0]:
             return
-        
-        
+
         logger.info("===== Initialisation du service de communication Redis pour le volontaire =====")
-        
+        bootstrap = threading.Thread(
+            target=self._bootstrap_redis_service,
+            name='volunteer-redis-bootstrap',
+            daemon=True,
+        )
+        bootstrap.start()
+
+    def _bootstrap_redis_service(self):
+        """Connexion coordinateur + enregistrement/auth en arrière-plan (ne bloque pas Daphne)."""
         try:
             # Importer ici pour éviter les importations circulaires
             from .client import RedisClient
