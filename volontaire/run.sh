@@ -2,43 +2,31 @@
 
 set -e
 
-# === Vérifications minimales ===
-
-# Vérifie que l'environnement virtuel existe
 if [[ ! -f venv/bin/activate ]]; then
-    echo "❌ L'environnement virtuel 'venv' est introuvable. Exécutez d'abord le script d'installation."
+    echo "❌ Environnement virtuel introuvable. Relancez ./install-volontaire.sh"
     exit 1
 fi
 
-# Vérifie la présence de manage.py
 if [[ ! -f manage.py ]]; then
-    echo "❌ Le fichier 'manage.py' est introuvable. Lancez ce script depuis la racine du projet Django."
+    echo "❌ Lancez ce script depuis le dossier volontaire."
     exit 1
 fi
-
-# Vérifie la présence de python3
-if ! command -v python3 &>/dev/null; then
-    echo "❌ python3 est introuvable. Installez-le avant de continuer."
-    exit 1
-fi
-
-# Vérifie la présence de daphne
-if ! command -v daphne &>/dev/null; then
-    echo "❌ Daphne n'est pas installé (pip install daphne)."
-    exit 1
-fi
-
-# === Lancement ===
 
 echo "✅ Activation de l'environnement virtuel..."
 source venv/bin/activate
 
+# Daphne est installé dans le venv par install.sh — pas dans le PATH système
+if [[ ! -x venv/bin/daphne ]]; then
+    echo "📦 Installation de daphne dans le venv..."
+    pip install --quiet daphne channels
+fi
+
 mkdir -p .volunteer/tasks .volunteer/temp_data
 
-echo "✅ Lancement des migrations Django..."
-python3 manage.py makemigrations
-python3 manage.py migrate
+echo "✅ Migrations Django..."
+python manage.py migrate --noinput
 
-echo "✅ Lancement du serveur ASGI avec Daphne..."
+echo "✅ Lancement du serveur volontaire..."
 VOLUNTEER_PORT="${VOLUNTEER_API_PORT:-8003}"
-daphne -b 0.0.0.0 -p "${VOLUNTEER_PORT}" backend.asgi:application
+echo "   → http://localhost:${VOLUNTEER_PORT}"
+exec venv/bin/daphne -b 0.0.0.0 -p "${VOLUNTEER_PORT}" backend.asgi:application

@@ -1,85 +1,96 @@
 #!/bin/bash
 
-set -e  # Arrête le script en cas d'erreur
+set -e
 
-# === Fonctions de vérification ===
+BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$BASE_DIR"
 
-function check_command {
-    if ! command -v "$1" &>/dev/null; then
-        echo "❌ $1 n'est pas installé. Installation en cours..."
-        return 1
-    else
-        echo "✅ $1 est déjà installé."
-        return 0
+echo "🔧 Installation volontaire VC-UY (tout automatique)..."
+
+# --- Sudo si nécessaire (apt, docker) ---
+need_sudo=false
+if ! command -v python3 &>/dev/null || ! python3 -m venv --help &>/dev/null 2>&1; then
+    need_sudo=true
+fi
+if ! command -v docker &>/dev/null; then
+    need_sudo=true
+fi
+if $need_sudo; then
+    if [[ $EUID -ne 0 ]] && ! sudo -v &>/dev/null; then
+        echo "❌ Mot de passe sudo requis pour installer Python/Docker automatiquement."
+        exit 1
     fi
-}
-
-function check_sudo {
-    if [[ $EUID -ne 0 ]]; then
-        if ! sudo -v &>/dev/null; then
-            echo "❌ Les droits sudo sont requis pour continuer."
-            exit 1
-        fi
-    fi
-}
-
-# === Préparation ===
-BASE_DIR="$(pwd)"
-echo "🔧 Préparation de l'environnement..."
-
-# === Vérifications ===
-check_sudo
-
-check_command docker || {
-    sudo apt update
-    sudo apt install -y docker.io
-}
-
-check_command python3 || {
-    echo "❌ Python3 est requis mais non trouvé. Veuillez l'installer manuellement."
-    exit 1
-}
-
-check_command python3-venv || {
-    sudo apt install -y python3-venv
-}
-
-# === Docker ===
-echo "🚀 Démarrage du service Docker..."
-sudo service docker start
-
-echo "🧑‍💻 Ajout de l'utilisateur '$USER' au groupe docker (si nécessaire)..."
-sudo usermod -aG docker "$USER"
-echo "ℹ️ Veuillez vous déconnecter/reconnecter ou exécuter 'newgrp docker' pour que les droits prennent effet."
-
-# === Chargement de l'image Docker ===
-if [[ -f task_docker_img/image-docker.tar ]]; then
-    echo "📦 Chargement de l'image Docker..."
-    docker image load -i task_docker_img/image-docker.tar
-else
-    echo "⚠️ Fichier task_docker_img/image-docker.tar introuvable. Ignoré."
 fi
 
-# === Environnement virtuel ===
-echo "🐍 Création de l'environnement virtuel Python..."
-cd "$BASE_DIR"
+# --- Python 3 + venv ---
+if ! command -v python3 &>/dev/null; then
+    echo "📦 Installation de Python 3..."
+    sudo apt-get update -qq
+    sudo apt-get install -y python3 python3-venv python3-pip
+fi
+if ! python3 -m venv --help &>/dev/null 2>&1; then
+    echo "📦 Installation de python3-venv..."
+    sudo apt-get update -qq
+    sudo apt-get install -y python3-venv python3-pip
+fi
+echo "✅ Python 3 prêt."
+
+# --- Docker ---
+docker_cmd() {
+    if docker info &>/dev/null 2>&1; then
+        docker "$@"
+    elif sg docker -c "docker $*" 2>/dev/null; then
+        :
+    else
+        sudo docker "$@"
+    fi
+}
+
+if ! command -v docker &>/dev/null; then
+    echo "📦 Installation de Docker..."
+    sudo apt-get update -qq
+    sudo apt-get install -y docker.io
+fi
+sudo service docker start 2>/dev/null || sudo systemctl start docker 2>/dev/null || true
+if [[ $EUID -ne 0 ]]; then
+    sudo usermod -aG docker "$USER" 2>/dev/null || true
+fi
+echo "✅ Docker prêt."
+
+# --- Image Docker malaria ---
+if [[ -f task_docker_img/image-docker.tar ]]; then
+    echo "📦 Chargement de l'image Docker..."
+    docker_cmd image load -i task_docker_img/image-docker.tar
+elif ! docker_cmd image inspect malaria-exp:latest &>/dev/null 2>&1; then
+    echo "📦 Téléchargement de l'image malaria-exp:latest..."
+    docker_cmd pull malaria-exp:latest 2>/dev/null || echo "⚠️ Image malaria : sera tirée à la première tâche."
+fi
+
+# --- Environnement virtuel Python ---
+echo "🐍 Création de l'environnement virtuel..."
 rm -rf venv
 python3 -m venv venv
 source venv/bin/activate
 
-# === Environnement volontaire ===
 mkdir -p .volunteer/tasks .volunteer/temp_data
 
-# === Installation des paquets Python ===
-echo "📦 Installation des paquets Python requis..."
-pip install --upgrade pip
-if [[ -f requirements.txt ]]; then
-    pip install -r requirements.txt
+# --- Dépendances Python (requirements à la racine du repo ou local) ---
+echo "📦 Installation des dépendances Python..."
+pip install --upgrade pip -q
+REQ="requirements.txt"
+[[ -f "$REQ" ]] || REQ="../requirements.txt"
+if [[ -f "$REQ" ]]; then
+    pip install -r "$REQ"
 else
     pip install django djangorestframework docker psutil redis requests PyJWT channels daphne
 fi
 
-echo "🔧 Application des migrations..."
-python3 manage.py migrate
+if [[ ! -x venv/bin/daphne ]]; then
+    echo "📦 Installation de daphne..."
+    pip install daphne channels
+fi
 
-echo "🎉 Tout est installé avec succès."
+echo "🔧 Migrations..."
+python manage.py migrate --noinput
+
+echo "🎉 Installation terminée."
