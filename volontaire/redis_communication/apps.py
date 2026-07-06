@@ -839,6 +839,7 @@ class RedisAppConfig(AppConfig):
                 )
                 if success:
                     logger.info("Volontaire authentifié avec succès")
+                    self.volunteer_id = volunteer_info.volunteer_id
                     self.volunteer_token = data.get('token')
                     if not os.path.exists('.volunteer'):
                         os.makedirs('.volunteer')
