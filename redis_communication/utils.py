@@ -16,6 +16,37 @@ from .auth_client import DATA_BASE_DIR
 logger = logging.getLogger(__name__)
 
 
+def load_cached_auth_info() -> Optional[Dict[str, Any]]:
+    """Charge le fichier auth local (token, refresh, identifiants)."""
+    auth_file = os.path.join(DATA_BASE_DIR, 'auth', 'volunteer_auth_info.json')
+    try:
+        with open(auth_file, 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return None
+    except Exception as exc:
+        logger.warning("Lecture auth cache impossible: %s", exc)
+        return None
+
+
+def is_auth_token_valid(token: Optional[str], leeway: int = 300) -> bool:
+    """True si le JWT n'est pas expiré (signature non vérifiée côté client)."""
+    if not token:
+        return False
+    try:
+        jwt.decode(
+            token,
+            options={"verify_signature": False, "verify_exp": True},
+            algorithms=["HS256"],
+            leeway=leeway,
+        )
+        return True
+    except jwt.ExpiredSignatureError:
+        return False
+    except Exception:
+        return False
+
+
 def get_volunteer_auth_token():
     """Récupère le token d'authentification du volontaire depuis le fichier de configuration."""
     # Utiliser DATA_BASE_DIR pour supporter les instances multiples

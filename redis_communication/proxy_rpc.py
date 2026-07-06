@@ -24,7 +24,7 @@ def _redis_kwargs() -> dict:
         lib_name=None,
         lib_version=None,
         socket_connect_timeout=10,
-        socket_timeout=15,
+        socket_timeout=25,
     )
 
 

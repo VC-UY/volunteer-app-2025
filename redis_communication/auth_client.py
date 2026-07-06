@@ -150,10 +150,11 @@ def delete_response(request_id: str) -> bool:
         return False
 
 
-def register_volunteer(name: str, ip_address: str, cpu_cores: int, ram_mb: int, disk_gb: int,
-                       username: str, password: str, machine_info: Optional[Dict[str, Any]] = None,
+def register_volunteer(name: str, mac_address: str = '', cpu_cores: int = 0, ram_mb: int = 0, disk_gb: int = 0,
+                       username: str = '', password: str = '', machine_info: Optional[Dict[str, Any]] = None,
                        callback: Optional[Callable[[Dict[str, Any]], None]] = None,
-                       timeout: int = 30) -> Tuple[bool, Dict[str, Any]]:
+                       timeout: int = 30,
+                       ip_address: str = '') -> Tuple[bool, Dict[str, Any]]:
     """
     Enregistre un nouveau volontaire auprès du coordinateur.
     
@@ -189,7 +190,7 @@ def register_volunteer(name: str, ip_address: str, cpu_cores: int, ram_mb: int, 
     request_data = {
         'action': 'register',
         'name': name,
-        'ip_address': ip_address,
+        'mac_address': mac_address or (machine_info or {}).get('adresse_mac', ''),
         'cpu_cores': cpu_cores,
         'ram_mb': ram_mb,
         'disk_gb': disk_gb,
@@ -251,7 +252,7 @@ def register_volunteer(name: str, ip_address: str, cpu_cores: int, ram_mb: int, 
     
 def login_volunteer(username: str, password: str,
                      callback: Optional[Callable[[Dict[str, Any]], None]] = None,
-                     timeout: int = 30,
+                     timeout: int = 60,
                     ) -> Tuple[bool, Dict[str, Any]]:
     """
     Authentifie un volontaire auprès du coordinateur.
