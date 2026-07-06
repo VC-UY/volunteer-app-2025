@@ -135,7 +135,7 @@ def _wait_for_response(
 def register_volunteer(name: str, ip_address: str, cpu_cores: int, ram_mb: int, disk_gb: int,
                        username: str, password: str, machine_info: Optional[Dict[str, Any]] = None,
                        callback: Optional[Callable[[Dict[str, Any]], None]] = None,
-                       timeout: int = 30) -> Tuple[bool, Dict[str, Any]]:
+                       timeout: int = 15) -> Tuple[bool, Dict[str, Any]]:
     """
     Enregistre un nouveau volontaire auprès du coordinateur.
     
@@ -216,7 +216,7 @@ def register_volunteer(name: str, ip_address: str, cpu_cores: int, ram_mb: int, 
     
 def login_volunteer(username: str, password: str,
                      callback: Optional[Callable[[Dict[str, Any]], None]] = None,
-                     timeout: int = 30,
+                     timeout: int = 15,
                     ) -> Tuple[bool, Dict[str, Any]]:
     """
     Authentifie un volontaire auprès du coordinateur.

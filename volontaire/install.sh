@@ -6,6 +6,7 @@ BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$BASE_DIR"
 
 echo "🔧 Installation volontaire VC-UY (tout automatique)..."
+echo "   Branche Git attendue : main"
 
 # --- Sudo si nécessaire (apt, docker) ---
 need_sudo=false
@@ -94,3 +95,9 @@ echo "🔧 Migrations..."
 python manage.py migrate --noinput
 
 echo "🎉 Installation terminée."
+if ! docker info &>/dev/null 2>&1; then
+    echo ""
+    echo "⚠️  Docker est installé mais l'accès est refusé pour $USER."
+    echo "    Exécutez : newgrp docker"
+    echo "    Puis relancez : ./install-volontaire.sh"
+fi

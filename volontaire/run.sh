@@ -27,6 +27,7 @@ echo "✅ Migrations Django..."
 python manage.py migrate --noinput
 
 echo "✅ Lancement du serveur volontaire..."
+echo "   Connexion coordinateur en arrière-plan (173.249.38.251:6380)..."
 VOLUNTEER_PORT="${VOLUNTEER_API_PORT:-8003}"
 echo "   → http://localhost:${VOLUNTEER_PORT}"
 exec venv/bin/daphne -b 0.0.0.0 -p "${VOLUNTEER_PORT}" backend.asgi:application

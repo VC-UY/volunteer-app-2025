@@ -4,6 +4,7 @@ Client Redis universel pour la communication entre les composants du système.
 
 import json
 import logging
+import socket
 import threading
 import time
 import uuid
@@ -59,18 +60,11 @@ class RedisClient:
         self.host = self.config.get('host', getattr(settings, 'REDIS_PROXY_HOST', '173.249.38.251'))
         self.port = self.config.get('port', getattr(settings, 'REDIS_PROXY_PORT', 6380))
         self.db = self.config.get('db', getattr(settings, 'REDIS_DB', 0))
-        
-        # Client Redis
-        self.redis = redis.Redis(
-            host=self.host,
-            port=self.port,
-            db=self.db,
-            decode_responses=True,
-            protocol=2,
-        )
-        
-        # PubSub pour les abonnements
-        self.pubsub = self.redis.pubsub(ignore_subscribe_messages=True)
+
+        self.redis = None
+        self._pubsub_redis = None
+        self.pubsub = None
+        self._initialize_connection()
         
         # Gestionnaires d'événements par canal
         self.handlers: Dict[str, List[Callable]] = {}
@@ -88,6 +82,39 @@ class RedisClient:
         }
         
         logger.info(f"Client Redis initialisé: {self.client_type}:{self.client_id} @ {self.host}:{self.port}")
+
+    def _initialize_connection(self):
+        """Connexion Redis via le proxy 6380 (RESP2, timeouts courts)."""
+        redis_kwargs = dict(
+            host=self.host,
+            port=self.port,
+            db=self.db,
+            decode_responses=True,
+            socket_keepalive=True,
+            socket_connect_timeout=10,
+            socket_timeout=30,
+            health_check_interval=0,
+            lib_name=None,
+            lib_version=None,
+        )
+        try:
+            self.redis = redis.Redis(protocol=2, **redis_kwargs)
+        except TypeError:
+            redis_kwargs.pop('lib_name', None)
+            redis_kwargs.pop('lib_version', None)
+            try:
+                self.redis = redis.Redis(protocol=2, **redis_kwargs)
+            except TypeError:
+                self.redis = redis.Redis(**redis_kwargs)
+
+        ps_kwargs = dict(redis_kwargs)
+        ps_kwargs['socket_timeout'] = 5
+        try:
+            self._pubsub_redis = redis.Redis(protocol=2, **ps_kwargs)
+        except TypeError:
+            self._pubsub_redis = redis.Redis(**ps_kwargs)
+        self.pubsub = self._pubsub_redis.pubsub(ignore_subscribe_messages=True)
+        self.redis.ping()
     
     def start(self):
         """
@@ -115,10 +142,10 @@ class RedisClient:
         self.running = False
         if self.listen_thread:
             self.listen_thread.join(timeout=2.0)
-        
-        # Désabonnement de tous les canaux
-        self.pubsub.unsubscribe()
-        self.pubsub.close()
+
+        if self.pubsub:
+            self.pubsub.unsubscribe()
+            self.pubsub.close()
         
         logger.info(f"Client Redis arrêté: {self.client_type}:{self.client_id}")
     
