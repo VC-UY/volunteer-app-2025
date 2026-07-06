@@ -149,8 +149,14 @@ def collect_full_volunteer_info(existing_info=None):
     logger.info(f"Données statiques collectées via l'agent: OS={static_data.get('os', {}).get('nom')}, CPU={static_data.get('cpu', {}).get('coeurs_logiques')} cores")
     
     from .utils import get_local_ip
-    ip_address = get_local_ip()
     hostname = static_data.get('os', {}).get('hostname') or socket.gethostname()
+    # MAC = identifiant machine (pas l'IP publique)
+    mac_address = static_data.get('adresse_mac')
+    if not mac_address and static_data.get('reseau', {}).get('interfaces'):
+        for iface in static_data['reseau']['interfaces']:
+            if iface.get('mac'):
+                mac_address = iface['mac']
+                break
     cpu_cores = int(static_data.get('cpu', {}).get('coeurs_logiques') or 0)
 
     # Fallback psutil si l'agent n'a pas fourni les ressources
@@ -194,7 +200,7 @@ def collect_full_volunteer_info(existing_info=None):
     
     return {
         'hostname': hostname,
-        'ip_address': ip_address,
+        'mac_address': mac_address or '',
         'cpu_cores': cpu_cores,
         'ram_mb': ram_mb,
         'disk_gb': disk_gb,
@@ -203,9 +209,30 @@ def collect_full_volunteer_info(existing_info=None):
         'machine_info': static_data
     }
 
+def _save_auth_file(full_info: dict, data: dict) -> None:
+    auth_dir = os.path.join(DATA_BASE_DIR, 'auth')
+    os.makedirs(auth_dir, exist_ok=True)
+    auth_file = os.path.join(auth_dir, 'volunteer_auth_info.json')
+    with open(auth_file, 'w') as f:
+        json.dump({
+            'token': data.get('token'),
+            'refresh_token': data.get('refresh_token'),
+            'username': full_info['username'],
+            'password': full_info['password'],
+            'last_login': time.time(),
+        }, f)
+    logger.info("Auth info sauvegardée dans %s", auth_file)
+
+
+def _start_task_manager(volunteer_id) -> None:
+    from .task_handlers import TaskManager
+    TaskManager.get_instance().start(str(volunteer_id))
+
+
 def auth_volunteer_flow():
 
     from .auth_client import register_volunteer, login_volunteer
+    from .utils import is_auth_token_valid, load_cached_auth_info
     from volontaire.models import MachineInfo
     logger.info("Vérification de l'enregistrement du volontaire...")
     volunteer_info = MachineInfo.objects.get_last_inserted()
@@ -223,41 +250,68 @@ def auth_volunteer_flow():
                 updated = True
         if updated:
             volunteer_info.save()
-        logger.info(f"Connexion volontaire avec username={full_info['username']}")
+
+        cached_auth = load_cached_auth_info()
+        volunteer_id = str(volunteer_info.volunteer_id)
+
+        if cached_auth and is_auth_token_valid(cached_auth.get('token')):
+            logger.info("Token en cache valide — démarrage immédiat (refresh auth en arrière-plan)")
+            _start_task_manager(volunteer_id)
+
+            def _refresh_login():
+                try:
+                    success, data = login_volunteer(
+                        username=full_info['username'],
+                        password=full_info['password'],
+                        timeout=60,
+                    )
+                    if success:
+                        _save_auth_file(full_info, data)
+                        logger.info("Refresh auth volontaire réussi")
+                    else:
+                        logger.warning("Refresh auth volontaire ignoré: %s", data.get('message'))
+                except Exception as exc:
+                    logger.warning("Refresh auth volontaire en échec: %s", exc)
+
+            threading.Thread(
+                target=_refresh_login,
+                name="volunteer-auth-refresh",
+                daemon=True,
+            ).start()
+            return True
+
+        logger.info(
+            "Connexion volontaire avec username=%s (attente coordinateur, jusqu'à 60s)...",
+            full_info['username'],
+        )
         success, data = login_volunteer(
             username=full_info['username'],
-            password=full_info['password']
+            password=full_info['password'],
+            timeout=60,
         )
         if success:
             logger.info("Volontaire authentifié avec succès")
-            # Utiliser DATA_BASE_DIR pour supporter les instances multiples
-            auth_dir = os.path.join(DATA_BASE_DIR, 'auth')
-            os.makedirs(auth_dir, exist_ok=True)
-            auth_file = os.path.join(auth_dir, 'volunteer_auth_info.json')
-            with open(auth_file, 'w') as f:
-                json.dump({
-                    'token': data.get('token'),
-                    'refresh_token': data.get('refresh_token'),
-                    'username': full_info['username'],  # Ajouté pour le rafraîchissement
-                    'password': full_info['password'],  # Ajouté pour le rafraîchissement
-                    'last_login': time.time()
-                }, f)
-            logger.info(f"Auth info sauvegardée dans {auth_file}")
+            _save_auth_file(full_info, data)
             logger.debug("Volontaire authentifié avec succès")
-            from .task_handlers import TaskManager
-            task_manager = TaskManager.get_instance()
-            task_manager.start(volunteer_info.volunteer_id)
+            _start_task_manager(volunteer_id)
         else:
+            if cached_auth and is_auth_token_valid(cached_auth.get('token')):
+                logger.warning(
+                    "Login RPC échoué (%s) — poursuite avec le token en cache",
+                    data.get('message'),
+                )
+                _start_task_manager(volunteer_id)
+                return True
             logger.error(f"Échec de l'authentification du volontaire: {data}")
             return False
     else:
         logger.info("Cas 2 ou 3 : Volontaire non enregistré ou sans volunteer_id")
         full_info = collect_full_volunteer_info(volunteer_info)
-        logger.info(f"[ENREGISTREMENT] Données envoyées au coordinateur via l'agent : name={full_info['hostname']}, ip_address={full_info['ip_address']}, cpu_cores={full_info['cpu_cores']}, ram_mb={full_info['ram_mb']}, disk_gb={full_info['disk_gb']}, username={full_info['username']}, password={full_info['password']}")
+        logger.info(f"[ENREGISTREMENT] machine={full_info['hostname']}, mac={full_info.get('mac_address', '')[:8]}…")
         
         success, data = register_volunteer(
             name=full_info['hostname'],
-            ip_address=full_info['ip_address'],
+            mac_address=full_info.get('mac_address', ''),
             cpu_cores=full_info['cpu_cores'],
             ram_mb=full_info['ram_mb'],
             disk_gb=full_info['disk_gb'],

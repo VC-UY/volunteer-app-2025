@@ -5,6 +5,7 @@ Gestionnaires pour les tâches dans le module de communication Redis.
 import logging
 import json
 import os
+import re
 import time
 import uuid
 from datetime import datetime
@@ -24,6 +25,32 @@ logger = logging.getLogger(__name__)
 # Répertoire pour stocker les fichiers des tâches
 TASKS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.volunteer', 'tasks')
 os.makedirs(TASKS_DIR, exist_ok=True)
+
+
+def _get_workflow_uuid(task) -> str | None:
+    """UUID workflow côté manager (pas l'id FK Django local)."""
+    if getattr(task, "workflow", None):
+        wfid = getattr(task.workflow, "workflow_id", None)
+        if wfid:
+            return str(wfid)
+    input_data = task.input_data or {}
+    fs = input_data.get("file_server") or {}
+    path = fs.get("path") or ""
+    match = re.search(r"input_([0-9a-f-]{36})", path, re.I)
+    if match:
+        return match.group(1)
+    return None
+
+
+def _manager_public_base() -> str:
+    return os.environ.get(
+        "MANAGER_PUBLIC_URL", "https://manager-vc-uy.npe-techs.com"
+    ).rstrip("/")
+
+
+def _manager_file_url(workflow_uuid: str, file_path: str) -> str:
+    return f"{_manager_public_base()}/api/workflow-files/{workflow_uuid}/{file_path}"
+
 
 class TaskManager:
     """
@@ -359,12 +386,20 @@ class TaskManager:
                 }
             )
             
-            # Télécharger les fichiers d'entrée si nécessaires
-            if task.input_data and 'files' in task.input_data:
-                self._download_input_files(task)
-            
+            # Télécharger les fichiers d'entrée avant toute exécution Docker
+            download_ok = True
+            if task.input_data and task.input_data.get("files"):
+                download_ok = self._download_input_files(task)
+
+            if not download_ok:
+                logger.error(
+                    "Téléchargement échoué pour %s — exécution annulée",
+                    task.task_id,
+                )
+                continue
+
             # Exécuter la tâche dans un thread séparé
-            import threading    
+            import threading
             thread = threading.Thread(target=self._execute_task, args=(task,))
             thread.setDaemon(True)
             thread.start()
@@ -1531,6 +1566,14 @@ class TaskManager:
         downloaded_files = []
         total_files = len(files)
         
+        workflow_uuid = _get_workflow_uuid(task)
+        proxy_broken = (
+            file_server.get("_routed_by") == "coordinator_file_proxy"
+            or file_server.get("port") == 8410
+            or ":8410" in (base_url or "")
+            or file_server.get("mode") != "public_api"
+        )
+
         for i, file_info in enumerate(files):
             # Gérer les deux formats possibles : chaîne ou dictionnaire
             if isinstance(file_info, dict):
@@ -1538,77 +1581,106 @@ class TaskManager:
             else:
                 # Si c'est une chaîne, utiliser directement
                 file_path = file_info
-                
-            # Construire l'URL complète avec le chemin du serveur
-            # server_path peut être vide ou contenir un chemin comme "/files/input_xxx/"
-            if server_path:
-                # S'assurer que le chemin se termine par /
-                if not server_path.endswith('/'):
-                    server_path = server_path + '/'
-                file_url = f"{base_url}{server_path}{file_path}"
-            else:
-                file_url = f"{base_url}/{file_path}"
-            
+
             # Déterminer le chemin local
             local_path = input_dir / Path(file_path).name
-            
-            try:
-                # Télécharger le fichier
-                logger.info(f"Téléchargement du fichier {file_url} vers {local_path}")
-                response = requests.get(file_url, stream=True, timeout=30)
-                response.raise_for_status()
 
-                # Écrire le fichier sur le disque
-                with open(local_path, 'wb') as f:
-                    for chunk in response.iter_content(chunk_size=8192):
+            def _save_response(resp):
+                with open(local_path, "wb") as f:
+                    for chunk in resp.iter_content(chunk_size=8192):
                         f.write(chunk)
 
-                downloaded_files.append({
-                    'remote_path': file_path,
-                    'local_path': str(local_path)
-                })
+            downloaded = False
+            last_error = None
 
-            except Exception as e:
-                logger.warning(f"Échec téléchargement via proxy {file_url}: {e}")
+            # Proxy coordinateur souvent cassé : API manager en priorité
+            if workflow_uuid and proxy_broken:
+                manager_url = _manager_file_url(workflow_uuid, file_path)
+                try:
+                    logger.info(f"Téléchargement manager API: {manager_url}")
+                    response = requests.get(manager_url, stream=True, timeout=60)
+                    response.raise_for_status()
+                    _save_response(response)
+                    downloaded_files.append({
+                        "remote_path": file_path,
+                        "local_path": str(local_path),
+                    })
+                    downloaded = True
+                except Exception as e:
+                    last_error = e
+                    logger.warning(f"Échec manager API {manager_url}: {e}")
 
-                # Fallback: essayer l'URL originale si disponible (quand le proxy est inaccessible)
-                original_base_url = file_server.get('_original_base_url')
-                if original_base_url:
-                    try:
-                        # Construire l'URL originale (sans le path du proxy)
-                        fallback_url = f"{original_base_url}/{file_path}"
-                        logger.info(f"Tentative fallback vers URL originale: {fallback_url}")
+            if not downloaded:
+                # Construire l'URL complète avec le chemin du serveur
+                if server_path:
+                    sp = server_path if server_path.endswith("/") else server_path + "/"
+                    file_url = f"{base_url}{sp}{file_path}"
+                else:
+                    file_url = f"{base_url}/{file_path}"
 
-                        response = requests.get(fallback_url, stream=True, timeout=30)
-                        response.raise_for_status()
+                try:
+                    logger.info(f"Téléchargement du fichier {file_url} vers {local_path}")
+                    response = requests.get(file_url, stream=True, timeout=30)
+                    response.raise_for_status()
+                    _save_response(response)
+                    downloaded_files.append({
+                        "remote_path": file_path,
+                        "local_path": str(local_path),
+                    })
+                    downloaded = True
+                except Exception as e:
+                    last_error = e
+                    logger.warning(f"Échec téléchargement {file_url}: {e}")
 
-                        with open(local_path, 'wb') as f:
-                            for chunk in response.iter_content(chunk_size=8192):
-                                f.write(chunk)
+            if not downloaded and workflow_uuid and not proxy_broken:
+                try:
+                    fallback_url = _manager_file_url(workflow_uuid, file_path)
+                    logger.info(f"Tentative fallback manager API: {fallback_url}")
+                    response = requests.get(fallback_url, stream=True, timeout=60)
+                    response.raise_for_status()
+                    _save_response(response)
+                    downloaded_files.append({
+                        "remote_path": file_path,
+                        "local_path": str(local_path),
+                    })
+                    downloaded = True
+                except Exception as api_err:
+                    last_error = api_err
+                    logger.warning(f"Échec fallback manager API: {api_err}")
 
-                        downloaded_files.append({
-                            'remote_path': file_path,
-                            'local_path': str(local_path)
-                        })
-                        logger.info(f"Fichier téléchargé via fallback: {fallback_url}")
-                        continue  # Succès, passer au fichier suivant
+            if downloaded:
+                continue
 
-                    except Exception as fallback_error:
-                        logger.error(f"Échec fallback {fallback_url}: {fallback_error}")
+            # Dernier recours : URL originale enregistrée dans le message
+            original_base_url = file_server.get("_original_base_url")
+            if original_base_url:
+                try:
+                    fallback_url = f"{original_base_url}/{file_path}"
+                    logger.info(f"Tentative fallback URL originale: {fallback_url}")
+                    response = requests.get(fallback_url, stream=True, timeout=30)
+                    response.raise_for_status()
+                    _save_response(response)
+                    downloaded_files.append({
+                        "remote_path": file_path,
+                        "local_path": str(local_path),
+                    })
+                    continue
+                except Exception as fallback_error:
+                    logger.error(f"Échec fallback {fallback_url}: {fallback_error}")
 
-                logger.error(f"Impossible de télécharger le fichier {file_path}")
-                
-                # Créer un événement d'erreur
-                from django.apps import apps
-                TaskProgress = apps.get_model('volontaire', 'TaskProgress')
-                # Enregistrer l'erreur dans la base de données
-                TaskProgress.objects.create(
-                    task=task,
-                    progress_type='error',
-                    percentage=0,
-                    message=f"Erreur lors du téléchargement du fichier {file_path}",
-                    details={'error': str(e)}
-                )
+            e = last_error or RuntimeError("téléchargement impossible")
+            logger.error(f"Impossible de télécharger le fichier {file_path}")
+
+            # Créer un événement d'erreur
+            from django.apps import apps
+            TaskProgress = apps.get_model('volontaire', 'TaskProgress')
+            TaskProgress.objects.create(
+                task=task,
+                progress_type='error',
+                percentage=0,
+                message=f"Erreur lors du téléchargement du fichier {file_path}",
+                details={'error': str(e)}
+            )
         
         # Mettre à jour le statut de la tâche
         if len(downloaded_files) == total_files:
@@ -1689,19 +1761,23 @@ class TaskManager:
         # Récupérer la dernière progression enregistrée
         latest_progress = TaskProgress.objects.filter(task=task).order_by('-timestamp').first()
         progress_value = latest_progress.percentage if latest_progress else 0
-        from redis_communication.utils import get_volunteer_auth_token
-        self.redis_client.publish('task/status', {
-                    'task_id': task.task_id,
-                    'volunteer_id': self.volunteer_id,
-                    'workflow_id': task.workflow.workflow_id if hasattr(task, 'workflow') and task.workflow else None,
-                    'status': task.status,
-                    'progress': progress_value,
-                    'timestamp': datetime.now().isoformat()
-                },
-                str(uuid.uuid4()),
-                get_volunteer_auth_token() ,
-                'request' 
-                )
+        from redis_communication.utils import get_volunteer_auth_token, get_volunteer_id
+        vid = self.volunteer_id or get_volunteer_id()
+        try:
+            self.redis_client.publish('task/status', {
+                        'task_id': task.task_id,
+                        'volunteer_id': vid,
+                        'workflow_id': task.workflow.workflow_id if hasattr(task, 'workflow') and task.workflow else None,
+                        'status': task.status,
+                        'progress': progress_value,
+                        'timestamp': datetime.now().isoformat()
+                    },
+                    str(uuid.uuid4()),
+                    get_volunteer_auth_token() ,
+                    'request'
+                    )
+        except Exception as exc:
+            logger.warning("Publication task/status ignorée (exécution continue): %s", exc)
     
     def _send_task_progress(self, task, progress):
         """
@@ -1712,17 +1788,20 @@ class TaskManager:
             progress: Valeur de progression actuelle
         """
         from redis_communication.utils import get_volunteer_auth_token
-        self.redis_client.publish('task/progress', {
-                'task_id': task.task_id,
-                'workflow_id': task.workflow.workflow_id if hasattr(task, 'workflow') and task.workflow else None,
-                'volunteer_id': self.volunteer_id,
-                'progress': progress,
-                'timestamp': datetime.now().isoformat()
-            },
-            str(uuid.uuid4()),
-            get_volunteer_auth_token() ,
-            'request' 
-        )
+        try:
+            self.redis_client.publish('task/progress', {
+                    'task_id': task.task_id,
+                    'workflow_id': task.workflow.workflow_id if hasattr(task, 'workflow') and task.workflow else None,
+                    'volunteer_id': self.volunteer_id,
+                    'progress': progress,
+                    'timestamp': datetime.now().isoformat()
+                },
+                str(uuid.uuid4()),
+                get_volunteer_auth_token() ,
+                'request'
+            )
+        except Exception as exc:
+            logger.warning("Publication task/progress ignorée: %s", exc)
 
         logger.info(f"Publication de la progression pour la tâche {task.name}: {progress}")
     

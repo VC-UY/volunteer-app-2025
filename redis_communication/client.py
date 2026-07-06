@@ -73,6 +73,7 @@ class RedisClient:
         # Client Redis (sera initialisé par _initialize_connection)
         self.redis = None
         self.pubsub = None
+        self._pubsub_redis = None  # Connexion dédiée écoute (évite conflit PING/pubsub)
         
         # Gestionnaires d'événements par canal (pour réabonnement)
         self.handlers: Dict[str, List[Callable]] = {}
@@ -133,11 +134,14 @@ class RedisClient:
                 except TypeError:
                     self.redis = redis.Redis(**redis_kwargs)
 
-            # Ne pas faire de PING initial car le proxy nécessite une authentification JWT
-            # self.redis.ping()
-            
-            # Créer le PubSub
-            self.pubsub = self.redis.pubsub(ignore_subscribe_messages=True)
+            # Connexion séparée pour SUBSCRIBE (ne jamais PING sur la même socket que pubsub)
+            ps_kwargs = dict(redis_kwargs)
+            ps_kwargs['socket_timeout'] = 5
+            try:
+                self._pubsub_redis = redis.Redis(protocol=2, **ps_kwargs)
+            except TypeError:
+                self._pubsub_redis = redis.Redis(**ps_kwargs)
+            self.pubsub = self._pubsub_redis.pubsub(ignore_subscribe_messages=True)
             
             self.connected = True
             self.reconnect_attempts = 0
@@ -324,26 +328,39 @@ class RedisClient:
             else:
                 logger.warning(f"Aucun token disponible pour le canal {channel}")
         
-        # Publier le message
+        # Publier le message (timeout court : ne jamais bloquer l'exécution des tâches)
         try:
-            # Log pour déboguer le problème de sérialisation
             json_message = message.to_json()
             logger.info(f"Message sérialisé pour {channel}: {json_message}")
-            
-            self.redis.publish(channel, json_message)
+
+            pub_client = redis.Redis(
+                host=self.host,
+                port=self.port,
+                db=self.db,
+                decode_responses=True,
+                socket_connect_timeout=3,
+                socket_timeout=3,
+                lib_name=None,
+                lib_version=None,
+            )
+            try:
+                pub_client.publish(channel, json_message)
+            finally:
+                pub_client.close()
+
             self.stats['messages_sent'] += 1
             self.stats['last_activity'] = time.time()
-            
+
             logger.debug(f"Message publié sur {channel}: {message.request_id}")
             return message.request_id
         except (redis.ConnectionError, redis.TimeoutError) as e:
-            logger.error(f"Erreur de connexion lors de la publication sur {channel}: {e}")
+            logger.warning(f"Publication {channel} ignorée (Redis lent/hors ligne): {e}")
             self.connected = False
             self.stats['connection_errors'] += 1
-            raise ChannelError(f"Erreur de publication: {e}")
+            return None
         except Exception as e:
-            logger.error(f"Erreur lors de la publication sur {channel}: {e}")
-            raise ChannelError(f"Erreur de publication: {e}")
+            logger.warning(f"Publication {channel} ignorée: {e}")
+            return None
     
     def _reconnect(self):
         """
@@ -365,7 +382,12 @@ class RedisClient:
             if self.pubsub:
                 try:
                     self.pubsub.close()
-                except:
+                except Exception:
+                    pass
+            if self._pubsub_redis:
+                try:
+                    self._pubsub_redis.close()
+                except Exception:
                     pass
             
             # Réinitialiser la connexion
@@ -435,12 +457,10 @@ class RedisClient:
                         break
                     time.sleep(1)
             else:
-                # Ping pour vérifier que la connexion est vivante
-                try:
-                    if self.redis:
-                        self.redis.ping()
-                except Exception as e:
-                    logger.warning(f"⚠️ Watchdog: Connexion perdue ({e})")
+                # Vérifier l'activité récente (ne pas PING sur la connexion pubsub)
+                idle = time.time() - self.stats.get('last_activity', 0)
+                if idle > 120:
+                    logger.warning("⚠️ Watchdog: inactivité Redis > 120s, reconnexion")
                     self.connected = False
                     self.stats['connection_errors'] += 1
     
