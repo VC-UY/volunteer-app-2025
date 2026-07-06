@@ -36,27 +36,80 @@ if ! python3 -m venv --help &>/dev/null 2>&1; then
 fi
 echo "✅ Python 3 prêt."
 
-# --- Docker ---
+# --- Docker : installation fiable + accès utilisateur ---
+docker_accessible() {
+    docker info &>/dev/null 2>&1
+}
+
 docker_cmd() {
-    if docker info &>/dev/null 2>&1; then
+    if docker_accessible; then
         docker "$@"
-    elif sg docker -c "docker $*" 2>/dev/null; then
-        :
-    else
+    elif command -v sg &>/dev/null && sg docker -c "docker $*" &>/dev/null; then
+        sg docker -c "docker $*"
+    elif sudo docker info &>/dev/null 2>&1; then
         sudo docker "$@"
+    else
+        return 1
+    fi
+}
+
+install_docker_engine() {
+    echo "📦 Installation de Docker..."
+    sudo apt-get update -qq
+    sudo apt-get install -y ca-certificates curl gnupg lsb-release
+
+    # Script officiel Docker (fonctionne sur Ubuntu/Debian récents où docker.io échoue)
+    if curl -fsSL https://get.docker.com | sudo sh; then
+        echo "✅ Docker installé (get.docker.com)."
+        return 0
+    fi
+
+    echo "⚠️  get.docker.com a échoué, tentative via dépôt Docker CE..."
+    sudo install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg 2>/dev/null || true
+    sudo chmod a+r /etc/apt/keyrings/docker.gpg 2>/dev/null || true
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "${VERSION_CODENAME:-$UBUNTU_CODENAME}") stable" \
+        | sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
+    sudo apt-get update -qq
+    if sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin; then
+        echo "✅ Docker CE installé."
+        return 0
+    fi
+
+    echo "⚠️  Dépôt Docker CE indisponible, tentative docker.io..."
+    sudo apt-get install -y docker.io
+    echo "✅ Docker installé (docker.io)."
+}
+
+setup_docker_service_and_access() {
+    sudo systemctl enable docker 2>/dev/null || true
+    sudo systemctl start docker 2>/dev/null || sudo service docker start 2>/dev/null || true
+
+    if [[ -S /var/run/docker.sock ]]; then
+        sudo chown root:docker /var/run/docker.sock 2>/dev/null || true
+        sudo chmod 660 /var/run/docker.sock 2>/dev/null || true
+    fi
+
+    if [[ $EUID -ne 0 ]] && [[ -n "$USER" ]]; then
+        sudo usermod -aG docker "$USER" 2>/dev/null || true
+    fi
+
+    # sg fait partie du paquet login sur Debian/Ubuntu
+    if ! command -v sg &>/dev/null; then
+        sudo apt-get install -y login 2>/dev/null || true
     fi
 }
 
 if ! command -v docker &>/dev/null; then
-    echo "📦 Installation de Docker..."
-    sudo apt-get update -qq
-    sudo apt-get install -y docker.io
+    install_docker_engine
 fi
-sudo service docker start 2>/dev/null || sudo systemctl start docker 2>/dev/null || true
-if [[ $EUID -ne 0 ]]; then
-    sudo usermod -aG docker "$USER" 2>/dev/null || true
+setup_docker_service_and_access
+
+if docker_cmd info &>/dev/null; then
+    echo "✅ Docker prêt et accessible."
+else
+    echo "⚠️  Docker installé ; l'accès sera activé automatiquement au lancement."
 fi
-echo "✅ Docker prêt."
 
 # --- Image Docker malaria ---
 if [[ -f task_docker_img/image-docker.tar ]]; then
@@ -95,9 +148,3 @@ echo "🔧 Migrations..."
 python manage.py migrate --noinput
 
 echo "🎉 Installation terminée."
-if ! docker info &>/dev/null 2>&1; then
-    echo ""
-    echo "⚠️  Docker est installé mais l'accès est refusé pour $USER."
-    echo "    Exécutez : newgrp docker"
-    echo "    Puis relancez : ./install-volontaire.sh"
-fi
