@@ -378,7 +378,10 @@ def tasks(request):
             "progress": progress,
             "name": task.name,
             "status": task.status,
-            "command": command
+            "command": command,
+            "workflow_id": str(task.workflow.workflow_id) if task.workflow else None,
+            "workflow_name": getattr(task.workflow, "name", None) if task.workflow else None,
+            "workflow_description": getattr(task.workflow, "description", None) if task.workflow else None,
         })
     return JsonResponse(result, safe=False)
 

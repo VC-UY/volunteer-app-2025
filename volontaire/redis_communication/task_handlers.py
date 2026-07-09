@@ -68,6 +68,7 @@ class TaskManager:
                 self.volunteer_id,
             )
             self._send_heartbeat()
+            self._request_pending_assignments()
             return
         
         self.running = True
@@ -84,8 +85,30 @@ class TaskManager:
             daemon=True,
         )
         self.heartbeat_thread.start()
+
+        # Demander au coordinateur de renvoyer les tâches ASSIGNED non démarrées
+        self._request_pending_assignments()
         
         logger.info(f"Gestionnaire de tâches démarré pour le volontaire {volunteer_id}")
+
+    def _request_pending_assignments(self):
+        """Demande au coordinateur de republier les assignations en attente."""
+        try:
+            from .utils import get_volunteer_auth_token
+            token = get_volunteer_auth_token()
+            self.redis_client.publish(
+                'coordinator/assign_request',
+                {
+                    'volunteer_id': self.volunteer_id,
+                    'action': 'republish',
+                },
+                str(uuid.uuid4()),
+                token,
+                'request',
+            )
+            logger.info("Demande de republication des assignations envoyée au coordinateur")
+        except Exception as exc:
+            logger.warning("Republication assignations impossible: %s", exc)
 
     def _has_active_tasks(self) -> bool:
         try:
@@ -97,13 +120,38 @@ class TaskManager:
         except Exception:
             return bool(self.current_task)
 
+    def _start_next_assigned_task(self) -> bool:
+        """
+        Démarre une seule tâche en attente (stratégie 1 tâche à la fois).
+        """
+        if self.current_task is not None:
+            return False
+        try:
+            from django.apps import apps
+            Task = apps.get_model('volontaire', 'Task')
+            next_task = (
+                Task.objects.filter(status='assigned')
+                .select_related('workflow')
+                .order_by('start_date', 'id')
+                .first()
+            )
+            if not next_task:
+                return False
+            logger.info("Démarrage FIFO de la tâche assignée %s", next_task.task_id)
+            thread = threading.Thread(target=self._execute_task, args=(next_task,), daemon=True)
+            thread.start()
+            return True
+        except Exception as exc:
+            logger.warning("Impossible de démarrer la prochaine tâche assignée: %s", exc)
+            return False
+
     def _send_heartbeat(self):
         """Signale au coordinateur que ce volontaire est en ligne."""
         if not self.volunteer_id:
             return
         try:
             from .utils import get_volunteer_auth_token
-            from volontaire.preferences_payload import (
+            from preferences_payload import (
                 build_preferences_payload,
                 is_available_now,
             )
@@ -343,11 +391,16 @@ class TaskManager:
             if task.input_data and 'files' in task.input_data:
                 self._download_input_files(task)
             
-            # Exécuter la tâche dans un thread séparé
-            import threading    
-            thread = threading.Thread(target=self._execute_task, args=(task,))
-            thread.setDaemon(True)
-            thread.start()
+            # Exécution séquentielle: une seule tâche active à la fois.
+            if self.current_task is None:
+                thread = threading.Thread(target=self._execute_task, args=(task,), daemon=True)
+                thread.start()
+            else:
+                logger.info(
+                    "Tâche %s mise en attente locale (tâche active: %s)",
+                    task.task_id,
+                    getattr(self.current_task, 'task_id', 'unknown'),
+                )
         
     
     def handle_task_cancel(self, channel: str, message: Message):
@@ -1260,6 +1313,7 @@ class TaskManager:
         finally:
             self.current_task = None
             self.task_process = None
+            self._start_next_assigned_task()
     
     def _monitor_task_progress(self, task):
         """
