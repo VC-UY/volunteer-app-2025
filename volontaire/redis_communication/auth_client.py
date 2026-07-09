@@ -438,3 +438,76 @@ def get_volunteer_info() -> Optional[Dict[str, Any]]:
         import traceback
         logger.error(traceback.format_exc())
         return None
+
+
+def load_volunter_credentials() -> Optional[Dict[str, Any]]:
+    """Charge token/refresh depuis .volunteer/volunteer_auth_info.json."""
+    try:
+        volunteer_info_file = os.path.join(VOLUNTEER_DIR, 'volunteer_auth_info.json')
+        if not os.path.exists(volunteer_info_file):
+            return None
+        with open(volunteer_info_file, 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        logger.error(f"Erreur lecture identifiants volontaire: {e}")
+        return None
+
+
+def save_volunteer_credentials(credentials: Dict[str, Any]) -> bool:
+    try:
+        volunteer_info_file = os.path.join(VOLUNTEER_DIR, 'volunteer_auth_info.json')
+        with open(volunteer_info_file, 'w') as f:
+            json.dump(credentials, f, indent=4)
+        return True
+    except Exception as e:
+        logger.error(f"Erreur sauvegarde identifiants volontaire: {e}")
+        return False
+
+
+def refresh_token_if_needed(auth_info: Dict[str, Any]) -> Optional[str]:
+    """Rafraîchit le JWT via auth/token_refresh si nécessaire."""
+    try:
+        from .client import RedisClient
+        import datetime
+
+        if not auth_info.get('username') or not auth_info.get('password'):
+            return None
+
+        client = RedisClient.get_instance()
+        request_id = str(uuid.uuid4())
+        request_data = {
+            'action': 'refresh_token',
+            'username': auth_info['username'],
+            'password': auth_info['password'],
+            'user_type': auth_info.get('user_type', 'volunteer'),
+            'old_token': auth_info.get('token'),
+            'timestamp': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        }
+
+        def handle_refresh_response(channel: str, message: Message):
+            if message.request_id == request_id:
+                save_response(request_id, message.data)
+                client.unsubscribe('auth/token_refresh_response', handle_refresh_response)
+
+        client.subscribe('auth/token_refresh_response', handle_refresh_response)
+        client.publish('auth/token_refresh', request_data, request_id=request_id)
+
+        start_time = time.time()
+        while time.time() - start_time < 30:
+            response = get_response(request_id)
+            if response:
+                delete_response(request_id)
+                response_data = response.get('response', {})
+                if response_data.get('status') == 'success':
+                    new_token = response_data.get('token')
+                    if new_token:
+                        auth_info['token'] = new_token
+                        auth_info['last_login'] = time.time()
+                        if save_volunteer_credentials(auth_info):
+                            return new_token
+                return None
+            time.sleep(0.1)
+        return None
+    except Exception as e:
+        logger.error(f"Erreur rafraîchissement token: {e}")
+        return None

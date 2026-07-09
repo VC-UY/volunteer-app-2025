@@ -11,6 +11,8 @@ from .views import (
     delete_preferences,
     tasks,
     task_details,
+    workflows_list,
+    workflow_details,
     AgentStatusView,
     AgentControlView,
     )
@@ -40,5 +42,7 @@ urlpatterns = [
     # suppression d'une preference en particulier
     path('preferences/delete/<int:id>/', delete_preference, name='delete_preference'),
     path('tasks/', tasks, name='tasks'),
+    path('api/workflows/', workflows_list, name='workflows_list'),
+    path('api/workflow/<str:workflow_id>/', workflow_details, name='workflow_details'),
 
 ]
