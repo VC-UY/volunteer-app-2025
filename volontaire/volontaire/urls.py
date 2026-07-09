@@ -9,13 +9,16 @@ from .views import (
     delete_preference,
     delete_preferences,
     tasks,
+    task_details,
+    workflows_list,
+    workflow_details,
     )
 
 urlpatterns = [
     path("", home, name="home"),
     path("machines/", MachineInfoView.as_view(), name="machine-info"),
     path("api/docker/containers/", DockerContainersStatusView.as_view(), name="docker-containers-status"),
-    # Gestion des actios sur conteneur
+    path('api/task/<str:task_id>/details/', task_details, name='task_details'),
     path('api/task/<str:task_id>/<str:action>/', handle_task_action, name='handle_task_action'),
     # ------Gestion des preferences
     # Suvegarde et mise a jour de preference
@@ -26,5 +29,7 @@ urlpatterns = [
     # suppression d'une preference en particulier
     path('preferences/delete/<int:id>/', delete_preference, name='delete_preference'),
     path('tasks/', tasks, name='tasks'),
+    path('api/workflows/', workflows_list, name='workflows_list'),
+    path('api/workflow/<str:workflow_id>/', workflow_details, name='workflow_details'),
 
 ]
