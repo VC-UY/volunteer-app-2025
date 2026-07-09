@@ -117,32 +117,41 @@ def handle_task_action(request, action, task_id):
             from redis_communication.task_handlers import TaskManager
             task_manager = TaskManager.get_instance()
             task = Task.objects.get(task_id=task_id)
+            ok = False
+
             if action == 'pause':
-                task_manager.pause_task(task_id)
-                task.status = 'paused'
-            elif action == 'replay':
-                task_manager.resume_task(task_id)
-                task.status = 'running'
-            elif action == 'suspend':
-                task_manager.stop_task(task_id)
-                task.status = 'suspended'
+                ok = task_manager.pause_task(task_id)
+            elif action in ['resume', 'replay']:
+                ok = task_manager.resume_task(task_id)
+            elif action in ['stop', 'suspend']:
+                ok = task_manager.stop_task(task_id)
             elif action == 'delete':
                 task_manager.stop_task(task_id)
                 task.delete()
                 return JsonResponse({'message': 'Tâche supprimée'}, status=200)
             elif action == 'limit_cpu':
-                cpu_quota = int(request.POST.get('cpu_quota', 50000))  # ex: 50000 = 5% CPU
-                task_manager.update_limits(task_id, cpu_quota=cpu_quota)
+                cpu_quota = int(request.POST.get('cpu_quota', 50000))
+                ok = task_manager.update_limits(task_id, cpu_quota=cpu_quota)
             elif action == 'limit_ram':
-                mem_limit = request.POST.get('mem_limit', '500m')  # ex: "500m", "1g"
-                task_manager.update_limits(task_id, mem_limit=mem_limit)
+                mem_limit = request.POST.get('mem_limit', '500m')
+                ok = task_manager.update_limits(task_id, mem_limit=mem_limit)
             else:
-                return JsonResponse({'error': 'Action inconnue'}, status=400)
-            return JsonResponse({'message': f'Action {action} effectuée'}, status=200)
-        
+                return JsonResponse({'error': f'Action inconnue: {action}'}, status=400)
+
+            if not ok:
+                return JsonResponse(
+                    {'error': f"Action '{action}' impossible pour la tâche {task_id} (statut: {task.status})"},
+                    status=400,
+                )
+
+            task.refresh_from_db()
+            return JsonResponse({'message': f'Action {action} effectuée', 'status': task.status}, status=200)
+
         except Task.DoesNotExist:
-            return JsonResponse({'error': 'Tâche non trouvée'}, status=404)
-    
+            return JsonResponse({'error': f'Tâche {task_id} non trouvée'}, status=404)
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+
     return JsonResponse({'error': 'Méthode non autorisée'}, status=405)
 
 
@@ -180,7 +189,7 @@ class MachineInfoView(APIView):
 
 
 from django.shortcuts import render
-from .models import MachineInfo, EtatMachine, PreferenceModel, Task, TaskProgress
+from .models import MachineInfo, EtatMachine, PreferenceModel, Task, TaskProgress, Workflow
 from django.db.models import Prefetch
 
 
@@ -221,13 +230,150 @@ def home(request):
 
 
 
+def _task_command_and_description(task):
+    command = getattr(task, 'command', None)
+    description = ''
+    params = task.parameters if isinstance(task.parameters, dict) else {}
+    if not command and task.docker_information:
+        command = task.docker_information.get('command', task.docker_information.get('cmd'))
+    if not command and params:
+        command = params.get('command')
+    if params:
+        description = params.get('description', '') or ''
+    return command, description
+
+
 def tasks(request):
-    tasks = Task.objects.all().order_by('-start_date')
-    
-    for task in tasks:
+    tasks_list = Task.objects.select_related('workflow').all().order_by('-start_date')
+    result = []
+    for task in tasks_list:
         last_progress = task.progress_events.order_by('-timestamp').first()
-        task.progress = last_progress.percentage if last_progress else 0
-    return JsonResponse([{ "id": task.task_id, "progress": task.progress, "name": task.name, "status": task.status } for task in tasks], safe=False)
+        progress = last_progress.percentage if last_progress else 0
+        command, description = _task_command_and_description(task)
+        params = task.parameters if isinstance(task.parameters, dict) else {}
+        result.append({
+            "id": task.task_id,
+            "task_id": task.task_id,
+            "progress": progress,
+            "name": task.name,
+            "description": description,
+            "status": task.status,
+            "command": command,
+            "workflow_id": str(task.workflow.workflow_id) if task.workflow else None,
+            "workflow_name": getattr(task.workflow, "name", None) if task.workflow else None,
+            "workflow_description": getattr(task.workflow, "description", None) if task.workflow else None,
+            "workflow_type": params.get('workflow_type', ''),
+        })
+    return JsonResponse(result, safe=False)
+
+
+def workflows_list(request):
+    workflows = []
+    for wf in Workflow.objects.all().order_by('-modification_date'):
+        wf_tasks = Task.objects.filter(workflow=wf).order_by('start_date', 'id')
+        task_items = []
+        counts = {'total': 0, 'running': 0, 'pending': 0, 'completed': 0, 'failed': 0}
+        for task in wf_tasks:
+            last_progress = task.progress_events.order_by('-timestamp').first()
+            progress = last_progress.percentage if last_progress else 0
+            command, description = _task_command_and_description(task)
+            st = (task.status or '').lower()
+            counts['total'] += 1
+            if st in ('running', 'progress', 'started', 'in_progress'):
+                counts['running'] += 1
+            elif st in ('pending', 'queued', 'assigned', 'created', 'accepted'):
+                counts['pending'] += 1
+            elif st in ('completed', 'complete'):
+                counts['completed'] += 1
+            elif st in ('failed', 'error', 'stopped', 'cancelled', 'canceled'):
+                counts['failed'] += 1
+            else:
+                counts['pending'] += 1
+            task_items.append({
+                "task_id": task.task_id,
+                "name": task.name,
+                "description": description,
+                "status": task.status,
+                "progress": progress,
+                "command": command,
+            })
+        workflows.append({
+            "workflow_id": wf.workflow_id,
+            "name": wf.name,
+            "description": wf.description or "",
+            "active": wf.active,
+            "creation_date": wf.creation_date.isoformat() if wf.creation_date else None,
+            "task_counts": counts,
+            "tasks": task_items,
+        })
+    return JsonResponse(workflows, safe=False)
+
+
+def workflow_details(request, workflow_id):
+    try:
+        wf = Workflow.objects.get(workflow_id=workflow_id)
+    except Workflow.DoesNotExist:
+        return JsonResponse({'error': f'Workflow {workflow_id} introuvable'}, status=404)
+
+    wf_tasks = Task.objects.filter(workflow=wf).order_by('start_date', 'id')
+    task_items = []
+    for task in wf_tasks:
+        last_progress = task.progress_events.order_by('-timestamp').first()
+        progress = last_progress.percentage if last_progress else 0
+        command, description = _task_command_and_description(task)
+        task_items.append({
+            "task_id": task.task_id,
+            "name": task.name,
+            "description": description,
+            "status": task.status,
+            "progress": progress,
+            "command": command,
+        })
+
+    return JsonResponse({
+        "workflow_id": wf.workflow_id,
+        "name": wf.name,
+        "description": wf.description or "",
+        "active": wf.active,
+        "creation_date": wf.creation_date.isoformat() if wf.creation_date else None,
+        "modification_date": wf.modification_date.isoformat() if wf.modification_date else None,
+        "tasks": task_items,
+    })
+
+
+def task_details(request, task_id):
+    try:
+        task = Task.objects.get(task_id=task_id)
+        last_progress = task.progress_events.order_by('-timestamp').first()
+        progress = last_progress.percentage if last_progress else 0
+        input_files = task.input_data.get('files', []) if task.input_data else []
+        output_files = task.output_data.get('files', []) if task.output_data else []
+        command, description = _task_command_and_description(task)
+        return JsonResponse({
+            'task_id': task.task_id,
+            'name': task.name,
+            'description': description,
+            'status': task.status,
+            'progress': progress,
+            'command': command,
+            'docker_info': task.docker_information,
+            'input_files': input_files,
+            'output_files': output_files,
+            'workflow_id': str(task.workflow.workflow_id) if task.workflow else None,
+            'workflow_name': getattr(task.workflow, 'name', None) if task.workflow else None,
+            'workflow_description': getattr(task.workflow, 'description', None) if task.workflow else None,
+            'created_at': task.start_date.isoformat() if task.start_date else None,
+            'end_date': task.end_date.isoformat() if task.end_date else None,
+            'error_message': task.error_message,
+            'execution_priority': task.execution_priority,
+            'attempts': task.attempts,
+            'container_id': task.container_id,
+            'local_input_path': task.local_input_path,
+        })
+    except Task.DoesNotExist:
+        return JsonResponse({'error': f'Tâche {task_id} non trouvée'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 
 # ---------------------------  Gestion des preferences -----------------  
