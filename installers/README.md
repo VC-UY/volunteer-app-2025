@@ -48,6 +48,12 @@ chmod +x installers/linux/install.sh
 sudo installers/linux/install.sh
 ```
 
+Alternative (depuis la racine du depot) :
+```bash
+chmod +x install-volontaire-service.sh
+./install-volontaire-service.sh
+```
+
 ### 3️⃣ Ce que fait le script
 ✅ Détecte votre distribution Linux  
 ✅ Crée un utilisateur système `volunteer`  
@@ -158,6 +164,12 @@ type C:\volunteer-app\logs\service_stdout.log | Select-Object -Last 20
 ```bash
 # Lancer le script de désinstallation
 sudo installers/linux/uninstall.sh
+```
+
+Suppression complète non interactive (une commande) :
+```bash
+chmod +x uninstall-volontaire.sh
+./uninstall-volontaire.sh
 ```
 
 Le script vous demandera :
