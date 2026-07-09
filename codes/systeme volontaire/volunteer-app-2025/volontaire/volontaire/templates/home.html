@@ -1,0 +1,1119 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Application volontaire VolunSys-UY1, partagez la puissance de votre machine pour le calcul scientifique distribue.">
+  <meta name="keywords" content="VolunSys, volontaire, calcul distribue, machine volontaire">
+  <link rel="icon" type="image/svg+xml" href="/static/logo.svg">
+  <title>VolunSys-UY1 | Application Volontaire</title>
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+  <style>
+    @keyframes slideIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+    @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes glow { 0%, 100% { box-shadow: 0 0 20px rgba(0, 212, 255, 0.3); } 50% { box-shadow: 0 0 40px rgba(0, 212, 255, 0.6); } }
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body { 
+      background: linear-gradient(180deg, #001440 0%, #002060 50%, #001440 100%);
+      min-height: 100vh;
+      color: #FFFFFF;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    }
+    
+    /* Navbar */
+    .navbar {
+      background: linear-gradient(135deg, rgba(0, 32, 96, 0.9) 0%, rgba(0, 20, 64, 0.9) 100%) !important;
+      backdrop-filter: blur(20px);
+      border-bottom: 2px solid rgba(0, 180, 240, 0.3);
+      box-shadow: 0 4px 24px rgba(0, 32, 96, 0.5);
+      padding: 1rem 0;
+    }
+    
+    .navbar-brand {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      background: linear-gradient(135deg, #FFFFFF 0%, #00D4FF 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    
+    .navbar .badge {
+      background: linear-gradient(135deg, rgba(0, 180, 240, 0.2) 0%, rgba(0, 212, 255, 0.1) 100%);
+      color: #00D4FF;
+      border: 2px solid rgba(0, 212, 255, 0.3);
+      padding: 0.5rem 1rem;
+      border-radius: 10px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+    
+    .btn-outline-light {
+      background: rgba(0, 180, 240, 0.1);
+      border: 2px solid rgba(0, 180, 240, 0.3);
+      color: #00D4FF;
+      border-radius: 12px;
+      padding: 0.5rem 1.5rem;
+      font-weight: 600;
+      transition: all 0.3s ease;
+    }
+    
+    .btn-outline-light:hover {
+      background: linear-gradient(135deg, #00B0F0 0%, #00D4FF 100%);
+      border-color: rgba(0, 212, 255, 0.4);
+      color: #FFFFFF;
+      box-shadow: 0 4px 16px rgba(0, 180, 240, 0.4);
+      transform: translateY(-2px);
+    }
+    
+    /* Sidebar */
+    .sidebar { 
+      background: linear-gradient(135deg, rgba(0, 32, 96, 0.8) 0%, rgba(0, 20, 64, 0.8) 100%);
+      backdrop-filter: blur(20px);
+      border-right: 2px solid rgba(0, 180, 240, 0.3);
+      min-height: calc(100vh - 80px);
+      padding: 2rem 1.5rem;
+      box-shadow: 4px 0 24px rgba(0, 32, 96, 0.3);
+      animation: slideIn 0.8s ease-out;
+    }
+    
+    .sidebar h5, .sidebar h6 {
+      color: #00D4FF;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      margin-bottom: 1.5rem;
+      text-transform: uppercase;
+      font-size: 0.9rem;
+    }
+    
+    .sidebar > div {
+      margin-bottom: 0.75rem;
+      padding: 0.5rem;
+      background: rgba(0, 180, 240, 0.05);
+      border-radius: 8px;
+      border: 1px solid rgba(0, 180, 240, 0.1);
+    }
+    
+    .sidebar strong {
+      color: #00B0F0;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+    
+    .sidebar span:not(.badge) {
+      color: #FFFFFF;
+    }
+    
+    .sidebar hr {
+      border-color: rgba(0, 180, 240, 0.3);
+      margin: 2rem 0;
+    }
+    
+    .sidebar .badge {
+      background: linear-gradient(135deg, rgba(0, 212, 255, 0.2) 0%, rgba(0, 180, 240, 0.1) 100%);
+      color: #00D4FF;
+      border: 1px solid rgba(0, 212, 255, 0.3);
+      padding: 0.4rem 0.8rem;
+      border-radius: 8px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+    
+    .sidebar pre {
+      background: rgba(0, 0, 0, 0.3) !important;
+      border: 1px solid rgba(0, 180, 240, 0.2);
+      border-radius: 12px;
+      padding: 1rem;
+      font-size: 0.85rem;
+      color: #00D4FF;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    
+    /* Main Content */
+    main {
+      padding: 2rem;
+      animation: slideIn 0.8s ease-out 0.2s both;
+    }
+    
+    main h4 {
+      color: #FFFFFF;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      background: linear-gradient(135deg, #FFFFFF 0%, #00D4FF 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    
+    /* Search Input */
+    #search-task {
+      background: rgba(0, 0, 0, 0.3);
+      border: 2px solid rgba(0, 180, 240, 0.3);
+      color: #FFFFFF;
+      border-radius: 12px;
+      padding: 0.75rem 1rem;
+      transition: all 0.3s ease;
+    }
+    
+    #search-task:focus {
+      background: rgba(0, 0, 0, 0.4);
+      border-color: #00D4FF;
+      box-shadow: 0 0 20px rgba(0, 212, 255, 0.3);
+      outline: none;
+      color: #FFFFFF;
+    }
+    
+    #search-task::placeholder {
+      color: rgba(0, 180, 240, 0.6);
+    }
+    
+    /* Table */
+    .table-responsive {
+      background: linear-gradient(135deg, rgba(0, 32, 96, 0.6) 0%, rgba(0, 20, 64, 0.6) 100%);
+      backdrop-filter: blur(20px);
+      border-radius: 16px;
+      border: 2px solid rgba(0, 180, 240, 0.3);
+      padding: 1.5rem;
+      box-shadow: 0 8px 32px rgba(0, 32, 96, 0.5);
+    }
+    
+    .table {
+      background: transparent !important;
+      color: #FFFFFF;
+      margin-bottom: 0;
+    }
+    
+    .table thead {
+      background: linear-gradient(135deg, rgba(0, 180, 240, 0.15) 0%, rgba(0, 212, 255, 0.1) 100%);
+      border-bottom: 2px solid rgba(0, 180, 240, 0.3);
+    }
+    
+    .table thead th {
+      color: #00D4FF;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      font-size: 0.85rem;
+      border: none;
+      padding: 1rem;
+    }
+    
+    .table tbody tr {
+      border-bottom: 1px solid rgba(0, 180, 240, 0.1);
+      transition: all 0.3s ease;
+    }
+    
+    .table tbody tr:hover {
+      background: rgba(0, 180, 240, 0.05);
+      transform: translateX(5px);
+    }
+    
+    .table tbody td {
+      color: #FFFFFF;
+      border: none;
+      padding: 1rem;
+      vertical-align: middle;
+    }
+    
+    .table tbody td .text-muted {
+      color: #00B0F0 !important;
+      font-weight: 500;
+    }
+    
+    /* Buttons */
+    .btn-primary {
+      background: linear-gradient(135deg, #00B0F0 0%, #00D4FF 100%);
+      border: 2px solid rgba(0, 212, 255, 0.4);
+      color: #FFFFFF;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+      border-radius: 12px;
+      padding: 0.75rem 1.5rem;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 16px rgba(0, 180, 240, 0.3);
+    }
+    
+    .btn-primary:hover {
+      background: linear-gradient(135deg, #00D4FF 0%, #00B0F0 100%);
+      border-color: #00D4FF;
+      box-shadow: 0 8px 24px rgba(0, 212, 255, 0.5);
+      transform: translateY(-2px);
+    }
+    
+    .btn-warning {
+      background: linear-gradient(135deg, rgba(255, 193, 7, 0.9) 0%, rgba(255, 165, 0, 0.9) 100%);
+      border: 2px solid rgba(255, 193, 7, 0.4);
+      color: #001440;
+    }
+    
+    .btn-warning:hover {
+      background: linear-gradient(135deg, rgba(255, 165, 0, 1) 0%, rgba(255, 193, 7, 1) 100%);
+      box-shadow: 0 4px 16px rgba(255, 193, 7, 0.4);
+      transform: translateY(-2px);
+    }
+    
+    .btn-success {
+      background: linear-gradient(135deg, rgba(0, 255, 136, 0.9) 0%, rgba(0, 200, 100, 0.9) 100%);
+      border: 2px solid rgba(0, 255, 136, 0.4);
+      color: #001440;
+    }
+    
+    .btn-success:hover {
+      background: linear-gradient(135deg, rgba(0, 200, 100, 1) 0%, rgba(0, 255, 136, 1) 100%);
+      box-shadow: 0 4px 16px rgba(0, 255, 136, 0.4);
+      transform: translateY(-2px);
+    }
+    
+    .btn-danger {
+      background: linear-gradient(135deg, rgba(220, 38, 38, 0.9) 0%, rgba(185, 28, 28, 0.9) 100%);
+      border: 2px solid rgba(220, 38, 38, 0.4);
+      color: #FFFFFF;
+    }
+    
+    .btn-danger:hover {
+      background: linear-gradient(135deg, rgba(185, 28, 28, 1) 0%, rgba(220, 38, 38, 1) 100%);
+      box-shadow: 0 4px 16px rgba(220, 38, 38, 0.4);
+      transform: translateY(-2px);
+    }
+    
+    .btn-sm {
+      padding: 0.4rem 0.8rem;
+      border-radius: 8px;
+      font-size: 0.85rem;
+    }
+    
+    .btn-outline-primary {
+      background: rgba(0, 180, 240, 0.1);
+      border: 2px solid rgba(0, 180, 240, 0.3);
+      color: #00D4FF;
+      border-radius: 10px;
+      font-weight: 600;
+    }
+    
+    .btn-outline-primary:hover {
+      background: linear-gradient(135deg, #00B0F0 0%, #00D4FF 100%);
+      border-color: #00D4FF;
+      color: #FFFFFF;
+    }
+    
+    /* Modal */
+    .modal-content {
+      background: linear-gradient(135deg, rgba(0, 32, 96, 0.95) 0%, rgba(0, 20, 64, 0.95) 100%);
+      backdrop-filter: blur(20px);
+      border: 2px solid rgba(0, 180, 240, 0.3);
+      border-radius: 20px;
+      box-shadow: 0 12px 48px rgba(0, 32, 96, 0.7);
+      color: #FFFFFF;
+    }
+    
+    .modal-header {
+      border-bottom: 2px solid rgba(0, 180, 240, 0.3);
+      padding: 1.5rem 2rem;
+    }
+    
+    .modal-title {
+      color: #00D4FF;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    
+    .btn-close {
+      filter: invert(1);
+      opacity: 0.8;
+    }
+    
+    .modal-body {
+      padding: 2rem;
+    }
+    
+    /* Form Elements */
+    .form-group label {
+      color: #00B0F0;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+      margin-bottom: 0.5rem;
+      display: block;
+    }
+    
+    input[type="time"],
+    input[type="number"] {
+      background: rgba(0, 0, 0, 0.3);
+      border: 2px solid rgba(0, 180, 240, 0.3);
+      color: #FFFFFF;
+      border-radius: 10px;
+      padding: 0.6rem 1rem;
+      width: 100%;
+      transition: all 0.3s ease;
+    }
+    
+    input[type="time"]:focus,
+    input[type="number"]:focus {
+      background: rgba(0, 0, 0, 0.4);
+      border-color: #00D4FF;
+      box-shadow: 0 0 20px rgba(0, 212, 255, 0.3);
+      outline: none;
+    }
+    
+    /* Checkbox Days */
+    .days-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 0.75rem;
+      margin-top: 0.5rem;
+    }
+    
+    .day-checkbox {
+      display: none;
+    }
+    
+    .day-label {
+      display: block;
+      padding: 0.75rem 1rem;
+      background: rgba(0, 180, 240, 0.1);
+      border: 2px solid rgba(0, 180, 240, 0.3);
+      border-radius: 10px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      color: #00B0F0;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+    
+    .day-checkbox:checked + .day-label {
+      background: linear-gradient(135deg, #00B0F0 0%, #00D4FF 100%);
+      border-color: #00D4FF;
+      color: #FFFFFF;
+      box-shadow: 0 4px 16px rgba(0, 180, 240, 0.4);
+      transform: translateY(-2px);
+    }
+    
+    .day-label:hover {
+      background: rgba(0, 180, 240, 0.15);
+      border-color: #00D4FF;
+    }
+    
+    /* Time Range */
+    .time-range {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+    
+    /* Resources */
+    .resources {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+    }
+    
+    /* Time Slots */
+    #timeSlotsContainer {
+      background: rgba(0, 180, 240, 0.05);
+      border: 1px solid rgba(0, 180, 240, 0.2);
+      border-radius: 12px;
+      padding: 1rem;
+      min-height: 60px;
+    }
+    
+    .time-slot {
+      background: rgba(0, 180, 240, 0.1);
+      border: 1px solid rgba(0, 180, 240, 0.3);
+      border-radius: 10px;
+      padding: 0.75rem 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: #FFFFFF;
+    }
+    
+    .time-slot strong {
+      color: #00D4FF;
+    }
+    
+    /* Preferences Table */
+    #prefsTable {
+      background: rgba(0, 180, 240, 0.05);
+      border: 1px solid rgba(0, 180, 240, 0.2);
+      border-radius: 12px;
+      overflow: hidden;
+      color: #FFFFFF;
+    }
+    
+    #prefsTable th {
+      background: linear-gradient(135deg, rgba(0, 180, 240, 0.15) 0%, rgba(0, 212, 255, 0.1) 100%);
+      color: #00D4FF;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      padding: 0.75rem;
+      border: none;
+      text-transform: uppercase;
+      font-size: 0.8rem;
+    }
+    
+    #prefsTable td {
+      padding: 0.75rem;
+      border-bottom: 1px solid rgba(0, 180, 240, 0.1);
+      color: #FFFFFF;
+    }
+    
+    #prefsTable strong {
+      color: #00D4FF;
+    }
+    
+    /* Status Badges */
+    .badge-running { 
+      background: linear-gradient(135deg, rgba(0, 255, 136, 0.2) 0%, rgba(0, 200, 100, 0.1) 100%);
+      color: #00FF88;
+      border: 1px solid rgba(0, 255, 136, 0.3);
+    }
+    
+    .badge-paused { 
+      background: linear-gradient(135deg, rgba(255, 193, 7, 0.2) 0%, rgba(255, 165, 0, 0.1) 100%);
+      color: #FFA500;
+      border: 1px solid rgba(255, 193, 7, 0.3);
+    }
+    
+    .badge-stopped { 
+      background: linear-gradient(135deg, rgba(220, 38, 38, 0.2) 0%, rgba(185, 28, 28, 0.1) 100%);
+      color: #FF4444;
+      border: 1px solid rgba(220, 38, 38, 0.3);
+    }
+    
+    .badge-pending { 
+      background: linear-gradient(135deg, rgba(0, 212, 255, 0.2) 0%, rgba(0, 180, 240, 0.1) 100%);
+      color: #00D4FF;
+      border: 1px solid rgba(0, 212, 255, 0.3);
+    }
+    
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 10px;
+      height: 10px;
+    }
+    
+    ::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 10px;
+    }
+    
+    ::-webkit-scrollbar-thumb {
+      background: linear-gradient(135deg, #00B0F0 0%, #00D4FF 100%);
+      border-radius: 10px;
+    }
+    
+    ::-webkit-scrollbar-thumb:hover {
+      background: linear-gradient(135deg, #00D4FF 0%, #00B0F0 100%);
+    }
+    
+    /* Toastify custom */
+    .toastify {
+      background: linear-gradient(135deg, rgba(0, 32, 96, 0.95) 0%, rgba(0, 20, 64, 0.95) 100%) !important;
+      backdrop-filter: blur(20px);
+      border: 2px solid rgba(0, 180, 240, 0.3);
+      border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0, 32, 96, 0.5);
+      color: #FFFFFF !important;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-expand-lg navbar-dark">
+    <div class="container-fluid px-4">
+      <a class="navbar-brand fw-bold" href="#"><i class="fa fa-hands-helping me-2"></i>VolunteerApp</a>
+      <div class="d-flex align-items-center gap-3">
+        <span class="text-white"><i class="fa fa-server"></i> <span id="machine-hostname">{% if machine %}{{ machine.hostname }}{% else %}Non configuré{% endif %}</span></span>
+        <span class="badge" id="machine-status"></span>
+        <button class="btn btn-outline-light" data-bs-toggle="modal" data-bs-target="#prefModal">
+          <i class="fa fa-cog"></i> Préférences
+        </button>
+      </div>
+    </div>
+  </nav>
+  
+  <div class="container-fluid">
+    <div class="row">
+      <!-- Sidebar -->
+      <aside class="col-md-3 sidebar">
+        <h5><i class="fas fa-server me-2"></i>Machine</h5>
+        {% if machine %}
+        <div><strong>Nom :</strong> <span id="sidebar-hostname">{{ machine.hostname }}</span></div>
+        <div><strong>OS :</strong> <span id="sidebar-os">{{ machine.os_name }} {{ machine.os_version }}</span></div>
+        <div><strong>CPU :</strong> <span id="sidebar-cpu">{{ machine.cpu_type }} ({{ machine.cpu_cores_physical }} cœurs, {{ machine.cpu_cores_logical }} logiques)</span></div>
+        <div><strong>RAM :</strong> <span id="sidebar-ram">{{ machine.ram_total_human }}</span></div>
+        <div><strong>Disque :</strong> <span id="sidebar-disk">{{ machine.disk_total_human }}</span></div>
+        <div><strong>Résolution :</strong> <span id="sidebar-screen">{{ machine.screen_resolution }}</span></div>
+        <div><strong>Statut :</strong> <span class="badge" id="sidebar-status">{% if etat %}{{ etat.statut_actuel }}{% else %}N/A{% endif %}</span></div>
+        {% else %}
+        <div class="alert alert-warning" style="background: rgba(255, 193, 7, 0.1); border: 1px solid rgba(255, 193, 7, 0.3); color: #FFC107; border-radius: 10px; padding: 1rem;">
+          <i class="fas fa-exclamation-triangle me-2"></i>Aucune machine enregistrée. Veuillez lancer l'agent pour enregistrer les informations de la machine.
+        </div>
+        {% endif %}
+
+        <hr>
+
+        <h6><i class="fas fa-sliders-h me-2"></i>Préférences</h6>
+        <button type="button" class="btn btn-primary w-100 mb-3" data-bs-toggle="modal" data-bs-target="#prefModal" {% if not machine %}disabled title="Veuillez d'abord enregistrer une machine"{% endif %}>
+          <i class="fas fa-plus"></i> Ajouter une préférence
+        </button>
+        <table id="prefsTable" class="table table-sm mt-2"></table>
+      </aside>
+      
+      <!-- Main Content -->
+      <main class="col-md-9">
+        <div class="d-flex align-items-center mb-4">
+          <h4 class="me-auto"><i class="fas fa-tasks me-2"></i>Tâches</h4>
+          <input type="text" id="search-task" class="form-control w-25" placeholder="Rechercher une tâche...">
+        </div>
+        
+        <div class="table-responsive">
+          <table class="table align-middle" id="tasks-table">
+            <thead>
+              <tr>
+                <th><i class="fas fa-file-alt me-2"></i>Nom</th>
+                <th><i class="fas fa-info-circle me-2"></i>Statut</th>
+                <th><i class="fas fa-chart-line me-2"></i>Progression</th>
+                <th><i class="fas fa-cogs me-2"></i>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="tasks-table-body">
+              {% if not tasks %}
+              <tr>
+                <td colspan="4" class="text-center" style="color: #00B0F0; padding: 2rem;">
+                  <i class="fas fa-inbox fa-3x mb-3" style="opacity: 0.5;"></i>
+                  <div>Aucune tâche en cours</div>
+                </td>
+              </tr>
+              {% endif %}
+              {% for task in tasks %}
+              <tr data-task-id="{{ task.id }}">
+                <td>{{ task.name }}</td>
+                <td><span class="text-muted" id="status-{{ task.id }}">{{ task.status }}</span></td>
+                <td>{{ task.progress }}%</td>
+                <td>
+                  <button class="btn btn-sm btn-warning pause-btn me-1" {% if not task.can_pause %}disabled{% endif %}>
+                    <i class="fa fa-pause"></i>
+                  </button>
+                  <button class="btn btn-sm btn-success resume-btn me-1" {% if not task.can_resume %}disabled{% endif %}>
+                    <i class="fa fa-play"></i>
+                  </button>
+                  <button class="btn btn-sm btn-danger stop-btn" {% if not task.can_stop %}disabled{% endif %}>
+                    <i class="fa fa-stop"></i>
+                  </button>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </main>
+    </div>
+  </div>
+  
+  <!-- Modal Préférences -->
+  <div class="modal fade" id="prefModal" tabindex="-1" aria-labelledby="prefModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="prefModalLabel">
+            <i class="fas fa-sliders-h me-2"></i>Configurer les Préférences
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <form id="preferenceForm">
+            <div class="form-group mb-4">
+              <label><i class="fas fa-calendar-alt me-2"></i>Jours disponibles:</label>
+              <div class="days-container">
+                <input type="checkbox" id="day-lundi" class="day-checkbox" value="Lundi">
+                <label for="day-lundi" class="day-label">Lundi</label>
+                <input type="checkbox" id="day-mardi" class="day-checkbox" value="Mardi">
+                <label for="day-mardi" class="day-label">Mardi</label>
+                <input type="checkbox" id="day-mercredi" class="day-checkbox" value="Mercredi">
+                <label for="day-mercredi" class="day-label">Mercredi</label>
+                <input type="checkbox" id="day-jeudi" class="day-checkbox" value="Jeudi">
+                <label for="day-jeudi" class="day-label">Jeudi</label>
+                <input type="checkbox" id="day-vendredi" class="day-checkbox" value="Vendredi">
+                <label for="day-vendredi" class="day-label">Vendredi</label>
+                <input type="checkbox" id="day-samedi" class="day-checkbox" value="Samedi">
+                <label for="day-samedi" class="day-label">Samedi</label>
+                <input type="checkbox" id="day-dimanche" class="day-checkbox" value="Dimanche">
+                <label for="day-dimanche" class="day-label">Dimanche</label>
+              </div>
+            </div>
+            
+            <div id="timeSlotsContainer" class="mb-4"></div>
+            
+            <div class="form-group time-range mb-4">
+              <div>
+                <label for="startTime"><i class="fas fa-clock me-2"></i>Heure début:</label>
+                <input type="time" id="startTime">
+              </div>
+              <div>
+                <label for="endTime"><i class="fas fa-clock me-2"></i>Heure fin:</label>
+                <input type="time" id="endTime">
+              </div>
+            </div>
+            
+            <div class="form-group resources mb-4">
+              <div>
+                <label for="cpu"><i class="fas fa-microchip me-2"></i>CPU (%):</label>
+                <input type="number" id="cpu" min="1" max="100" value="100">
+              </div>
+              <div>
+                <label for="ram"><i class="fas fa-memory me-2"></i>RAM (GB):</label>
+                <input type="number" id="ram" min="1" value="16">
+              </div>
+              <div>
+                <label for="maxTime"><i class="fas fa-hourglass-half me-2"></i>Temps max (min):</label>
+                <input type="number" id="maxTime" min="1" value="60">
+              </div>
+            </div>
+            
+            <div class="form-group mb-3">
+              <button type="button" class="btn btn-outline-primary w-100" onclick="addTimeSlot()">
+                <i class="fas fa-plus me-2"></i> Ajouter ce créneau
+              </button>
+            </div>
+            
+            <div class="form-group">
+              <button type="button" class="btn btn-success w-100" onclick="savePreferences()">
+                <i class="fas fa-save me-2"></i> Enregistrer les préférences
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Scripts -->
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+  <script>
+    // Recherche tâche
+    $('#search-task').on('keyup', function() {
+      var value = $(this).val().toLowerCase();
+      $('#tasks-table tbody tr').filter(function() {
+        $(this).toggle($(this).text().toLowerCase().indexOf(value) > -1)
+      });
+    });
+    
+    // Actions tâches
+    function sendTaskAction(taskId, action) {
+      var csrftoken = getCookie('csrftoken');
+      $.ajax({
+        url: '/api/task/' + taskId + '/' + action + '/',
+        type: 'POST',
+        headers: {'X-CSRFToken': csrftoken},
+        success: function(data) {
+          Toastify({
+            text: 'Action réussie',
+            duration: 2000,
+            gravity: 'top',
+            position: 'right',
+            style: {
+              background: 'linear-gradient(135deg, rgba(0, 255, 136, 0.9) 0%, rgba(0, 200, 100, 0.9) 100%)',
+            }
+          }).showToast();
+        },
+        error: function(xhr) {
+          Toastify({
+            text: 'Erreur: ' + xhr.responseText,
+            duration: 3000,
+            gravity: 'top',
+            position: 'right',
+            style: {
+              background: 'linear-gradient(135deg, rgba(220, 38, 38, 0.9) 0%, rgba(185, 28, 28, 0.9) 100%)',
+            }
+          }).showToast();
+        }
+      });
+    }
+    
+    // Confirmation et actions
+    $('#tasks-table').on('click', '.pause-btn', function() {
+      var row = $(this).closest('tr');
+      var taskId = row.data('task-id');
+      if (confirm('Mettre en pause cette tâche ?')) sendTaskAction(taskId, 'pause');
+    });
+    
+    $('#tasks-table').on('click', '.resume-btn', function() {
+      var row = $(this).closest('tr');
+      var taskId = row.data('task-id');
+      if (confirm('Reprendre cette tâche ?')) sendTaskAction(taskId, 'resume');
+    });
+    
+    $('#tasks-table').on('click', '.stop-btn', function() {
+      var row = $(this).closest('tr');
+      var taskId = row.data('task-id');
+      if (confirm('Arrêter cette tâche ?')) sendTaskAction(taskId, 'stop');
+    });
+
+    const reloadTasks = () => {
+      $.ajax({
+        url: '/tasks/',
+        type: 'GET',
+        success: function(data) {
+          var tbody = $('#tasks-table-body');
+          tbody.empty();
+          if (data.length === 0) {
+            tbody.append('<tr><td colspan="4" class="text-center" style="color: #00B0F0; padding: 2rem;"><i class="fas fa-inbox fa-3x mb-3" style="opacity: 0.5;"></i><div>Aucune tâche en cours</div></td></tr>');
+          } else {
+            data.forEach(task => {
+              tbody.append(`
+                <tr data-task-id="${task.id}">
+                  <td>${task.name}</td>
+                  <td><span class="text-muted" id="status-${task.id}">${task.status}</span></td>
+                  <td><span id="progress-${task.id}">${task.progress}%</span></td>
+                  <td>
+                    <button class="btn btn-sm btn-warning pause-btn me-1" ${task.status !== "running" ? 'disabled' : ''}><i class="fa fa-pause"></i></button>
+                    <button class="btn btn-sm btn-success resume-btn me-1" ${task.status !== 'paused' ? 'disabled' : ''}><i class="fa fa-play"></i></button>
+                    <button class="btn btn-sm btn-danger stop-btn" ${task.status !== "failed" && task.status !== "complete" && task.status !== "terminate" && task.status !== "error" ? 'disabled' : ''}><i class="fa fa-stop"></i></button>
+                  </td>
+                </tr>
+              `);
+            });
+          }
+        },
+        error: function(xhr) {
+          console.error('Erreur lors du chargement des tâches:', xhr);
+          Toastify({
+            text: 'Erreur de chargement des tâches',
+            duration: 3000,
+            gravity: 'top',
+            position: 'right',
+            style: {
+              background: 'linear-gradient(135deg, rgba(220, 38, 38, 0.9) 0%, rgba(185, 28, 28, 0.9) 100%)',
+            }
+          }).showToast();
+        }
+      });
+    };
+
+    // WebSocket pour updates temps réel
+    function setupWebSocket() {
+      var wsProto = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+      var wsUrl = wsProto + window.location.host + '/ws/tasks/';
+      var ws = new WebSocket(wsUrl);
+
+      ws.onopen = function() {
+        console.log('WebSocket connecté');
+        Toastify({
+          text: 'Connexion WebSocket établie',
+          duration: 2000,
+          gravity: 'top',
+          position: 'right',
+          style: {
+            background: 'linear-gradient(135deg, rgba(0, 255, 136, 0.9) 0%, rgba(0, 200, 100, 0.9) 100%)',
+          }
+        }).showToast();
+      };
+
+      ws.onclose = function() {
+        console.log('WebSocket déconnecté, tentative de reconnexion dans 0.5 secondes...');
+        Toastify({
+          text: 'Connexion WebSocket perdue, reconnexion...',
+          duration: 2000,
+          gravity: 'top',
+          position: 'right',
+          style: {
+            background: 'linear-gradient(135deg, rgba(220, 38, 38, 0.9) 0%, rgba(185, 28, 28, 0.9) 100%)',
+          }
+        }).showToast();
+        setTimeout(setupWebSocket, 500);
+      };
+
+      ws.onerror = function(error) {
+        console.error('WebSocket error:', error);
+      };
+
+      ws.onmessage = function(e) {
+        var data = JSON.parse(e.data);
+        console.log('Message WebSocket reçu:', e);
+        
+        const type = data.type;
+
+        if (type === 'send_task_progress' || type === 'send_task_update') {
+          var row = $('#tasks-table-body tr[data-task-id="' + data.data.task_id + '"]');
+          if (row.length === 0) {
+            $('#tasks-table-body').append(`
+              <tr data-task-id="${data.data.task_id}">
+                <td>${data.data.name}</td>
+                <td><span class="text-muted" id="status-${data.data.task_id}">${data.data.status}</span></td>
+                <td><span id="progress-${data.data.task_id}">${data.data.progress || 0}%</span></td>
+                <td>
+                  <button class="btn btn-sm btn-warning pause-btn me-1" ${data.data.status !== "running" ? 'disabled' : ''}><i class="fa fa-pause"></i></button>
+                  <button class="btn btn-sm btn-success resume-btn me-1" ${data.data.status !== 'paused' ? 'disabled' : ''}><i class="fa fa-play"></i></button>
+                  <button class="btn btn-sm btn-danger stop-btn" ${data.data.status !== "failed" && data.data.status !== "complete" && data.data.status !== "terminate" && data.data.status !== "error" ? 'disabled' : ''}><i class="fa fa-stop"></i></button>
+                </td>
+              </tr>
+            `);
+          } else {
+            row.find('span[id^="status-"]').text(data.data.status);
+            if (data.data.progress !== undefined) {
+              row.find('span[id^="progress-"]').text(data.data.progress + '%');
+            }
+            if (data.data.status === 'complete') {
+              row.find('span[id^="progress-"]').text('100%');
+            }
+            row.find('.pause-btn').prop('disabled', data.data.status !== 'running');
+            row.find('.resume-btn').prop('disabled', data.data.status !== 'paused');
+            row.find('.stop-btn').prop('disabled', !['failed', 'complete', 'terminate', 'error'].includes(data.data.status));
+          }
+        } else if (data.type === 'send_add_task') {
+          console.log("Nouvelle tâche ou découpage terminé", data);
+          reloadTasks();
+          Toastify({
+            text: 'Nouvelle tâche récupérée: ' + data.data?.name,
+            duration: 2000,
+            gravity: 'top',
+            position: 'right',
+            style: {
+              background: 'linear-gradient(135deg, rgba(0, 255, 136, 0.9) 0%, rgba(0, 200, 100, 0.9) 100%)',
+            }
+          }).showToast();
+        }
+      };
+    }
+
+    setupWebSocket();
+    
+    // CSRF utilitaire
+    function getCookie(name) {
+      let cookieValue = null;
+      if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+          const cookie = cookies[i].trim();
+          if (cookie.substring(0, name.length + 1) === (name + '=')) {
+            cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+            break;
+          }
+        }
+      }
+      return cookieValue;
+    }
+
+    // Gestion préférences
+    let currentPreferences = [];
+    let tempTimeSlots = [];
+
+    function loadPreferences() {
+      fetch('/preferences/')
+        .then(response => response.json())
+        .then(data => {
+          currentPreferences = data;
+          renderPrefs();
+        })
+        .catch(e => {
+          currentPreferences = [];
+          renderPrefs();
+        });
+    }
+
+    function addTimeSlot() {
+      const startTime = document.getElementById('startTime').value;
+      const endTime = document.getElementById('endTime').value;
+      const cpu = document.getElementById('cpu').value;
+      const ram = document.getElementById('ram').value;
+      const maxTime = document.getElementById('maxTime').value;
+      
+      if (!startTime || !endTime) {
+        alert('Veuillez spécifier les heures de début et de fin.');
+        return;
+      }
+      
+      tempTimeSlots.push({startTime, endTime, cpu, ram, maxTime});
+      renderTimeSlots();
+    }
+
+    function renderTimeSlots() {
+      const container = document.getElementById('timeSlotsContainer');
+      container.innerHTML = '';
+      
+      if (tempTimeSlots.length === 0) {
+        container.innerHTML = '<p style="color: #00B0F0; text-align: center; padding: 1rem;">Aucun créneau ajouté.</p>';
+        return;
+      }
+      
+      tempTimeSlots.forEach((slot, index) => {
+        const slotEl = document.createElement('div');
+        slotEl.className = 'time-slot mb-2';
+        slotEl.innerHTML = `
+          <div>
+            <strong>${slot.startTime} - ${slot.endTime}</strong> | 
+            <span style="color: #00B0F0;">CPU: ${slot.cpu}%</span> | 
+            <span style="color: #00B0F0;">RAM: ${slot.ram}GB</span> | 
+            <span style="color: #00B0F0;">Max: ${slot.maxTime}min</span>
+          </div>
+          <button type='button' class='btn btn-sm btn-danger' onclick='removeTimeSlot(${index})'>
+            <i class='fas fa-trash-alt'></i>
+          </button>
+        `;
+        container.appendChild(slotEl);
+      });
+    }
+
+    function removeTimeSlot(index) {
+      tempTimeSlots.splice(index, 1);
+      renderTimeSlots();
+    }
+
+    function savePreferences() {
+      const selectedDays = Array.from(document.querySelectorAll('.day-checkbox:checked')).map(cb => cb.value);
+      
+      if (selectedDays.length === 0) {
+        alert('Veuillez sélectionner au moins un jour.');
+        return;
+      }
+      
+      if (tempTimeSlots.length === 0) {
+        alert('Veuillez ajouter au moins un créneau horaire.');
+        return;
+      }
+      
+      const allPrefs = [];
+      selectedDays.forEach(day => {
+        tempTimeSlots.forEach(slot => {
+          allPrefs.push({
+            day,
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+            cpu: slot.cpu,
+            ram: slot.ram,
+            maxTime: slot.maxTime
+          });
+        });
+      });
+      
+      const payload = { preferences: allPrefs };
+      
+      fetch('/save_preferences/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify(payload)
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          Toastify({
+            text: 'Préférences enregistrées avec succès',
+            duration: 2000,
+            gravity: 'top',
+            position: 'right',
+            style: {
+              background: 'linear-gradient(135deg, rgba(0, 255, 136, 0.9) 0%, rgba(0, 200, 100, 0.9) 100%)',
+            }
+          }).showToast();
+          loadPreferences();
+          var modalEl = bootstrap.Modal.getInstance(document.getElementById('prefModal'));
+          if (modalEl) modalEl.hide();
+        } else {
+          alert('Erreur: ' + data.error);
+        }
+      })
+      .catch(error => alert('Erreur réseau: ' + error));
+    }
+
+    function renderPrefs() {
+      const table = document.getElementById('prefsTable');
+      table.innerHTML = '<tr><th>Jour</th><th>Plage horaire</th><th>Ressources</th><th>Action</th></tr>';
+      
+      if (!currentPreferences || currentPreferences.length === 0) {
+        const emptyRow = document.createElement('tr');
+        emptyRow.innerHTML = '<td colspan="4" class="text-center" style="color: #00B0F0; padding: 1rem;">Aucune préférence enregistrée</td>';
+        table.appendChild(emptyRow);
+        return;
+      }
+      
+      const groupedPrefs = {};
+      currentPreferences.forEach((pref, index) => {
+        const day = pref.day;
+        if (!groupedPrefs[day]) groupedPrefs[day] = [];
+        groupedPrefs[day].push({...pref, index});
+      });
+      
+      Object.keys(groupedPrefs).sort().forEach(day => {
+        const prefs = groupedPrefs[day];
+        const rowspan = prefs.length;
+        
+        prefs.forEach((pref, idx) => {
+          const row = document.createElement('tr');
+          
+          if (idx === 0) {
+            const dayCell = document.createElement('td');
+            dayCell.rowSpan = rowspan;
+            dayCell.innerHTML = `<strong>${day}</strong>`;
+            row.appendChild(dayCell);
+          }
+          
+          const timeCell = document.createElement('td');
+          timeCell.innerHTML = `${pref.startTime} - ${pref.endTime}`;
+          row.appendChild(timeCell);
+          
+          const resourceCell = document.createElement('td');
+          resourceCell.innerHTML = `<span style="color: #00B0F0;">CPU: ${pref.cpu}%</span> | <span style="color: #00B0F0;">RAM: ${pref.ram}GB</span> | <span style="color: #00B0F0;">Max: ${pref.maxTime}min</span>`;
+          row.appendChild(resourceCell);
+          
+          const actionCell = document.createElement('td');
+          actionCell.innerHTML = `<button class="btn btn-sm btn-danger" onclick="deletePreference(${pref.id || pref.index})"><i class="fas fa-trash-alt"></i></button>`;
+          row.appendChild(actionCell);
+          
+          table.appendChild(row);
+        });
+      });
+    }
+
+    function deletePreference(id) {
+      if (!confirm("Voulez-vous vraiment supprimer cette préférence ?")) return;
+      
+      fetch(`/preferences/delete/${id}/`, {
+        method: 'DELETE',
+        headers: {
+          'X-CSRFToken': getCookie('csrftoken'),
+          'Content-Type': 'application/json',
+        }
+      })
+      .then(response => {
+        if (response.ok) {
+          loadPreferences();
+          Toastify({
+            text: 'Préférence supprimée',
+            duration: 2000,
+            gravity: 'top',
+            position: 'right',
+            style: {
+              background: 'linear-gradient(135deg, rgba(0, 255, 136, 0.9) 0%, rgba(0, 200, 100, 0.9) 100%)',
+            }
+          }).showToast();
+        } else {
+          alert("Erreur lors de la suppression");
+        }
+      })
+      .catch(() => alert("Erreur lors de la suppression"));
+    }
+
+    // Charger à l'affichage
+    window.addEventListener('DOMContentLoaded', function() {
+      loadPreferences();
+    });
+  </script>
+</body>
+</html>

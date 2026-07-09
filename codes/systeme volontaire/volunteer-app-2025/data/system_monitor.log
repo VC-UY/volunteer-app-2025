@@ -1,0 +1,100 @@
+2026-07-06 07:13:55,912 - INFO - Module agent chargé avec succès
+2026-07-06 07:13:55,912 - INFO - Utilisation de l'agent pour collecter les données statiques
+2026-07-06 07:13:57,560 - WARNING - dmidecode non accessible, utilisant valeurs par défaut
+2026-07-06 07:13:57,592 - INFO - Données statiques collectées avec succès via l'agent
+2026-07-06 07:13:57,592 - INFO - Données statiques collectées via l'agent: OS=Linux, CPU=8 cores
+2026-07-06 07:13:57,706 - INFO - [ENREGISTREMENT] Données envoyées au coordinateur via l'agent : name=ashley-HP-Laptop-15-da0xxx, ip_address=172.26.27.223, cpu_cores=8, ram_mb=11816.96, disk_gb=144.94, username=volunteer_2bf93b3e, password=172c4edea77d484c8d5f14653688e3ef
+2026-07-06 07:13:57,706 - INFO - Enregistrement du volontaire ashley-HP-Laptop-15-da0xxx
+2026-07-06 07:13:57,707 - ERROR - Le fichier /home/ashley/Documents/cours/inf 5009 SUJET DE RECHERCHE/codes/final runtime/vc-uyr/volunteer-app-2025/data/auth/volunteer_info.json n'a pas été trouvé donc pas de volunteer_id
+2026-07-06 07:13:57,708 - INFO - Connexion Redis établie: 173.249.38.251:6380
+2026-07-06 07:13:57,708 - INFO - Client Redis initialisé: volunteer:volunteer @ 173.249.38.251:6380
+2026-07-06 07:13:57,708 - DEBUG - Taille du message après nettoyage: 1028 caractères
+2026-07-06 07:13:57,708 - DEBUG - Handler 'handle_response' ajouté pour le canal auth/volunteer_register_response
+2026-07-06 07:13:58,050 - INFO - Abonné au canal: auth/volunteer_register_response
+2026-07-06 07:13:58,050 - INFO - Publication d'un message de type 'request' sur le canal auth/volunteer_register
+2026-07-06 07:13:58,051 - WARNING - Aucun token disponible pour le canal auth/volunteer_register
+2026-07-06 07:13:58,051 - INFO - Message sérialisé pour auth/volunteer_register: {"request_id": "66d7b811-dc15-4cfb-90a4-07d1470fcbc0", "sender": {"type": "volunteer", "id": "volunteer"}, "message_type": "request", "timestamp": 1783322038.0509346, "data": {"action": "register", "name": "ashley-HP-Laptop-15-da0xxx", "ip_address": "172.26.27.223", "cpu_cores": 8, "ram_mb": 11816.96, "disk_gb": 144.94, "username": "volunteer_2bf93b3e", "password": "172c4edea77d484c8d5f14653688e3ef", "timestamp": "2026-07-06 07:13:57", "machine_info": {"os": {"nom": "Linux", "version": "#106~22.04.1-Ubuntu SMP PREEMPT_DYNAMIC Fri Mar  6 08:44:59 UTC ", "architecture": "x86_64", "hostname": "ashley-HP-Laptop-15-da0xxx"}, "cpu": {"type": "", "coeurs_physiques": 4, "coeurs_logiques": 8, "frequence": {"min": 400.0, "max": 3400.0}}, "memoire": {"ram": {"total": "11.54 GB"}, "cache": {"total": "0 GB"}, "swap": {"total": "1.91 GB"}}, "disque": {"total": "144.94 GB"}, "gpu": {"disponible": false}, "bios_carte_mere": {"BIOS": {"Fabricant": "HP", "Version": "Q85 Ver. 01.31.00", "Date": "01/15/2025"}, "mother_board": {"Fabricant": "HP", "Modele": "8377"}}, "resolution_ecran": "1360x768", "adresse_mac": "4b:6a:73:7c:22:8b", "partitions_disque": 63, "interfaces_reseau": 7, "peripheriques_usb": 5}}}
+2026-07-06 07:13:58,767 - DEBUG - Message publié sur auth/volunteer_register: 66d7b811-dc15-4cfb-90a4-07d1470fcbc0
+2026-07-06 07:13:58,768 - INFO - Demande d'enregistrement envoyée pour volunteer_2bf93b3e (request_id: 66d7b811-dc15-4cfb-90a4-07d1470fcbc0)
+2026-07-06 07:14:34,229 - INFO - Module agent chargé avec succès
+2026-07-06 07:14:34,230 - INFO - Utilisation de l'agent pour collecter les données statiques
+2026-07-06 07:14:34,289 - WARNING - dmidecode non accessible, utilisant valeurs par défaut
+2026-07-06 07:14:34,320 - INFO - Données statiques collectées avec succès via l'agent
+2026-07-06 07:14:34,321 - INFO - Données statiques collectées via l'agent: OS=Linux, CPU=8 cores
+2026-07-06 07:14:34,397 - INFO - [ENREGISTREMENT] Données envoyées au coordinateur via l'agent : name=ashley-HP-Laptop-15-da0xxx, ip_address=172.26.27.223, cpu_cores=8, ram_mb=11816.96, disk_gb=144.94, username=volunteer_5bb9ee00, password=0f9d4de570154906bfd93a339c95fc25
+2026-07-06 07:14:34,398 - INFO - Enregistrement du volontaire ashley-HP-Laptop-15-da0xxx
+2026-07-06 07:14:34,398 - ERROR - Le fichier /home/ashley/Documents/cours/inf 5009 SUJET DE RECHERCHE/codes/final runtime/vc-uyr/volunteer-app-2025/data/auth/volunteer_info.json n'a pas été trouvé donc pas de volunteer_id
+2026-07-06 07:14:34,399 - INFO - Connexion Redis établie: 173.249.38.251:6380
+2026-07-06 07:14:34,399 - INFO - Client Redis initialisé: volunteer:volunteer @ 173.249.38.251:6380
+2026-07-06 07:14:34,400 - DEBUG - Taille du message après nettoyage: 1028 caractères
+2026-07-06 07:14:34,400 - DEBUG - Handler 'handle_response' ajouté pour le canal auth/volunteer_register_response
+2026-07-06 07:14:34,687 - INFO - Abonné au canal: auth/volunteer_register_response
+2026-07-06 07:14:34,687 - INFO - Publication d'un message de type 'request' sur le canal auth/volunteer_register
+2026-07-06 07:14:34,688 - WARNING - Aucun token disponible pour le canal auth/volunteer_register
+2026-07-06 07:14:34,688 - INFO - Message sérialisé pour auth/volunteer_register: {"request_id": "f36ef7cd-6abf-463c-aa12-2c7102cc8a46", "sender": {"type": "volunteer", "id": "volunteer"}, "message_type": "request", "timestamp": 1783322074.6879642, "data": {"action": "register", "name": "ashley-HP-Laptop-15-da0xxx", "ip_address": "172.26.27.223", "cpu_cores": 8, "ram_mb": 11816.96, "disk_gb": 144.94, "username": "volunteer_5bb9ee00", "password": "0f9d4de570154906bfd93a339c95fc25", "timestamp": "2026-07-06 07:14:34", "machine_info": {"os": {"nom": "Linux", "version": "#106~22.04.1-Ubuntu SMP PREEMPT_DYNAMIC Fri Mar  6 08:44:59 UTC ", "architecture": "x86_64", "hostname": "ashley-HP-Laptop-15-da0xxx"}, "cpu": {"type": "", "coeurs_physiques": 4, "coeurs_logiques": 8, "frequence": {"min": 400.0, "max": 3400.0}}, "memoire": {"ram": {"total": "11.54 GB"}, "cache": {"total": "0 GB"}, "swap": {"total": "1.91 GB"}}, "disque": {"total": "144.94 GB"}, "gpu": {"disponible": false}, "bios_carte_mere": {"BIOS": {"Fabricant": "HP", "Version": "Q85 Ver. 01.31.00", "Date": "01/15/2025"}, "mother_board": {"Fabricant": "HP", "Modele": "8377"}}, "resolution_ecran": "1360x768", "adresse_mac": "4b:6a:73:7c:22:8b", "partitions_disque": 63, "interfaces_reseau": 7, "peripheriques_usb": 5}}}
+2026-07-06 07:14:35,326 - DEBUG - Message publié sur auth/volunteer_register: f36ef7cd-6abf-463c-aa12-2c7102cc8a46
+2026-07-06 07:14:35,327 - INFO - Demande d'enregistrement envoyée pour volunteer_5bb9ee00 (request_id: f36ef7cd-6abf-463c-aa12-2c7102cc8a46)
+2026-07-06 07:15:05,330 - ERROR - Timeout lors de l'enregistrement de volunteer_5bb9ee00
+2026-07-06 07:15:05,331 - ERROR - Échec de l'enregistrement du volontaire: Timeout
+2026-07-06 07:15:05,332 - INFO - Thread d'écoute démarré
+2026-07-06 07:15:05,333 - INFO - Watchdog démarré
+2026-07-06 07:15:05,333 - INFO - Client Redis démarré avec watchdog: volunteer:volunteer
+2026-07-06 07:15:05,334 - DEBUG - Handler 'heartbeat_handler' ajouté pour le canal coord/heartbeat
+2026-07-06 07:15:05,334 - INFO - Abonné au canal: coord/heartbeat
+2026-07-06 07:15:05,335 - DEBUG - Handler 'error_handler' ajouté pour le canal coord/emergency
+2026-07-06 07:15:05,335 - INFO - Abonné au canal: coord/emergency
+2026-07-06 07:15:05,335 - DEBUG - Handler 'error_handler' ajouté pour le canal system/error
+2026-07-06 07:15:05,336 - INFO - Abonné au canal: system/error
+2026-07-06 07:15:05,378 - WARNING - Message reçu sur le canal auth/volunteer_register_response: {"request_id": "f36ef7cd-6abf-463c-aa12-2c7102cc8a46", "sender": {"type": "coordinator", "id": "d992c41d-206d-4b44-977a-508f1e11ddcb"}, "message_type": "response", "timestamp": 1783322075.8139524, "data": {"status": "success", "message": "Machine d\u00e9j\u00e0 enregistr\u00e9e, informations mises \u00e0 jour", "volunteer_id": "fe32b096-748a-4c58-a48e-1021646fc185", "username": "volunteer_5bb9ee00", "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiZmUzMmIwOTYtNzQ4YS00YzU4LWE0OGUtMTAyMTY0NmZjMTg1Iiwicm9sZSI6InZvbHVudGVlciIsImV4cCI6MTc4MzQwODQ3NSwiaWF0IjoxNzgzMzIyMDc1fQ.zbUzg4ZiPUwRgUVfhFuuQXu7C9oxFuksI0belFqh5t4", "is_update": true}, "token": null}
+2026-07-06 07:15:05,378 - INFO - Gestionnaires trouvés pour le canal auth/volunteer_register_response: 1
+2026-07-06 07:15:05,379 - INFO - Appel du gestionnaire handle_response pour auth/volunteer_register_response
+2026-07-06 07:15:05,381 - DEBUG - Réponse f36ef7cd-6abf-463c-aa12-2c7102cc8a46 enregistrée dans /home/ashley/Documents/cours/inf 5009 SUJET DE RECHERCHE/codes/final runtime/vc-uyr/volunteer-app-2025/data/temp_data/f36ef7cd-6abf-463c-aa12-2c7102cc8a46.json
+2026-07-06 07:15:05,383 - INFO - Thread d'écoute des tâches démarré
+2026-07-06 07:15:05,383 - INFO - Désabonné du canal: auth/volunteer_register_response
+2026-07-06 07:15:05,384 - ERROR - Le fichier /home/ashley/Documents/cours/inf 5009 SUJET DE RECHERCHE/codes/final runtime/vc-uyr/volunteer-app-2025/data/auth/volunteer_info.json n'a pas été trouvé donc pas de volunteer_id
+2026-07-06 07:15:05,384 - INFO - Chargement du module agent depuis: /home/ashley/Documents/cours/inf 5009 SUJET DE RECHERCHE/codes/final runtime/vc-uyr/volunteer-app-2025/agent.py
+2026-07-06 07:15:05,385 - WARNING - Le volontaire n'est pas encore enregistré; le gestionnaire de tâches ne sera pas démarré
+2026-07-06 07:15:05,389 - INFO - Module agent chargé avec succès
+2026-07-06 07:15:05,390 - INFO - Collecte continue des données via l'agent démarrée
+2026-07-06 07:15:05,391 - INFO - Application Redis Communication initialisée avec succès avec l'agent de collecte
+2026-07-06 07:15:05,398 - WARNING - Dépendances manquantes: sensors
+2026-07-06 07:15:05,398 - INFO - Compteur de fichiers réinitialisé à 1
+2026-07-06 07:15:05,399 - INFO - Envoi des données de l'agent désactivé (DISABLE_AGENT_SENDING=true)
+2026-07-06 07:15:05,520 - WARNING - dmidecode non accessible, utilisant valeurs par défaut
+2026-07-06 07:15:05,569 - INFO - Données initiales sauvegardées
+2026-07-06 07:15:05,569 - INFO - Demarrage de la boucle de collecte continue avec machine_id: None
+2026-07-06 07:15:06,844 - INFO - Module agent chargé avec succès
+2026-07-06 07:15:06,844 - INFO - Utilisation de l'agent pour collecter les données statiques
+2026-07-06 07:15:06,910 - WARNING - dmidecode non accessible, utilisant valeurs par défaut
+2026-07-06 07:15:06,941 - INFO - Données statiques collectées avec succès via l'agent
+2026-07-06 07:15:06,941 - INFO - Données statiques collectées via l'agent: OS=Linux, CPU=8 cores
+2026-07-06 07:15:07,039 - INFO - [ENREGISTREMENT] Données envoyées au coordinateur via l'agent : name=ashley-HP-Laptop-15-da0xxx, ip_address=172.26.27.223, cpu_cores=8, ram_mb=11816.96, disk_gb=144.94, username=volunteer_6e742f65, password=b9bb6685924d4f46af1a565dd36e3296
+2026-07-06 07:15:07,039 - INFO - Enregistrement du volontaire ashley-HP-Laptop-15-da0xxx
+2026-07-06 07:15:07,040 - ERROR - Le fichier /home/ashley/Documents/cours/inf 5009 SUJET DE RECHERCHE/codes/final runtime/vc-uyr/volunteer-app-2025/data/auth/volunteer_info.json n'a pas été trouvé donc pas de volunteer_id
+2026-07-06 07:15:07,041 - INFO - Connexion Redis établie: 173.249.38.251:6380
+2026-07-06 07:15:07,042 - INFO - Client Redis initialisé: volunteer:volunteer @ 173.249.38.251:6380
+2026-07-06 07:15:07,042 - DEBUG - Taille du message après nettoyage: 1028 caractères
+2026-07-06 07:15:07,043 - DEBUG - Handler 'handle_response' ajouté pour le canal auth/volunteer_register_response
+2026-07-06 07:15:08,277 - INFO - Abonné au canal: auth/volunteer_register_response
+2026-07-06 07:15:08,277 - INFO - Publication d'un message de type 'request' sur le canal auth/volunteer_register
+2026-07-06 07:15:08,278 - WARNING - Aucun token disponible pour le canal auth/volunteer_register
+2026-07-06 07:15:08,278 - INFO - Message sérialisé pour auth/volunteer_register: {"request_id": "c2a1dbd7-5d17-42b3-a2e9-eb06ad8cb4b1", "sender": {"type": "volunteer", "id": "volunteer"}, "message_type": "request", "timestamp": 1783322108.278016, "data": {"action": "register", "name": "ashley-HP-Laptop-15-da0xxx", "ip_address": "172.26.27.223", "cpu_cores": 8, "ram_mb": 11816.96, "disk_gb": 144.94, "username": "volunteer_6e742f65", "password": "b9bb6685924d4f46af1a565dd36e3296", "timestamp": "2026-07-06 07:15:07", "machine_info": {"os": {"nom": "Linux", "version": "#106~22.04.1-Ubuntu SMP PREEMPT_DYNAMIC Fri Mar  6 08:44:59 UTC ", "architecture": "x86_64", "hostname": "ashley-HP-Laptop-15-da0xxx"}, "cpu": {"type": "", "coeurs_physiques": 4, "coeurs_logiques": 8, "frequence": {"min": 400.0, "max": 3400.0}}, "memoire": {"ram": {"total": "11.54 GB"}, "cache": {"total": "0 GB"}, "swap": {"total": "1.91 GB"}}, "disque": {"total": "144.94 GB"}, "gpu": {"disponible": false}, "bios_carte_mere": {"BIOS": {"Fabricant": "HP", "Version": "Q85 Ver. 01.31.00", "Date": "01/15/2025"}, "mother_board": {"Fabricant": "HP", "Modele": "8377"}}, "resolution_ecran": "1360x768", "adresse_mac": "4b:6a:73:7c:22:8b", "partitions_disque": 63, "interfaces_reseau": 7, "peripheriques_usb": 5}}}
+2026-07-06 07:15:08,668 - DEBUG - Message publié sur auth/volunteer_register: c2a1dbd7-5d17-42b3-a2e9-eb06ad8cb4b1
+2026-07-06 07:15:08,669 - INFO - Demande d'enregistrement envoyée pour volunteer_6e742f65 (request_id: c2a1dbd7-5d17-42b3-a2e9-eb06ad8cb4b1)
+2026-07-06 07:15:14,433 - INFO - Données variables sauvegardées dans /home/ashley/Documents/cours/inf 5009 SUJET DE RECHERCHE/codes/final runtime/vc-uyr/volunteer-app-2025/data/data/2.json.gz
+2026-07-06 07:15:37,879 - INFO - Module agent chargé avec succès
+2026-07-06 07:15:37,880 - INFO - Utilisation de l'agent pour collecter les données statiques
+2026-07-06 07:15:37,936 - WARNING - dmidecode non accessible, utilisant valeurs par défaut
+2026-07-06 07:15:37,966 - INFO - Données statiques collectées avec succès via l'agent
+2026-07-06 07:15:37,967 - INFO - Données statiques collectées via l'agent: OS=Linux, CPU=8 cores
+2026-07-06 07:15:38,045 - INFO - [ENREGISTREMENT] Données envoyées au coordinateur via l'agent : name=ashley-HP-Laptop-15-da0xxx, ip_address=172.26.27.223, cpu_cores=8, ram_mb=11816.96, disk_gb=144.94, username=volunteer_eb969d73, password=c11d59a4457e4048bf9a9cf29bae4f7b
+2026-07-06 07:15:38,045 - INFO - Enregistrement du volontaire ashley-HP-Laptop-15-da0xxx
+2026-07-06 07:15:38,046 - ERROR - Le fichier /home/ashley/Documents/cours/inf 5009 SUJET DE RECHERCHE/codes/final runtime/vc-uyr/volunteer-app-2025/data/auth/volunteer_info.json n'a pas été trouvé donc pas de volunteer_id
+2026-07-06 07:15:38,047 - INFO - Connexion Redis établie: 173.249.38.251:6380
+2026-07-06 07:15:38,047 - INFO - Client Redis initialisé: volunteer:volunteer @ 173.249.38.251:6380
+2026-07-06 07:15:38,048 - DEBUG - Taille du message après nettoyage: 1028 caractères
+2026-07-06 07:15:38,048 - DEBUG - Handler 'handle_response' ajouté pour le canal auth/volunteer_register_response
+2026-07-06 07:15:39,426 - INFO - Abonné au canal: auth/volunteer_register_response
+2026-07-06 07:15:39,427 - INFO - Publication d'un message de type 'request' sur le canal auth/volunteer_register
+2026-07-06 07:15:39,427 - WARNING - Aucun token disponible pour le canal auth/volunteer_register
+2026-07-06 07:15:39,428 - INFO - Message sérialisé pour auth/volunteer_register: {"request_id": "709a266f-92ec-442b-803e-32c7c7dbdb5e", "sender": {"type": "volunteer", "id": "volunteer"}, "message_type": "request", "timestamp": 1783322139.4277496, "data": {"action": "register", "name": "ashley-HP-Laptop-15-da0xxx", "ip_address": "172.26.27.223", "cpu_cores": 8, "ram_mb": 11816.96, "disk_gb": 144.94, "username": "volunteer_eb969d73", "password": "c11d59a4457e4048bf9a9cf29bae4f7b", "timestamp": "2026-07-06 07:15:38", "machine_info": {"os": {"nom": "Linux", "version": "#106~22.04.1-Ubuntu SMP PREEMPT_DYNAMIC Fri Mar  6 08:44:59 UTC ", "architecture": "x86_64", "hostname": "ashley-HP-Laptop-15-da0xxx"}, "cpu": {"type": "", "coeurs_physiques": 4, "coeurs_logiques": 8, "frequence": {"min": 400.0, "max": 3400.0}}, "memoire": {"ram": {"total": "11.54 GB"}, "cache": {"total": "0 GB"}, "swap": {"total": "1.91 GB"}}, "disque": {"total": "144.94 GB"}, "gpu": {"disponible": false}, "bios_carte_mere": {"BIOS": {"Fabricant": "HP", "Version": "Q85 Ver. 01.31.00", "Date": "01/15/2025"}, "mother_board": {"Fabricant": "HP", "Modele": "8377"}}, "resolution_ecran": "1360x768", "adresse_mac": "4b:6a:73:7c:22:8b", "partitions_disque": 63, "interfaces_reseau": 7, "peripheriques_usb": 5}}}

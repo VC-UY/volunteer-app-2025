@@ -1,0 +1,24 @@
+[Unit]
+Description=Volunteer Web Interface (Django/Daphne)
+After=network.target volunteer.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=volunteer
+Group=volunteer
+WorkingDirectory=/opt/volunteer-app
+Environment="PYTHONUNBUFFERED=1"
+Environment="DJANGO_SETTINGS_MODULE=backend.settings"
+ExecStart=/opt/volunteer-app/exp-env/bin/daphne -b 0.0.0.0 -p 8002 backend.asgi:application
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=volunteer-web
+
+# Performance
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
