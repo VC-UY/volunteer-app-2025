@@ -818,58 +818,114 @@ class RedisAppConfig(AppConfig):
 
             logger.info("Vérification de l'enregistrement du volontaire...")
             volunteer_info = MachineInfo.objects.get_last_inserted()
+            saved_info = get_volunteer_info() or {}
+            saved_volunteer_id = saved_info.get('volunteer_id')
+            saved_username = saved_info.get('username')
+            saved_password = saved_info.get('password')
 
-            # Cas 1 : Volontaire déjà enregistré (avec volunteer_id)
-            if volunteer_info and volunteer_info.volunteer_id:
+            # Cas 1 : Volontaire déjà enregistré (avec volunteer_id en BD ou fichier local)
+            volunteer_id = (volunteer_info.volunteer_id if volunteer_info and volunteer_info.volunteer_id else None) or saved_volunteer_id
+            if volunteer_id:
                 # Toujours enrichir les données locales si besoin
                 full_info = collect_full_volunteer_info(volunteer_info)
-                # Mettre à jour la BD locale si des champs sont incomplets
-                updated = False
-                for k, v in full_info.items():
-                    if hasattr(volunteer_info, k) and (getattr(volunteer_info, k) in [None, '', 0]):
-                        setattr(volunteer_info, k, v)
-                        updated = True
-                if updated:
-                    volunteer_info.save()
+                if saved_username and saved_password:
+                    full_info['username'] = saved_username
+                    full_info['password'] = saved_password
+                if volunteer_info:
+                    updated = False
+                    for k, v in full_info.items():
+                        if hasattr(volunteer_info, k) and (getattr(volunteer_info, k) in [None, '', 0]):
+                            setattr(volunteer_info, k, v)
+                            updated = True
+                    if updated:
+                        volunteer_info.save()
                 self.load_volunteer_credentials()
-                logger.info(f"Connexion volontaire avec username={full_info['username']}")
-                success, data = login_volunteer(
-                    username=full_info['username'],
-                    password=full_info['password']
-                )
-                if success:
-                    logger.info("Volontaire authentifié avec succès")
-                    self.volunteer_id = volunteer_info.volunteer_id
-                    self.volunteer_token = data.get('token')
-                    if not os.path.exists('.volunteer'):
-                        os.makedirs('.volunteer')
-                    with open('.volunteer/volunteer_auth_info.json', 'w') as f:
-                        json.dump({
-                            'token': data.get('token'),
-                            'refresh_token': data.get('refresh_token'),
-                            'last_login': time.time()
-                        }, f)
-                    logger.debug("Volontaire authentifié avec succès")
+                # Token JWT valide en cache : démarrer sans bloquer sur login Redis
+                auth_cache = os.path.join('.volunteer', 'volunteer_auth_info.json')
+                cached_token = None
+                if os.path.exists(auth_cache):
+                    try:
+                        with open(auth_cache) as f:
+                            cached_auth = json.load(f)
+                        last_login = cached_auth.get('last_login', 0)
+                        if cached_auth.get('token') and (time.time() - last_login) < 86400:
+                            cached_token = cached_auth['token']
+                    except Exception as exc:
+                        logger.warning(f"Token cache illisible: {exc}")
+
+                if cached_token:
+                    try:
+                        import jwt
+                        payload = jwt.decode(cached_token, options={"verify_signature": False})
+                        volunteer_id = payload.get('user_id') or volunteer_id
+                    except Exception:
+                        pass
+                    logger.info("Démarrage avec token JWT en cache (skip login Redis)")
+                    self.volunteer_id = str(volunteer_id)
+                    self.volunteer_token = cached_token
                     from .task_handlers import TaskManager
-                    task_manager = TaskManager.get_instance()
-                    task_manager.start(volunteer_info.volunteer_id)
+                    TaskManager.get_instance().start(self.volunteer_id)
                 else:
-                    logger.error(f"Échec de l'authentification du volontaire: {data}")
+                    logger.info(f"Connexion volontaire avec username={full_info['username']}")
+                    success, data = login_volunteer(
+                        username=full_info['username'],
+                        password=full_info['password']
+                    )
+                    if success:
+                        logger.info("Volontaire authentifié avec succès")
+                        self.volunteer_id = str(volunteer_id)
+                        self.volunteer_token = data.get('token')
+                        if not os.path.exists('.volunteer'):
+                            os.makedirs('.volunteer')
+                        with open('.volunteer/volunteer_auth_info.json', 'w') as f:
+                            json.dump({
+                                'token': data.get('token'),
+                                'refresh_token': data.get('refresh_token'),
+                                'last_login': time.time()
+                            }, f)
+                        logger.debug("Volontaire authentifié avec succès")
+                        from .task_handlers import TaskManager
+                        task_manager = TaskManager.get_instance()
+                        task_manager.start(self.volunteer_id)
+                    else:
+                        logger.error(f"Échec de l'authentification du volontaire: {data}")
             else:
-                # Cas 2 ou 3 : Volontaire non enregistré ou sans volunteer_id
+                # Cas 2 : tenter login si identifiants connus, sinon enregistrement
                 full_info = collect_full_volunteer_info(volunteer_info)
-                logger.info(f"[ENREGISTREMENT] Données envoyées au coordinateur : name={full_info['hostname']}, ip_address={full_info['ip_address']}, cpu_cores={full_info['cpu_cores']}, ram_mb={full_info['ram_mb']}, disk_gb={full_info['disk_gb']}, username={full_info['username']}, password={full_info['password']}")
-                
-                success, data = register_volunteer(
-                    name=full_info['hostname'],
-                    ip_address=full_info['ip_address'],
-                    cpu_cores=full_info['cpu_cores'],
-                    ram_mb=full_info['ram_mb'],
-                    disk_gb=full_info['disk_gb'],
-                    username=full_info['username'],
-                    password=full_info['password'],
-                    machine_info=full_info['machine_info'],
-                )
+                if saved_username and saved_password:
+                    full_info['username'] = saved_username
+                    full_info['password'] = saved_password
+                    logger.info(f"Connexion volontaire existant username={full_info['username']}")
+                    success, data = login_volunteer(
+                        username=full_info['username'],
+                        password=full_info['password'],
+                    )
+                    if success:
+                        self.volunteer_id = data.get('volunteer_id') or saved_volunteer_id
+                        self.volunteer_token = data.get('token')
+                        from .task_handlers import TaskManager
+                        TaskManager.get_instance().start(self.volunteer_id)
+                        logger.info("Volontaire reconnecté via login")
+                    else:
+                        logger.warning(f"Login échoué, tentative d'enregistrement: {data}")
+                        success = False
+                        data = {}
+                else:
+                    success = False
+                    data = {}
+
+                if not success:
+                    logger.info(f"[ENREGISTREMENT] Données envoyées au coordinateur : name={full_info['hostname']}, username={full_info['username']}")
+                    success, data = register_volunteer(
+                        name=full_info['hostname'],
+                        ip_address=full_info['ip_address'],
+                        cpu_cores=full_info['cpu_cores'],
+                        ram_mb=full_info['ram_mb'],
+                        disk_gb=full_info['disk_gb'],
+                        username=full_info['username'],
+                        password=full_info['password'],
+                        machine_info=full_info['machine_info'],
+                    )
                 if success:
                     logger.info("Volontaire enregistré aupres du coordinateur avec succès")
                     # Mettre à jour la BD locale (création ou update)

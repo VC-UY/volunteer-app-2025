@@ -18,6 +18,25 @@ from .message import Message
 logger = logging.getLogger(__name__)
 
 
+def _normalize_status(status) -> str:
+    return str(status or "").lower().strip()
+
+
+def _is_running_status(status) -> bool:
+    return _normalize_status(status) in (
+        "progress", "running", "started", "in_progress"
+    )
+
+
+def _is_pausable_status(status) -> bool:
+    return _is_running_status(status)
+
+
+def _is_stoppable_status(status) -> bool:
+    return _normalize_status(status) in (
+        "progress", "running", "started", "in_progress", "paused", "assigned", "pending"
+    )
+
 
 # Import des modèles à l'intérieur des fonctions pour éviter les importations circulaires
 
@@ -265,12 +284,42 @@ class TaskManager:
         
         logger.info(f"{len(volunteer_tasks)} tâches assignées au volontaire {self.volunteer_id}")
 
-        # Creer le workflow s'il n'existe pas
         from django.apps import apps
         Workflow = apps.get_model('volontaire', 'Workflow')
+        wf_name = (
+            data.get("workflow_name")
+            or (volunteer_tasks[0].get("workflow_name") if volunteer_tasks else None)
+            or data.get("workflow_type")
+            or f"Workflow {str(workflow_id)[:8]}"
+        )
+        wf_desc = data.get("workflow_description") or ""
+        wf_type = data.get("workflow_type") or (
+            volunteer_tasks[0].get("workflow_type") if volunteer_tasks else ""
+        )
+        if not wf_desc and volunteer_tasks:
+            wf_desc = volunteer_tasks[0].get("description") or ""
+        if wf_type and wf_desc and not wf_desc.startswith("["):
+            wf_desc = f"[{wf_type}] {wf_desc}"
+        elif wf_type and not wf_desc:
+            wf_desc = f"Type: {wf_type}"
+
         workflow = Workflow.objects.filter(workflow_id=workflow_id).first()
         if not workflow:
-            workflow = Workflow.objects.create(workflow_id=workflow_id, name="Workflow", description="Workflow")
+            workflow = Workflow.objects.create(
+                workflow_id=workflow_id,
+                name=wf_name,
+                description=wf_desc,
+            )
+        else:
+            changed = False
+            if wf_name and workflow.name in ("Workflow", "", None):
+                workflow.name = wf_name
+                changed = True
+            if wf_desc and workflow.description in ("Workflow", "", None):
+                workflow.description = wf_desc
+                changed = True
+            if changed:
+                workflow.save()
         
         # Traiter chaque tâche assignée à ce volontaire
         for task_data in volunteer_tasks:
@@ -297,7 +346,13 @@ class TaskManager:
                 )
                 existing_task.name = task_data.get('name', existing_task.name)
                 existing_task.workflow = workflow
-                existing_task.parameters = task_data.get('parameters', existing_task.parameters or {})
+                params = task_data.get('parameters', existing_task.parameters or {})
+                if isinstance(params, list):
+                    params = {}
+                params['command'] = task_data.get('command', params.get('command', ''))
+                params['description'] = task_data.get('description', params.get('description', ''))
+                params['workflow_type'] = wf_type or params.get('workflow_type', '')
+                existing_task.parameters = params
                 existing_task.status = 'assigned'
                 existing_task.input_data = task_data.get('input_data', existing_task.input_data or {})
                 existing_task.estimated_execution_time = task_data.get(
@@ -314,11 +369,17 @@ class TaskManager:
                 task = existing_task
             else:
                 # Créer une nouvelle tâche
+                params = task_data.get('parameters', {}) or {}
+                if isinstance(params, list):
+                    params = {}
+                params['command'] = task_data.get('command', params.get('command', ''))
+                params['description'] = task_data.get('description', params.get('description', ''))
+                params['workflow_type'] = wf_type or params.get('workflow_type', '')
                 task = Task(
                     task_id=str(task_id),
                     name=task_data.get('name', 'Tâche sans nom'),
                     workflow=workflow,
-                    parameters=task_data.get('parameters', {}),
+                    parameters=params,
                     status='assigned',
                     input_data=task_data.get('input_data', {}),
                     estimated_execution_time=task_data.get('estimated_execution_time', 0),
@@ -570,8 +631,12 @@ class TaskManager:
             task = Task.objects.get(task_id=task_id)
             
             # Vérifier que la tâche est en cours d'exécution
-            if task.status != 'progress':
-                logger.warning(f"Impossible de mettre en pause la tâche {task_id} car elle n'est pas en cours d'exécution")
+            if not _is_pausable_status(task.status):
+                logger.warning(
+                    "Impossible de mettre en pause la tâche %s (statut=%s)",
+                    task_id,
+                    task.status,
+                )
                 return False
             
             # Mettre à jour le statut de la tâche
@@ -648,13 +713,27 @@ class TaskManager:
             # Récupérer la tâche
             task = Task.objects.get(task_id=task_id)
             
-            # Vérifier que la tâche est en pause
-            if task.status != 'paused':
-                logger.warning(f"Impossible de reprendre la tâche {task_id} car elle n'est pas en pause")
+            # Reprendre une tâche en pause ou démarrer une tâche assignée/en attente
+            st = _normalize_status(task.status)
+            if st in ('pending', 'queued', 'assigned', 'created', 'accepted'):
+                if self.current_task is not None:
+                    logger.warning("Une autre tâche est déjà en cours (%s)", self.current_task)
+                    return False
+                logger.info("Démarrage manuel de la tâche %s", task_id)
+                thread = threading.Thread(target=self._execute_task, args=(task,), daemon=True)
+                thread.start()
+                return True
+
+            if st != 'paused':
+                logger.warning(
+                    "Impossible de reprendre la tâche %s (statut=%s)",
+                    task_id,
+                    task.status,
+                )
                 return False
             
             # Mettre à jour le statut de la tâche
-            task.status = 'progress'
+            task.status = 'running'
             task.save()
             
             # Notifier le frontend de la reprise
@@ -727,13 +806,19 @@ class TaskManager:
             # Récupérer la tâche
             task = Task.objects.get(task_id=task_id)
             
-            # Vérifier que la tâche est en cours d'exécution ou en pause
-            if task.status not in ['progress', 'paused']:
-                logger.warning(f"Impossible d'arrêter la tâche {task_id} car elle n'est pas en cours d'exécution ou en pause")
+            # Vérifier que la tâche peut être arrêtée
+            if not _is_stoppable_status(task.status):
+                logger.warning(
+                    "Impossible d'arrêter la tâche %s (statut=%s)",
+                    task_id,
+                    task.status,
+                )
                 return False
+
+            prev_status = task.status
             
             # Mettre à jour le statut de la tâche
-            task.status = 'Cancel'
+            task.status = 'stopped'
             task.end_date = timezone.now()
             task.save()
             
@@ -762,9 +847,15 @@ class TaskManager:
                 message="Tâche arrêtée"
             )
             
-            # Arrêter le conteneur Docker
+            # Arrêter le conteneur Docker si actif
             docker_manager = DockerManager.get_instance()
-            docker_manager.stop_task(task_id)
+            if _is_running_status(prev_status) or _normalize_status(prev_status) == 'paused':
+                docker_manager.stop_task(task_id)
+
+            if self.current_task and str(getattr(self.current_task, 'task_id', '')) == str(task_id):
+                self.current_task = None
+                self.task_process = None
+                self._start_next_assigned_task()
             
             # Envoyer une notification d'arrêt
             from redis_communication.utils import get_volunteer_auth_token

@@ -118,7 +118,7 @@ class RedisClient:
                     socket.TCP_KEEPCNT: 3
                 },
                 socket_connect_timeout=10,
-                socket_timeout=30,
+                socket_timeout=5,
                 health_check_interval=0,  # Désactiver le health check automatique
                 # Evite CLIENT SETINFO: le proxy le filtre sans repondre (timeout)
                 lib_name=None,
@@ -306,7 +306,7 @@ class RedisClient:
         if token:
             message.token = token
             logger.info(f"Token JWT ajouté au message pour le canal {channel}")
-        elif channel != 'auth/token_refresh':
+        elif channel != 'auth/token_refresh' and not channel.startswith('auth/'):
             from redis_communication.auth_client import load_volunter_credentials, refresh_token_if_needed
             auth_info = load_volunter_credentials()
             if auth_info and 'token' in auth_info:
@@ -328,25 +328,15 @@ class RedisClient:
             else:
                 logger.warning(f"Aucun token disponible pour le canal {channel}")
         
-        # Publier le message (timeout court : ne jamais bloquer l'exécution des tâches)
+        # Publier via la connexion dédiée (pas une nouvelle socket à chaque fois)
         try:
             json_message = message.to_json()
             logger.info(f"Message sérialisé pour {channel}: {json_message}")
 
-            pub_client = redis.Redis(
-                host=self.host,
-                port=self.port,
-                db=self.db,
-                decode_responses=True,
-                socket_connect_timeout=3,
-                socket_timeout=3,
-                lib_name=None,
-                lib_version=None,
-            )
-            try:
-                pub_client.publish(channel, json_message)
-            finally:
-                pub_client.close()
+            if not self.redis:
+                raise redis.ConnectionError("Client Redis non initialisé")
+
+            self.redis.publish(channel, json_message)
 
             self.stats['messages_sent'] += 1
             self.stats['last_activity'] = time.time()
@@ -356,6 +346,7 @@ class RedisClient:
         except (redis.ConnectionError, redis.TimeoutError) as e:
             logger.warning(f"Publication {channel} ignorée (Redis lent/hors ligne): {e}")
             self.stats['connection_errors'] += 1
+            self.connected = False
             return None
         except Exception as e:
             logger.warning(f"Publication {channel} ignorée: {e}")
@@ -418,18 +409,12 @@ class RedisClient:
             import datetime
             creds = load_volunter_credentials()
             if creds:
-                volunteer_last_login = get_volunteer_info() # date de la derniere connexion en decimale
-                if volunteer_last_login and datetime.datetime.fromtimestamp(volunteer_last_login['last_login']) + datetime.timedelta(hours=24) > datetime.datetime.now(): # verifier si le token est encore valide pour 24h
+                last_login = creds.get('last_login')
+                if last_login and datetime.datetime.fromtimestamp(last_login) + datetime.timedelta(hours=24) > datetime.datetime.now():
                     logger.info("✅  Le volontaire était déjà authentifié et token valide")
                     
-                else:
-                    logger.warning("Le token d'authentification du volontaire n'est plus valide, reconnexion ...")
-                    from redis_communication.apps import auth_volunteer_flow
-                    auth_volunteer_flow()
             else:
                 logger.warning("Aucune information d'authentification du volontaire disponible après reconnexion")
-                from redis_communication.apps import auth_volunteer_flow
-                auth_volunteer_flow()
             return True
             
         except Exception as e:
