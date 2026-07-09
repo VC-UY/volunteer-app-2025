@@ -82,10 +82,60 @@ def delete_response(request_id: str) -> bool:
         return False
 
 
+def _wait_for_response(
+    client: "RedisClient",
+    response_channel: str,
+    request_channel: str,
+    request_data: Dict[str, Any],
+    request_id: str,
+    callback: Optional[Callable[[Dict[str, Any]], None]],
+    timeout: int,
+) -> Tuple[bool, Dict[str, Any]]:
+    """
+    Publie une requête auth et attend sa réponse, avec re-tentatives courtes.
+    """
+    delete_response(request_id)
+
+    def handle_response(channel: str, message: Message):
+        if message.request_id == request_id:
+            save_response(request_id, message.data)
+            if callback:
+                callback(message.data)
+
+    client.subscribe(response_channel, handle_response)
+
+    try:
+        if not client.running:
+            client.start()
+
+        # Laisser Redis enregistrer l'abonnement avant d'envoyer la requête.
+        time.sleep(0.2)
+        client.publish(request_channel, request_data, request_id=request_id)
+
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            response = get_response(request_id)
+            if response:
+                delete_response(request_id)
+                payload = response.get('response', {})
+                return payload.get('status') == 'success', payload
+            time.sleep(0.1)
+
+        logger.warning(
+            "Aucune réponse sur %s pour %s après %ss",
+            response_channel,
+            request_id,
+            timeout,
+        )
+        return False, {'status': 'error', 'message': 'Timeout'}
+    finally:
+        client.unsubscribe(response_channel, handle_response)
+
+
 def register_volunteer(name: str, ip_address: str, cpu_cores: int, ram_mb: int, disk_gb: int,
                        username: str, password: str, machine_info: Optional[Dict[str, Any]] = None,
                        callback: Optional[Callable[[Dict[str, Any]], None]] = None,
-                       timeout: int = 30) -> Tuple[bool, Dict[str, Any]]:
+                       timeout: int = 15) -> Tuple[bool, Dict[str, Any]]:
     """
     Enregistre un nouveau volontaire auprès du coordinateur.
     
@@ -137,53 +187,36 @@ def register_volunteer(name: str, ip_address: str, cpu_cores: int, ram_mb: int, 
         request_data['machine_info'] = cleaned_machine_info
         logger.debug(f"Taille du message après nettoyage: {len(json.dumps(request_data))} caractères")
     
-    # Fonction de rappel pour traiter la réponse
-    def handle_response(channel: str, message: Message):
-        if message.request_id == request_id:
-            # Enregistrer la réponse
-            save_response(request_id, message.data)
-            
-            # Appeler le callback si fourni
-            if callback:
-                callback(message.data)
-            
-            # Se désabonner du canal
-            client.unsubscribe('auth/volunteer_register_response', handle_response)
-    
-    # S'abonner au canal de réponse
-    client.subscribe('auth/volunteer_register_response', handle_response)
-    
-    # Publier la requête
-    client.publish('auth/volunteer_register', request_data, request_id=request_id)
-    
     logger.info(f"Demande d'enregistrement envoyée pour {username} (request_id: {request_id})")
-    
-    # Attendre la réponse
-    start_time = time.time()
-    while time.time() - start_time < timeout:
-        response = get_response(request_id)
-        if response:
-            # Supprimer la réponse du fichier
-            delete_response(request_id)
-            
-            # Vérifier le statut
-            status = response.get('response', {}).get('status')
-            if status == 'success':
-                return True, response.get('response', {})
-            else:
-                return False, response.get('response', {})
-        
-        # Attendre un peu avant de vérifier à nouveau
-        time.sleep(0.1)
-    
-    # Timeout
+
+    attempts = 3
+    for attempt in range(1, attempts + 1):
+        success, response = _wait_for_response(
+            client=client,
+            response_channel='auth/volunteer_register_response',
+            request_channel='auth/volunteer_register',
+            request_data=request_data,
+            request_id=request_id,
+            callback=callback,
+            timeout=timeout,
+        )
+        if success or response.get('message') != 'Timeout' or attempt == attempts:
+            return success, response
+
+        logger.warning(
+            "Réessai inscription volontaire %s/%s après timeout Redis",
+            attempt + 1,
+            attempts,
+        )
+        time.sleep(min(attempt, 3))
+
     logger.error(f"Timeout lors de l'enregistrement de {username}")
     return False, {'status': 'error', 'message': 'Timeout'}
     
     
 def login_volunteer(username: str, password: str,
                      callback: Optional[Callable[[Dict[str, Any]], None]] = None,
-                     timeout: int = 30,
+                     timeout: int = 15,
                     ) -> Tuple[bool, Dict[str, Any]]:
     """
     Authentifie un volontaire auprès du coordinateur.
@@ -219,27 +252,8 @@ def login_volunteer(username: str, password: str,
     }
     
     
-    # Créer un gestionnaire de réponse
-    response_received = False
-    response_data = {}
-    
-    # Fonction de rappel pour traiter la réponse
-    def handle_response(channel: str, message: Message):
-        if message.request_id == request_id:
-            # Enregistrer la réponse
-            save_response(request_id, message.data)
-            
-            # Appeler le callback si fourni
-            if callback:
-                callback(message.data)
-            
-            # Se désabonner du canal
-            client.unsubscribe('auth/volunteer_login_response', handle_response)
-    
-    # S'abonner au canal de réponse
     client = RedisClient.get_instance()
-    client.subscribe('auth/volunteer_login_response', handle_response)
-    
+
     try:
         # Vérifier que les données peuvent être sérialisées en JSON
         try:
@@ -251,29 +265,27 @@ def login_volunteer(username: str, password: str,
             if 'machine_info' in request_data:
                 del request_data['machine_info']
         
-        # Publier la requête
-        client.publish('auth/volunteer_login', request_data, request_id=request_id)
-        
-        # Attendre la réponse
-        start_time = time.time()
-        
-        while time.time() - start_time < timeout:
-            response = get_response(request_id)
-            if response:
-                # Supprimer la réponse du fichier
-                delete_response(request_id)
-                
-                # Vérifier le statut
-                status = response.get('response', {}).get('status')
-                if status == 'success':
-                    return True, response.get('response', {})
-                else:
-                    return False, response.get('response', {})
-            
-            # Attendre un peu avant de vérifier à nouveau
-            time.sleep(0.1)
-        
-        # Timeout
+        attempts = 3
+        for attempt in range(1, attempts + 1):
+            success, response = _wait_for_response(
+                client=client,
+                response_channel='auth/volunteer_login_response',
+                request_channel='auth/volunteer_login',
+                request_data=request_data,
+                request_id=request_id,
+                callback=callback,
+                timeout=timeout,
+            )
+            if success or response.get('message') != 'Timeout' or attempt == attempts:
+                return success, response
+
+            logger.warning(
+                "Réessai authentification volontaire %s/%s après timeout Redis",
+                attempt + 1,
+                attempts,
+            )
+            time.sleep(min(attempt, 3))
+
         logger.error(f"Timeout lors de l'authentification de {username}")
         return False, {'status': 'error', 'message': 'Timeout'}
         

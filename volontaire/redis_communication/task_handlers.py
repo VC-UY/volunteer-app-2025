@@ -51,6 +51,7 @@ class TaskManager:
         self.current_task = None
         self.task_process = None
         self.task_thread = None
+        self.heartbeat_thread = None
         self.running = False           
     
     def start(self, volunteer_id):
@@ -60,18 +61,144 @@ class TaskManager:
         Args:
             volunteer_id: ID du volontaire
         """
+        self.volunteer_id = str(volunteer_id)
         if self.running:
-            logger.warning("Le gestionnaire de tâches est déjà en cours d'exécution")
+            logger.warning(
+                "Gestionnaire de tâches déjà actif (volunteer_id=%s) — republication heartbeat",
+                self.volunteer_id,
+            )
+            self._send_heartbeat()
+            self._request_pending_assignments()
             return
         
-        self.volunteer_id = str(volunteer_id)
         self.running = True
         
         # S'abonner aux canaux de tâches
         self.redis_client.subscribe('task/assignment', self.handle_task_assignment)
         self.redis_client.subscribe('task/cancel', self.handle_task_cancel)
+
+        # Présence coordinateur : heartbeat immédiat puis toutes les 20s
+        self._send_heartbeat()
+        self.heartbeat_thread = threading.Thread(
+            target=self._heartbeat_loop,
+            name=f"volunteer-heartbeat-{self.volunteer_id[:8]}",
+            daemon=True,
+        )
+        self.heartbeat_thread.start()
+
+        # Demander au coordinateur de renvoyer les tâches ASSIGNED non démarrées
+        self._request_pending_assignments()
         
         logger.info(f"Gestionnaire de tâches démarré pour le volontaire {volunteer_id}")
+
+    def _request_pending_assignments(self):
+        """Demande au coordinateur de republier les assignations en attente."""
+        try:
+            from .utils import get_volunteer_auth_token
+            token = get_volunteer_auth_token()
+            self.redis_client.publish(
+                'coordinator/assign_request',
+                {
+                    'volunteer_id': self.volunteer_id,
+                    'action': 'republish',
+                },
+                str(uuid.uuid4()),
+                token,
+                'request',
+            )
+            logger.info("Demande de republication des assignations envoyée au coordinateur")
+        except Exception as exc:
+            logger.warning("Republication assignations impossible: %s", exc)
+
+    def _has_active_tasks(self) -> bool:
+        try:
+            from django.apps import apps
+            Task = apps.get_model('volontaire', 'Task')
+            return Task.objects.filter(
+                status__in=['pending', 'assigned', 'in_progress', 'running', 'started']
+            ).exists()
+        except Exception:
+            return bool(self.current_task)
+
+    def _start_next_assigned_task(self) -> bool:
+        """
+        Démarre une seule tâche en attente (stratégie 1 tâche à la fois).
+        """
+        if self.current_task is not None:
+            return False
+        try:
+            from django.apps import apps
+            Task = apps.get_model('volontaire', 'Task')
+            next_task = (
+                Task.objects.filter(status='assigned')
+                .select_related('workflow')
+                .order_by('start_date', 'id')
+                .first()
+            )
+            if not next_task:
+                return False
+            logger.info("Démarrage FIFO de la tâche assignée %s", next_task.task_id)
+            thread = threading.Thread(target=self._execute_task, args=(next_task,), daemon=True)
+            thread.start()
+            return True
+        except Exception as exc:
+            logger.warning("Impossible de démarrer la prochaine tâche assignée: %s", exc)
+            return False
+
+    def _send_heartbeat(self):
+        """Signale au coordinateur que ce volontaire est en ligne."""
+        if not self.volunteer_id:
+            return
+        try:
+            from .utils import get_volunteer_auth_token
+            from preferences_payload import (
+                build_preferences_payload,
+                is_available_now,
+            )
+
+            prefs = build_preferences_payload()
+            busy = bool(self.current_task) or self._has_active_tasks()
+            available_now = is_available_now(prefs) and not busy
+            payload = {
+                "volunteer_id": self.volunteer_id,
+                "status": "busy" if busy else ("available" if available_now else "offline"),
+                "timestamp": timezone.now().isoformat(),
+                "preferences": prefs,
+                "resources": {
+                    "cpu_cores": prefs.get("max_cpu_cores") or prefs.get("machine_cpu_cores") or 1,
+                    "memory_mb": int((prefs.get("max_ram_gb") or 1) * 1024),
+                    "disk_space_mb": int((prefs.get("max_disk_gb") or 1) * 1024),
+                    "gpu": False,
+                },
+            }
+            token = get_volunteer_auth_token()
+            self.redis_client.publish(
+                "volunteer/heartbeat",
+                payload,
+                str(uuid.uuid4()),
+                token,
+                "request",
+            )
+            self.redis_client.publish(
+                "coord/heartbeat",
+                payload,
+                str(uuid.uuid4()),
+                token,
+                "request",
+            )
+            logger.info(
+                "Heartbeat envoyé (volunteer_id=%s, status=%s)",
+                self.volunteer_id,
+                payload["status"],
+            )
+        except Exception as exc:
+            logger.warning("Échec heartbeat volontaire: %s", exc)
+
+    def _heartbeat_loop(self):
+        while self.running:
+            time.sleep(20)
+            if self.running:
+                self._send_heartbeat()
     
     def stop(self):
         """
@@ -84,6 +211,22 @@ class TaskManager:
             try:
                 self.task_process.terminate()
             except:
+                pass
+
+        if self.volunteer_id:
+            try:
+                from .utils import get_volunteer_auth_token
+                self.redis_client.publish(
+                    "volunteer/disconnect",
+                    {
+                        "volunteer_id": self.volunteer_id,
+                        "timestamp": timezone.now().isoformat(),
+                    },
+                    str(uuid.uuid4()),
+                    get_volunteer_auth_token(),
+                    "request",
+                )
+            except Exception:
                 pass
         
         # Se désabonner des canaux
@@ -248,11 +391,16 @@ class TaskManager:
             if task.input_data and 'files' in task.input_data:
                 self._download_input_files(task)
             
-            # Exécuter la tâche dans un thread séparé
-            import threading    
-            thread = threading.Thread(target=self._execute_task, args=(task,))
-            thread.setDaemon(True)
-            thread.start()
+            # Exécution séquentielle: une seule tâche active à la fois.
+            if self.current_task is None:
+                thread = threading.Thread(target=self._execute_task, args=(task,), daemon=True)
+                thread.start()
+            else:
+                logger.info(
+                    "Tâche %s mise en attente locale (tâche active: %s)",
+                    task.task_id,
+                    getattr(self.current_task, 'task_id', 'unknown'),
+                )
         
     
     def handle_task_cancel(self, channel: str, message: Message):
@@ -1165,6 +1313,7 @@ class TaskManager:
         finally:
             self.current_task = None
             self.task_process = None
+            self._start_next_assigned_task()
     
     def _monitor_task_progress(self, task):
         """

@@ -39,29 +39,39 @@ class DockerManager:
             sys.argv[1] in management_commands
         )
 
+    def _docker_socket_candidates(self):
+        """Chemins socket Docker à essayer (rootless puis classique)."""
+        candidates = []
+        rootless = f"/run/user/{os.getuid()}/docker.sock"
+        if os.path.exists(rootless):
+            candidates.append(f"unix://{rootless}")
+        if os.path.exists("/var/run/docker.sock"):
+            candidates.append("unix:///var/run/docker.sock")
+        return candidates
+
     def _initialize_client(self):
         """Initialize Docker client with fallback options"""
-        try:
-            # Method 1: Try explicit Unix socket
-            logger.info("Attempting to connect to Docker via Unix socket...")
-            self.client = docker.DockerClient(base_url='unix:///var/run/docker.sock')
-            self.client.ping()
-            self._available = True
-            logger.info("✓ Docker client connected successfully via Unix socket")
-            return
-        except Exception as e:
-            logger.warning(f"Failed to connect via Unix socket: {e}")
+        for base_url in self._docker_socket_candidates():
+            try:
+                logger.info("Attempting to connect to Docker via %s...", base_url)
+                self.client = docker.DockerClient(base_url=base_url)
+                self.client.ping()
+                os.environ["DOCKER_HOST"] = base_url
+                self._available = True
+                logger.info("Docker client connected successfully via %s", base_url)
+                return
+            except Exception as e:
+                logger.warning("Failed to connect via %s: %s", base_url, e)
 
         try:
-            # Method 2: Try from environment
             logger.info("Attempting to connect to Docker from environment...")
             self.client = docker.from_env()
             self.client.ping()
             self._available = True
-            logger.info("✓ Docker client connected successfully from environment")
+            logger.info("Docker client connected successfully from environment")
             return
         except Exception as e:
-            logger.error(f"Failed to connect to Docker: {e}")
+            logger.error("Failed to connect to Docker: %s", e)
             logger.error("Docker operations will not be available")
             self.client = None
             self._available = False

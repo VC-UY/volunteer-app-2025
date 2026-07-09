@@ -1147,16 +1147,37 @@
           if (!data || data.length === 0) {
             tbody.append('<tr class="empty-row"><td colspan="5" class="text-center" style="color: #00B0F0; padding: 2rem;"><i class="fas fa-inbox fa-3x mb-3" style="opacity: 0.5;"></i><div>Aucune tâche reçue</div></td></tr>');
           } else {
-            data.forEach(task => {
+            const sortedTasks = [...data].sort((a, b) => {
+              const wa = (a.workflow_name || a.workflow_id || '').toLowerCase();
+              const wb = (b.workflow_name || b.workflow_id || '').toLowerCase();
+              if (wa !== wb) return wa.localeCompare(wb);
+              return String(a.task_id || '').localeCompare(String(b.task_id || ''));
+            });
+            let currentWorkflowGroup = null;
+            sortedTasks.forEach(task => {
               const taskId = task.task_id || task.id;
               const st = (task.status || '').toLowerCase();
               const isRunning = st === 'running' || st === 'progress' || st === 'started';
               const isPaused = st === 'paused';
               const isFinished = ['completed', 'complete', 'failed', 'terminate', 'error', 'stopped'].includes(st);
               const prog = task.progress || 0;
+              const workflowLabel = task.workflow_name || task.workflow_id || 'Workflow inconnu';
+              if (workflowLabel !== currentWorkflowGroup) {
+                currentWorkflowGroup = workflowLabel;
+                tbody.append(`
+                  <tr class="workflow-group-row" style="background: rgba(0, 176, 240, 0.15);">
+                    <td colspan="5" style="color: #7DD3FC; font-weight: 700;">
+                      <i class="fa fa-diagram-project me-2"></i>${workflowLabel}
+                    </td>
+                  </tr>
+                `);
+              }
               tbody.append(`
                 <tr data-task-id="${taskId}" data-status="${st}" style="color: #FFFFFF !important;">
-                  <td style="color: #00D4FF; font-weight: 600;">${task.name || '—'}</td>
+                  <td style="color: #00D4FF; font-weight: 600;">
+                    <div>${task.name || '—'}</div>
+                    <div style="font-size: 0.75rem; color: #94A3B8;">${workflowLabel}</div>
+                  </td>
                   <td style="color: #94A3B8; font-size: 0.85rem; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${task.command || ''}">${(task.command || '—').substring(0, 40)}</td>
                   <td><span class="badge badge-${task.status}" id="status-${taskId}">${statusLabel(task.status)}</span></td>
                   <td style="color: #FFFFFF;">

@@ -4,6 +4,7 @@ Client Redis universel pour la communication entre les composants du système.
 
 import json
 import logging
+import socket
 import threading
 import time
 import uuid
@@ -60,49 +61,120 @@ class RedisClient:
         self.port = self.config.get('port', getattr(settings, 'REDIS_PROXY_PORT', 6380))
         self.db = self.config.get('db', getattr(settings, 'REDIS_DB', 0))
         
-        # Client Redis
-        self.redis = redis.Redis(
-            host=self.host,
-            port=self.port,
-            db=self.db,
-            decode_responses=True,
-            protocol=2,
-        )
+        # État de connexion
+        self.connected = False
+        self.reconnect_attempts = 0
         
-        # PubSub pour les abonnements
-        self.pubsub = self.redis.pubsub(ignore_subscribe_messages=True)
+        # Paramètres de reconnexion
+        self.reconnect_delay = 5  # Délai initial en secondes
+        self.max_reconnect_delay = 60  # Délai maximum
+        self.reconnect_multiplier = 1.5  # Multiplicateur pour exponential backoff
         
-        # Gestionnaires d'événements par canal
+        # Client Redis (sera initialisé par _initialize_connection)
+        self.redis = None
+        self.pubsub = None
+        self._pubsub_redis = None  # Connexion dédiée écoute (évite conflit PING/pubsub)
+        
+        # Gestionnaires d'événements par canal (pour réabonnement)
         self.handlers: Dict[str, List[Callable]] = {}
+        self.subscribed_channels = set()
         
-        # Thread d'écoute
+        # Thread d'écoute et watchdog
         self.listen_thread = None
+        self.watchdog_thread = None
         self.running = False
         
         # Statistiques
         self.stats = {
             'messages_sent': 0,
             'messages_received': 0,
+            'reconnections': 0,
+            'connection_errors': 0,
             'last_activity': time.time(),
             'start_time': time.time()
         }
         
+        # Initialiser la connexion
+        self._initialize_connection()
+        
         logger.info(f"Client Redis initialisé: {self.client_type}:{self.client_id} @ {self.host}:{self.port}")
+    
+    def _initialize_connection(self):
+        """
+        Initialise ou réinitialise la connexion Redis avec socket keepalive.
+        """
+        try:
+            # Créer le client Redis avec socket keepalive.
+            # protocol=2 (RESP2) obligatoire: le proxy coordinateur ne gere pas HELLO/RESP3.
+            redis_kwargs = dict(
+                host=self.host,
+                port=self.port,
+                db=self.db,
+                decode_responses=True,
+                socket_keepalive=True,
+                socket_keepalive_options={
+                    socket.TCP_KEEPIDLE: 60,
+                    socket.TCP_KEEPINTVL: 10,
+                    socket.TCP_KEEPCNT: 3
+                },
+                socket_connect_timeout=10,
+                socket_timeout=30,
+                health_check_interval=0,  # Désactiver le health check automatique
+                # Evite CLIENT SETINFO: le proxy le filtre sans repondre (timeout)
+                lib_name=None,
+                lib_version=None,
+            )
+            try:
+                self.redis = redis.Redis(protocol=2, **redis_kwargs)
+            except TypeError:
+                redis_kwargs.pop('lib_name', None)
+                redis_kwargs.pop('lib_version', None)
+                try:
+                    self.redis = redis.Redis(protocol=2, **redis_kwargs)
+                except TypeError:
+                    self.redis = redis.Redis(**redis_kwargs)
+
+            # Connexion séparée pour SUBSCRIBE (ne jamais PING sur la même socket que pubsub)
+            ps_kwargs = dict(redis_kwargs)
+            ps_kwargs['socket_timeout'] = 5
+            try:
+                self._pubsub_redis = redis.Redis(protocol=2, **ps_kwargs)
+            except TypeError:
+                self._pubsub_redis = redis.Redis(**ps_kwargs)
+            self.pubsub = self._pubsub_redis.pubsub(ignore_subscribe_messages=True)
+            
+            self.connected = True
+            self.reconnect_attempts = 0
+            logger.info(f"Connexion Redis établie: {self.host}:{self.port}")
+            
+        except Exception as e:
+            self.connected = False
+            logger.error(f"Erreur de connexion Redis: {e}")
+            # Ne pas bloquer le démarrage : le watchdog reconnectera
     
     def start(self):
         """
-        Démarre le thread d'écoute des messages.
+        Démarre les threads d'écoute des messages et de watchdog.
         """
         if self.running:
             logger.warning("Le client est déjà en cours d'exécution")
             return
         
         self.running = True
+        
+        # Démarrer le thread d'écoute
         self.listen_thread = threading.Thread(target=self._listen_loop)
         self.listen_thread.daemon = True
         self.listen_thread.start()
+        logger.info("Thread d'écoute démarré")
         
-        logger.info(f"Client Redis démarré: {self.client_type}:{self.client_id}")
+        # Démarrer le watchdog
+        self.watchdog_thread = threading.Thread(target=self._watchdog_loop)
+        self.watchdog_thread.daemon = True
+        self.watchdog_thread.start()
+        logger.info("Watchdog démarré")
+        
+        logger.info(f"Client Redis démarré avec watchdog: {self.client_type}:{self.client_id}")
         return True
     
     def stop(self):
@@ -130,15 +202,41 @@ class RedisClient:
             channel: Nom du canal
             handler: Fonction de rappel qui sera appelée avec (channel, message)
         """
-        # Ajouter le gestionnaire
+        # Initialiser la liste des handlers pour ce canal si nécessaire
         if channel not in self.handlers:
             self.handlers[channel] = []
-        self.handlers[channel].append(handler)
         
-        # S'abonner au canal Redis
-        self.pubsub.subscribe(channel)
+        # Vérifier si ce handler existe déjà (par nom de fonction) pour éviter les doublons
+        handler_name = getattr(handler, '__name__', str(handler))
+        existing_handler_names = [getattr(h, '__name__', str(h)) for h in self.handlers[channel]]
         
-        logger.info(f"Abonné au canal: {channel}")
+        if handler_name not in existing_handler_names:
+            self.handlers[channel].append(handler)
+            logger.debug(f"Handler '{handler_name}' ajouté pour le canal {channel}")
+        else:
+            logger.debug(f"Handler '{handler_name}' existe déjà pour le canal {channel}, ignoré")
+        
+        # Garder trace des canaux souscrits (pour réabonnement)
+        self.subscribed_channels.add(channel)
+        
+        # S'abonner au canal Redis si connecté (et pas déjà abonné)
+        if self.connected and self.pubsub:
+            try:
+                # Vérifier si on n'est pas déjà abonné au niveau Redis
+                if not hasattr(self, '_redis_subscribed_channels'):
+                    self._redis_subscribed_channels = set()
+                
+                if channel not in self._redis_subscribed_channels:
+                    self.pubsub.subscribe(channel)
+                    self._redis_subscribed_channels.add(channel)
+                    logger.info(f"Abonné au canal: {channel}")
+                else:
+                    logger.debug(f"Déjà abonné au canal Redis: {channel}")
+            except Exception as e:
+                # Ne pas marquer la connexion comme morte: le publish utilise un autre
+                # socket, et le proxy peut renvoyer des erreurs non-fatales au SUBSCRIBE.
+                logger.error(f"Erreur lors de l'abonnement à {channel}: {e}")
+        
         return True
     
     def unsubscribe(self, channel: str, handler: Optional[Callable] = None):
@@ -179,6 +277,11 @@ class RedisClient:
         Returns:
             str: ID de la requête
         """
+        # Vérifier la connexion
+        if not self.connected:
+            logger.error(f"Impossible de publier sur {channel}: non connecté")
+            return None
+        
         # Déterminer le type de message en fonction du canal si non spécifié
         if message_type is None:
             if '_response' in channel:
@@ -203,22 +306,174 @@ class RedisClient:
         if token:
             message.token = token
             logger.info(f"Token JWT ajouté au message pour le canal {channel}")
+        elif channel != 'auth/token_refresh':
+            from redis_communication.auth_client import load_volunter_credentials, refresh_token_if_needed
+            auth_info = load_volunter_credentials()
+            if auth_info and 'token' in auth_info:
+                # Vérifier si le token n'est pas expiré et le rafraîchir si nécessaire
+                last_login = auth_info.get('last_login')
+                import datetime
+                if datetime.datetime.now() - datetime.datetime.fromtimestamp(last_login) < datetime.timedelta(hours=1):
+                    message.token = auth_info['token']
+                    logger.info(f"Token JWT valide ajouté au message pour le canal {channel}")
+                else:
+                    # Token expiré, tenter de le rafraîchir
+                    logger.info(f"Token expiré, tentative de rafraîchissement pour le canal {channel}")
+                    new_token = refresh_token_if_needed(auth_info)
+                    if new_token:
+                        message.token = new_token
+                        logger.info(f"Token JWT rafraîchi et ajouté au message pour le canal {channel}")
+                    else:
+                        logger.warning(f"Impossible de rafraîchir le token pour le canal {channel}")
+            else:
+                logger.warning(f"Aucun token disponible pour le canal {channel}")
         
-        # Publier le message
+        # Publier le message (timeout court : ne jamais bloquer l'exécution des tâches)
         try:
-            # Log pour déboguer le problème de sérialisation
             json_message = message.to_json()
             logger.info(f"Message sérialisé pour {channel}: {json_message}")
-            
-            self.redis.publish(channel, json_message)
+
+            pub_client = redis.Redis(
+                host=self.host,
+                port=self.port,
+                db=self.db,
+                decode_responses=True,
+                socket_connect_timeout=3,
+                socket_timeout=3,
+                lib_name=None,
+                lib_version=None,
+            )
+            try:
+                pub_client.publish(channel, json_message)
+            finally:
+                pub_client.close()
+
             self.stats['messages_sent'] += 1
             self.stats['last_activity'] = time.time()
-            
+
             logger.debug(f"Message publié sur {channel}: {message.request_id}")
             return message.request_id
+        except (redis.ConnectionError, redis.TimeoutError) as e:
+            logger.warning(f"Publication {channel} ignorée (Redis lent/hors ligne): {e}")
+            self.stats['connection_errors'] += 1
+            return None
         except Exception as e:
-            logger.error(f"Erreur lors de la publication sur {channel}: {e}")
-            raise ChannelError(f"Erreur de publication: {e}")
+            logger.warning(f"Publication {channel} ignorée: {e}")
+            return None
+    
+    def _reconnect(self):
+        """
+        Tente de se reconnecter à Redis avec exponential backoff.
+        """
+        if self.connected:
+            return True
+        
+        self.reconnect_attempts += 1
+        backoff = min(
+            self.reconnect_delay * (self.reconnect_multiplier ** (self.reconnect_attempts - 1)),
+            self.max_reconnect_delay
+        )
+        
+        logger.info(f"Tentative de reconnexion à Redis {self.host}:{self.port}...")
+        
+        try:
+            # Fermer l'ancienne connexion
+            if self.pubsub:
+                try:
+                    self.pubsub.close()
+                except Exception:
+                    pass
+            if self._pubsub_redis:
+                try:
+                    self._pubsub_redis.close()
+                except Exception:
+                    pass
+            
+            # Réinitialiser la connexion
+            self._initialize_connection()
+            
+            # Réabonner aux canaux
+            if self.subscribed_channels:
+                self._resubscribe_all()
+            
+            
+            logger.info("✅ Reconnexion réussie!")
+            self.stats['reconnections'] += 1
+
+            # Reprise immédiate : heartbeat + écoute des assignations
+            try:
+                from redis_communication.task_handlers import TaskManager
+                tm = TaskManager.get_instance()
+                if tm.volunteer_id:
+                    if not tm.running:
+                        tm.start(tm.volunteer_id)
+                    else:
+                        tm._send_heartbeat()
+            except Exception as resume_exc:
+                logger.warning("Reprise TaskManager après reconnexion: %s", resume_exc)
+
+            # Vérifier le token d'authentification
+            from redis_communication.auth_client import load_volunter_credentials
+            from redis_communication.auth_client import get_volunteer_info
+            import datetime
+            creds = load_volunter_credentials()
+            if creds:
+                volunteer_last_login = get_volunteer_info() # date de la derniere connexion en decimale
+                if volunteer_last_login and datetime.datetime.fromtimestamp(volunteer_last_login['last_login']) + datetime.timedelta(hours=24) > datetime.datetime.now(): # verifier si le token est encore valide pour 24h
+                    logger.info("✅  Le volontaire était déjà authentifié et token valide")
+                    
+                else:
+                    logger.warning("Le token d'authentification du volontaire n'est plus valide, reconnexion ...")
+                    from redis_communication.apps import auth_volunteer_flow
+                    auth_volunteer_flow()
+            else:
+                logger.warning("Aucune information d'authentification du volontaire disponible après reconnexion")
+                from redis_communication.apps import auth_volunteer_flow
+                auth_volunteer_flow()
+            return True
+            
+        except Exception as e:
+            logger.warning(f"Échec de reconnexion (tentative {self.reconnect_attempts}): {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            logger.info(f"Nouvelle tentative dans {backoff:.1f}s...")
+            time.sleep(backoff)
+            return False
+    
+    def _resubscribe_all(self):
+        """
+        Réabonne à tous les canaux après une reconnexion.
+        """
+        logger.info(f"Réabonnement à {len(self.subscribed_channels)} canaux...")
+        
+        for channel in self.subscribed_channels:
+            try:
+                self.pubsub.subscribe(channel)
+                logger.info(f"  ✓ Réabonné à {channel}")
+            except Exception as e:
+                logger.error(f"  ✗ Erreur réabonnement à {channel}: {e}")
+    
+    def _watchdog_loop(self):
+        """
+        Thread de surveillance qui vérifie périodiquement la connexion.
+        """
+        while self.running:
+            time.sleep(10)  # Vérifier toutes les 10 secondes
+            
+            if not self.connected:
+                logger.warning("⚠️ Déconnexion détectée par le watchdog")
+                # Tenter de se reconnecter
+                while self.running and not self.connected:
+                    if self._reconnect():
+                        break
+                    time.sleep(1)
+            else:
+                # Vérifier l'activité récente (ne pas PING sur la connexion pubsub)
+                idle = time.time() - self.stats.get('last_activity', 0)
+                if idle > 120:
+                    logger.warning("⚠️ Watchdog: inactivité Redis > 120s, reconnexion")
+                    self.connected = False
+                    self.stats['connection_errors'] += 1
     
     def _listen_loop(self):
         """
@@ -226,6 +481,11 @@ class RedisClient:
         """
         while self.running:
             try:
+                # Si déconnecté, attendre la reconnexion
+                if not self.connected:
+                    time.sleep(1)
+                    continue
+                
                 message = self.pubsub.get_message(timeout=0.1)
                 if message and message['type'] == 'message':
                     channel = message['channel']
@@ -266,9 +526,14 @@ class RedisClient:
                 # Petite pause pour éviter de surcharger le CPU
                 time.sleep(0.01)
                 
+            except (redis.ConnectionError, redis.TimeoutError) as e:
+                logger.error(f"Erreur de connexion Redis: {e}")
+                self.connected = False
+                self.stats['connection_errors'] += 1
+                time.sleep(1.0)
             except redis.RedisError as e:
                 logger.error(f"Erreur Redis: {e}")
-                time.sleep(1.0)  # Attendre avant de réessayer
+                time.sleep(1.0)
             except Exception as e:
                 logger.error(f"Erreur inattendue: {e}")
                 time.sleep(1.0)
@@ -283,5 +548,7 @@ class RedisClient:
         return {
             **self.stats,
             'subscribed_channels': list(self.handlers.keys()),
-            'uptime': time.time() - self.stats.get('start_time', time.time())
+            'uptime': time.time() - self.stats.get('start_time', time.time()),
+            'connected': self.connected,
+            'reconnect_attempts': self.reconnect_attempts
         }
