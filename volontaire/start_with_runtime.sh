@@ -70,5 +70,8 @@ echo "Runtime OK"
 if [ ! -d venv ]; then echo "ERREUR: venv manquant"; exit 1; fi
 # shellcheck disable=SC1091
 source venv/bin/activate
+# Important: rester dans APP_DIR — un démarrage depuis volunteer-app-2025/
+# charge l'autre backend (data/db.sqlite3 vide) et casse l'UI.
+pwd -P
 python manage.py migrate --noinput
-exec daphne backend.asgi:application -p "$VOLUNTEER_PORT" -b 0.0.0.0
+exec daphne backend.asgi:application -p "$VOLUNTEER_PORT" -b 127.0.0.1

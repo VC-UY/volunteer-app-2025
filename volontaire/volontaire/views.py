@@ -417,8 +417,8 @@ def task_details(request, task_id):
             'error_message': task.error_message,
             'execution_priority': task.execution_priority,
             'attempts': task.attempts,
-            'container_id': task.container_id,
-            'local_input_path': task.local_input_path,
+            'container_id': getattr(task, 'container_id', None),
+            'local_input_path': getattr(task, 'local_input_path', None),
         })
     except Task.DoesNotExist:
         return JsonResponse({'error': f'Tâche {task_id} non trouvée'}, status=404)
