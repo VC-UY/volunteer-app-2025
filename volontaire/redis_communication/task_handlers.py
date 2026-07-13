@@ -71,7 +71,9 @@ class TaskManager:
         self.task_process = None
         self.task_thread = None
         self.heartbeat_thread = None
-        self.running = False           
+        self.running = False
+        # Serialize start so concurrent assignment messages never run 2 Docker jobs.
+        self._execution_lock = threading.Lock()
     
     def start(self, volunteer_id):
         """
@@ -139,6 +141,21 @@ class TaskManager:
         except Exception:
             return bool(self.current_task)
 
+    def _try_claim_and_start(self, task) -> bool:
+        """
+        Claim the single execution slot then start Docker in a background thread.
+        Returns False if another task is already running.
+        """
+        with self._execution_lock:
+            if self.current_task is not None:
+                return False
+            # Reserve the slot BEFORE the thread starts (avoids race with parallel assigns).
+            self.current_task = task
+        logger.info("Démarrage exclusif de la tâche %s", getattr(task, "task_id", task))
+        thread = threading.Thread(target=self._execute_task, args=(task,), daemon=True)
+        thread.start()
+        return True
+
     def _start_next_assigned_task(self) -> bool:
         """
         Démarre une seule tâche en attente (stratégie 1 tâche à la fois).
@@ -156,10 +173,7 @@ class TaskManager:
             )
             if not next_task:
                 return False
-            logger.info("Démarrage FIFO de la tâche assignée %s", next_task.task_id)
-            thread = threading.Thread(target=self._execute_task, args=(next_task,), daemon=True)
-            thread.start()
-            return True
+            return self._try_claim_and_start(next_task)
         except Exception as exc:
             logger.warning("Impossible de démarrer la prochaine tâche assignée: %s", exc)
             return False
@@ -283,6 +297,39 @@ class TaskManager:
             return
         
         logger.info(f"{len(volunteer_tasks)} tâches assignées au volontaire {self.volunteer_id}")
+
+        # Fair-share: n'accepter qu'une seule nouvelle tâche si on est libre.
+        # Les autres restent côté coordinateur (PENDING / autre volontaire).
+        busy = bool(self.current_task) or self._has_active_tasks()
+        if busy:
+            logger.info(
+                "Volontaire occupé — ignore %s nouvelle(s) assignation(s) (1 tâche à la fois)",
+                len(volunteer_tasks),
+            )
+            # Still allow refresh of the currently running/assigned task id only.
+            active_ids = set()
+            try:
+                from django.apps import apps
+                Task = apps.get_model('volontaire', 'Task')
+                active_ids = set(
+                    Task.objects.filter(
+                        status__in=['pending', 'assigned', 'in_progress', 'running', 'started', 'Running']
+                    ).values_list('task_id', flat=True)
+                )
+            except Exception:
+                if self.current_task is not None:
+                    active_ids = {str(self.current_task.task_id)}
+            volunteer_tasks = [
+                t for t in volunteer_tasks if str(t.get('task_id')) in active_ids
+            ]
+            if not volunteer_tasks:
+                return
+        elif len(volunteer_tasks) > 1:
+            logger.info(
+                "Message multi-tâches (%s) — n'accepte que la première (fair-share)",
+                len(volunteer_tasks),
+            )
+            volunteer_tasks = volunteer_tasks[:1]
 
         from django.apps import apps
         Workflow = apps.get_model('volontaire', 'Workflow')
@@ -452,11 +499,9 @@ class TaskManager:
             if task.input_data and 'files' in task.input_data:
                 self._download_input_files(task)
             
-            # Exécution séquentielle: une seule tâche active à la fois.
-            if self.current_task is None:
-                thread = threading.Thread(target=self._execute_task, args=(task,), daemon=True)
-                thread.start()
-            else:
+            # Exécution séquentielle: une seule tâche Docker active à la fois.
+            # Les autres restent en statut "assigned" jusqu'à la fin de la courante.
+            if not self._try_claim_and_start(task):
                 logger.info(
                     "Tâche %s mise en attente locale (tâche active: %s)",
                     task.task_id,
@@ -716,12 +761,9 @@ class TaskManager:
             # Reprendre une tâche en pause ou démarrer une tâche assignée/en attente
             st = _normalize_status(task.status)
             if st in ('pending', 'queued', 'assigned', 'created', 'accepted'):
-                if self.current_task is not None:
+                if not self._try_claim_and_start(task):
                     logger.warning("Une autre tâche est déjà en cours (%s)", self.current_task)
                     return False
-                logger.info("Démarrage manuel de la tâche %s", task_id)
-                thread = threading.Thread(target=self._execute_task, args=(task,), daemon=True)
-                thread.start()
                 return True
 
             if st != 'paused':
@@ -1088,8 +1130,15 @@ class TaskManager:
             
             # S'abonner au canal task/terminate pour recevoir la notification de fin de tâche
             self.redis_client.subscribe('task/terminate', self._handle_task_terminate)
-            
-            logger.info(f"Tâche {task_id} terminée et serveur de fichiers démarré sur le port {port}")
+
+            if uploaded:
+                logger.info("Tâche %s terminée (sorties uploadées vers le manager)", task_id)
+            else:
+                logger.info(
+                    "Tâche %s terminée et serveur de fichiers démarré sur le port %s",
+                    task_id,
+                    file_server_info.get("port"),
+                )
             return True
         except Task.DoesNotExist:
             logger.error(f"Tâche {task_id} introuvable")
@@ -1162,10 +1211,20 @@ class TaskManager:
         
         TaskProgress = apps.get_model('volontaire', 'TaskProgress')
         
+        # Slot already reserved by _try_claim_and_start; keep ownership if we are the runner.
+        with self._execution_lock:
+            if self.current_task is not None and getattr(self.current_task, "task_id", None) != getattr(task, "task_id", None):
+                logger.warning(
+                    "Abandon exécution %s: slot déjà pris par %s",
+                    getattr(task, "task_id", None),
+                    getattr(self.current_task, "task_id", None),
+                )
+                return
+            self.current_task = task
+
         # Marquer la tâche comme démarrée
         task.status = 'Running'
         task.save()
-        self.current_task = task
         
         # Notifier le frontend du démarrage
         from channels.layers import get_channel_layer
@@ -1402,8 +1461,10 @@ class TaskManager:
             logger.error(f"Erreur lors de l'exécution de la tâche {task.task_id}: {e}")
             logger.error(traceback.format_exc())
         finally:
-            self.current_task = None
-            self.task_process = None
+            with self._execution_lock:
+                if self.current_task is not None and getattr(self.current_task, "task_id", None) == getattr(task, "task_id", None):
+                    self.current_task = None
+                self.task_process = None
             self._start_next_assigned_task()
     
     def _monitor_task_progress(self, task):

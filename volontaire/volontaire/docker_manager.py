@@ -114,6 +114,24 @@ class DockerManager:
             print(f"Error pulling image: {e}")
             return None
 
+    def _remove_container_by_name(self, name: str) -> None:
+        """Remove any leftover container that would block reuse of this name."""
+        try:
+            existing = self.client.containers.get(name)
+        except NotFound:
+            return
+        try:
+            status = (existing.status or "").lower()
+            if status in ("running", "created", "paused", "restarting"):
+                existing.stop(timeout=10)
+        except Exception as exc:
+            logger.warning("Could not stop leftover container %s: %s", name, exc)
+        try:
+            existing.remove(force=True)
+            print(f"Removed leftover container named {name}")
+        except Exception as exc:
+            logger.warning("Could not remove leftover container %s: %s", name, exc)
+
     def run_container(self, image_name, task_id, cpu_limit=None, mem_limit=None, **kwargs):
         """Run a Docker container"""
         self._ensure_available()
@@ -130,6 +148,9 @@ class DockerManager:
             except docker.errors.ImageNotFound:
                 print(f"Local image {image_name} not found. Attempting to pull...")
                 self.client.images.pull(image_name)
+
+            # Retries / concurrent starts leave a named container behind → 409 Conflict.
+            self._remove_container_by_name(task_id)
                 
             print(f"Running container for task {task_id}...")
             container = self.client.containers.run(
@@ -144,6 +165,24 @@ class DockerManager:
             print(f"Container started for task {task_id}: {container.id}")
             return container
         except APIError as e:
+            # One more attempt if another process raced us on the name.
+            if getattr(e, "status_code", None) == 409 or "Conflict" in str(e):
+                try:
+                    self._remove_container_by_name(task_id)
+                    container = self.client.containers.run(
+                        image=image_name,
+                        detach=True,
+                        name=task_id,
+                        cpu_quota=int(cpu_limit * 100000) if cpu_limit else None,
+                        mem_limit=mem_limit,
+                        **kwargs
+                    )
+                    self.tasks[task_id] = container.id
+                    print(f"Container started for task {task_id} after conflict cleanup: {container.id}")
+                    return container
+                except Exception as retry_exc:
+                    print(f"Error running container for task {task_id} (retry): {retry_exc}")
+                    return None
             print(f"Error running container for task {task_id}: {e}")
             return None
 

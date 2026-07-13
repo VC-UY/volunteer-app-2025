@@ -194,37 +194,56 @@ from django.db.models import Prefetch
 
 
 def home(request):
-    # Utiliser le manager pour récupérer la dernière machine insérée
+    # preferences_payload.py est à la racine du projet (à côté de manage.py)
+    try:
+        from preferences_payload import build_preferences_payload, is_available_now
+    except ImportError:
+        from volontaire.preferences_payload import build_preferences_payload, is_available_now  # type: ignore
+
     machine = MachineInfo.objects.get_last_inserted()
 
-    # Si aucune machine n'existe, créer des valeurs par défaut
     if not machine:
-        # Créer une machine par défaut ou retourner des valeurs vides
         context = {
             'machine': None,
             'etat': None,
             'preferences': None,
+            'pref_summary': {},
+            'available_now': True,
             'tasks': [],
+            'counts': {'total': 0, 'running': 0, 'pending': 0, 'completed': 0, 'failed': 0},
         }
         return render(request, 'home.html', context)
 
-    # Récupérer le dernier état et les préférences
     etat = EtatMachine.objects.filter(machine=machine).order_by('-timestamp').first()
-
-    # Récupérer ou créer les préférences pour cette machine
     preferences, created = PreferenceModel.objects.get_or_create(machine=machine)
+    pref_summary = build_preferences_payload()
+    available_now = is_available_now(pref_summary)
 
-    # Toutes les tâches, avec progression la plus récente
     tasks = Task.objects.all().order_by('-start_date')
+    counts = {'total': tasks.count(), 'running': 0, 'pending': 0, 'completed': 0, 'failed': 0}
     for task in tasks:
         last_progress = task.progress_events.order_by('-timestamp').first()
         task.progress = last_progress.percentage if last_progress else 0
+        st = (task.status or '').lower()
+        if st in ('running', 'progress', 'started', 'in_progress'):
+            counts['running'] += 1
+        elif st in ('pending', 'queued', 'assigned', 'created', 'accepted'):
+            counts['pending'] += 1
+        elif st in ('completed', 'complete'):
+            counts['completed'] += 1
+        elif st in ('failed', 'error', 'stopped', 'cancelled', 'canceled'):
+            counts['failed'] += 1
+        else:
+            counts['pending'] += 1
 
     context = {
         'machine': machine,
         'etat': etat,
         'preferences': preferences,
+        'pref_summary': pref_summary,
+        'available_now': available_now,
         'tasks': tasks,
+        'counts': counts,
     }
     return render(request, 'home.html', context)
 
