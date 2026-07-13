@@ -129,6 +129,20 @@ class RuntimeStatusView(APIView):
             "disk": runtime.disk_quota(),
         })
 
+
+class RuntimeAuthValidateView(APIView):
+    """
+    Endpoint de compatibilité pour le boot de vc-uyr.
+    L'auth réelle du volontaire reste Redis/coordinator ; ici on accepte
+    localement pour que le runtime démarre.
+    """
+
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request):
+        return Response({"valid": True, "revoked": False})
+
 # ------------------- Gestion des actions sur une tâche (via TaskManager / vc-uyr) --------------------------
 
 

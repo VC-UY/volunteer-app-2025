@@ -1,13 +1,7 @@
-# Runtime vc-uyr (sans Docker)
+# Exécution sans Docker (vc-uyr)
 
-L'exécution des tâches passe par le binaire **vc-uyr** (`localhost:7070`),
-plus par Docker.
-
-## Prérequis
-- Binaire + config : `VC-UY/.vcuy/runtime/bin/vc-uyr` et `.../config/vc-uyr.toml`
-- Le runtime v0.1.0 valide encore un token auprès de `[server].url` au démarrage
-  (`/api/auth/validate/`). Pointer cette URL vers un endpoint compatible, ou
-  obtenir d'Ashley un mode « offline / local-only ».
+Par défaut, l'app démarre un **runtime local compatible** (`runtime_compat_server.py`)
+sur `http://127.0.0.1:7070`. Même API que le binaire Rust Ashley, sans root ni Docker.
 
 ## Démarrage
 ```bash
@@ -15,6 +9,12 @@ cd volontaire
 bash start_with_runtime.sh
 ```
 
+## Binaire Rust (optionnel)
+```bash
+USE_RUST_BINARY=1 bash start_with_runtime.sh
+```
+Nécessite souvent `sudo` (namespaces) + le shim auth (`runtime_auth_shim.py`).
+
 ## Contrat tâche
 Bundle `.tar.gz` self-contained avec `run.sh` à la racine.
-Variables : `vc_INPUT`, `vc_OUTPUT`, `vc_STATE`, `vc_LOGS`, `vc_TASK_ID`.
+Env: `vc_INPUT`, `vc_OUTPUT`, `vc_STATE`, `vc_LOGS`, `vc_TASK_ID`.
