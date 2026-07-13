@@ -2,16 +2,12 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from volontaire.utils.get_info import get_statics_infos
-from volontaire.docker_manager import DockerManager
 from django.shortcuts import render
 from pathlib import Path
 import psutil
 import time as time_module
 import json
-
-
-# Utiliser l'instance singleton de DockerManager
-manager = DockerManager.get_instance()
+from volontaire.services.runtime_client import RuntimeClient
 
 # Chemin vers le fichier de statistiques de l'agent
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -117,103 +113,23 @@ class MachineStateView(APIView):
             return Response({'error': str(e)}, status=500)
 
 
-# ==================== DOCKER CONTAINER MANAGEMENT ====================
+# ==================== RUNTIME VC-UYR ====================
 
+class RuntimeStatusView(APIView):
+    """Statut du runtime vc-uyr (remplace l'API conteneurs Docker)."""
 
-
-# Pause
-class PauseContainerView(APIView):
-    def post(self, request, container_id):
-        try:
-            msg = manager.pause_task(container_id)
-            return Response({"message": msg})
-        except Exception as e:
-            return Response({"error": str(e)}, status=400)
-
-# Replay
-class ReplayContainerView(APIView):
-    def post(self, request, container_id):
-        try:
-            msg = manager.resume_task(container_id)
-            return Response({"message": msg})
-        except Exception as e:
-            return Response({"error": str(e)}, status=400)
-
-# Suspend
-class SuspendContainerView(APIView):
-    def post(self, request, container_id):
-        try:
-            msg = manager.stop_task(container_id)
-            return Response({"message": msg})
-        except Exception as e:
-            return Response({"error": str(e)}, status=400)
-
-# Delete
-class DeleteContainerView(APIView):
-    def delete(self, request, container_id):
-        try:
-            msg = manager.remove_task(container_id)
-            return Response({"message": msg})
-        except Exception as e:
-            return Response({"error": str(e)}, status=400)
-
-# Limit CPU
-class LimitCPUView(APIView):
-    def post(self, request, container_id):
-        try:
-            cpu_quota = int(request.data.get("cpu_quota", 50000))  # ex: 50000 = 5% CPU
-            msg = manager.update_limits(container_id, cpu_quota)
-            return Response({"message": msg})
-        except Exception as e:
-            return Response({"error": str(e)}, status=400)
-
-# Limit RAM
-class LimitRAMView(APIView):
-    def post(self, request, container_id):
-        try:
-            mem_limit = request.data.get("mem_limit", "500m")  # ex: "500m", "1g"
-            msg = manager.update_limits(container_id, mem_limit)
-            return Response({"message": msg})
-        except Exception as e:
-            return Response({"error": str(e)}, status=400)
-
-# Purge
-class PurgeContainersView(APIView):
-    def delete(self, request):
-        try:
-            msg = manager.purge_all()
-            return Response({"message": msg})
-        except Exception as e:
-            return Response({"error": str(e)}, status=500)
-
-# Liste des conteneurs (task list)
-class TaskListView(APIView):
     def get(self, request):
-        try:
-            containers = manager.list_tasks()
-            result = [
-                {
-                    "id": c.id,
-                    "name": c.name,
-                    "status": c.status,
-                    "image": c.image.tags
-                } for c in containers
-            ]
-            return Response(result)
-        except Exception as e:
-            return Response({"error": str(e)}, status=500)
+        runtime = RuntimeClient()
+        online = runtime.health()
+        status_payload = runtime.status() or {}
+        return Response({
+            "online": online,
+            "backend": "vc-uyr",
+            "status": status_payload,
+            "disk": runtime.disk_quota(),
+        })
 
-# Détails d’un conteneur (task details)
-class TaskDetailView(APIView):
-    def get(self, request, container_id):
-        try:
-            details = manager.task_details(container_id)
-            return Response(details)
-        except Exception as e:
-            return Response({"error": str(e)}, status=404)
-        
-
-# ------------------- Gestion des actions sur un conteneur --------------------------
+# ------------------- Gestion des actions sur une tâche (via TaskManager / vc-uyr) --------------------------
 
 
 from django.views.decorators.csrf import csrf_exempt
@@ -267,24 +183,7 @@ def handle_task_action(request, action, task_id):
 
 
 
-# ------------------------- Docker Container Status API -------------------------------------
 
-# API pour récupérer les états de tous les conteneurs Docker
-class DockerContainersStatusView(APIView):
-    def get(self, request):
-        try:
-            # Récupérer la liste des tâches avec leurs conteneurs associés
-            containers = manager.list_tasks()
-            
-            # Formater la réponse
-            response_data = {
-                "total_containers": len(containers),
-                "containers": containers
-            }
-            
-            return Response(response_data, status=status.HTTP_200_OK)
-        except Exception as e:
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 # ------------------------- Computer charateristic manage -------------------------------------
 

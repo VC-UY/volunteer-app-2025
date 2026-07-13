@@ -6,7 +6,7 @@ from .views import (
     preferences_list,
     MachineInfoView,
     MachineStateView,
-    DockerContainersStatusView,
+    RuntimeStatusView,
     delete_preference,
     delete_preferences,
     tasks,
@@ -20,7 +20,7 @@ from .views import (
 urlpatterns = [
     path("", home, name="home"),
     path("machines/", MachineInfoView.as_view(), name="machine-info"),
-    path("api/docker/containers/", DockerContainersStatusView.as_view(), name="docker-containers-status"),
+    path("api/runtime/status/", RuntimeStatusView.as_view(), name="runtime-status"),
     
     # API Agent de collecte
     path('api/agent/status/', AgentStatusView.as_view(), name='agent-status'),

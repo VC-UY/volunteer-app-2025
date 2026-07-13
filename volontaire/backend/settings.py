@@ -160,3 +160,8 @@ REDIS_DB = 0
 os.environ.setdefault('COORDINATOR_HOST', REDIS_PROXY_HOST)
 os.environ.setdefault('COORDINATOR_PROXY_PORT', str(REDIS_PROXY_PORT))
 os.environ.setdefault('MANAGER_PUBLIC_URL', MANAGER_PUBLIC_URL)
+
+# Runtime vc-uyr (remplace Docker)
+RUNTIME_URL = os.environ.get('RUNTIME_URL', 'http://localhost:7070')
+RUNTIME_HEALTH_TIMEOUT = int(os.environ.get('RUNTIME_HEALTH_TIMEOUT', '5'))
+
