@@ -102,6 +102,16 @@ def resolve_task_bundle(task) -> str:
     téléchargés + task.command (ou docker_information.command en secours).
     """
     input_path = getattr(task, "local_input_path", None)
+    if not input_path:
+        # Fallback: dossier standard créé au téléchargement des entrées
+        candidate = Path(".volunteer") / "tasks" / str(task.task_id) / "input"
+        if candidate.is_dir():
+            input_path = str(candidate.resolve())
+            try:
+                task.local_input_path = input_path
+                task.save(update_fields=["local_input_path"])
+            except Exception:
+                pass
     bundle = locate_bundle(input_path)
     if bundle:
         return bundle
