@@ -7,6 +7,7 @@ from .views import (
     MachineInfoView,
     MachineStateView,
     RuntimeStatusView,
+    RuntimeAuthValidateView,
     delete_preference,
     delete_preferences,
     tasks,
@@ -21,7 +22,8 @@ urlpatterns = [
     path("", home, name="home"),
     path("machines/", MachineInfoView.as_view(), name="machine-info"),
     path("api/runtime/status/", RuntimeStatusView.as_view(), name="runtime-status"),
-    
+    path("api/auth/validate/", RuntimeAuthValidateView.as_view(), name="runtime-auth-validate"),
+
     # API Agent de collecte
     path('api/agent/status/', AgentStatusView.as_view(), name='agent-status'),
     path('api/agent/<str:action>/', AgentControlView.as_view(), name='agent-control'),
