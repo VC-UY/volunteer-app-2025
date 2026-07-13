@@ -669,7 +669,7 @@ class TaskManager:
         from django.apps import apps
         Task = apps.get_model('volontaire', 'Task')
         TaskProgress = apps.get_model('volontaire', 'TaskProgress')
-        from volontaire.docker_manager import DockerManager
+        from volontaire.services.runtime_client import RuntimeClient
         
         try:
             # Récupérer la tâche
@@ -713,9 +713,12 @@ class TaskManager:
                 message="Tâche mise en pause"
             )
             
-            # Mettre en pause le conteneur Docker
-            docker_manager = DockerManager.get_instance()
-            docker_manager.pause_task(task_id)
+            if not (self.current_task and str(self.current_task.task_id) == str(task_id)):
+                logger.warning("Pause refusée: %s n'est pas la tâche active du runtime", task_id)
+                return False
+            if not RuntimeClient().pause():
+                logger.error("Le runtime vc-uyr n'a pas pu mettre en pause la tâche %s", task_id)
+                return False
             from redis_communication.utils import get_volunteer_auth_token
             
             # Envoyer une notification de pause
@@ -752,7 +755,7 @@ class TaskManager:
         from django.apps import apps
         Task = apps.get_model('volontaire', 'Task')
         TaskProgress = apps.get_model('volontaire', 'TaskProgress')
-        from volontaire.docker_manager import DockerManager
+        from volontaire.services.runtime_client import RuntimeClient
         
         try:
             # Récupérer la tâche
@@ -803,9 +806,9 @@ class TaskManager:
                 message="Tâche reprise"
             )
             
-            # Reprendre le conteneur Docker
-            docker_manager = DockerManager.get_instance()
-            docker_manager.resume_task(task_id)
+            if not RuntimeClient().resume():
+                logger.error("Le runtime vc-uyr n'a pas pu reprendre la tâche %s", task_id)
+                return False
             from redis_communication.utils import get_volunteer_auth_token
             
             # Envoyer une notification de reprise
@@ -842,7 +845,7 @@ class TaskManager:
         from django.apps import apps
         Task = apps.get_model('volontaire', 'Task')
         TaskProgress = apps.get_model('volontaire', 'TaskProgress')
-        from volontaire.docker_manager import DockerManager
+        from volontaire.services.runtime_client import RuntimeClient
         
         try:
             # Récupérer la tâche
@@ -889,10 +892,9 @@ class TaskManager:
                 message="Tâche arrêtée"
             )
             
-            # Arrêter le conteneur Docker si actif
-            docker_manager = DockerManager.get_instance()
+            # Arrêt global du runtime (1 tâche à la fois)
             if _is_running_status(prev_status) or _normalize_status(prev_status) == 'paused':
-                docker_manager.stop_task(task_id)
+                RuntimeClient().shutdown()
 
             if self.current_task and str(getattr(self.current_task, 'task_id', '')) == str(task_id):
                 self.current_task = None
@@ -935,31 +937,46 @@ class TaskManager:
 
         from django.apps import apps
         Task = apps.get_model('volontaire', 'Task')
-        from volontaire.docker_manager import DockerManager
+        from volontaire.services.runtime_client import RuntimeClient
         
         try:
             # Récupérer la tâche
             task = Task.objects.get(task_id=task_id)
             
             # Vérifier que la tâche est en cours d'exécution
-            if task.status not in ['progress', 'paused']:
+            if _normalize_status(task.status) not in ('progress', 'running', 'paused'):
                 logger.warning(f"Impossible de mettre à jour les limites de la tâche {task_id} car elle n'est pas en cours d'exécution ou en pause")
                 return False
             
-            # Mettre à jour les limites de ressources
-            docker_manager = DockerManager.get_instance()
-            success = docker_manager.update_task_limits(task_id, cpu_limit, memory_limit)
-            
+            # Limites globales du runtime vc-uyr
+            runtime = RuntimeClient()
+            status = runtime.status() or {}
+            cpu_percent = int(float(cpu_limit) * 100) if cpu_limit is not None else int(status.get('cpu_percent') or 30)
+            # memory_limit peut être "512m"/"1g"/Mo numériques
+            memory_mb = 512
+            if memory_limit is not None:
+                ml = str(memory_limit).strip().lower()
+                if ml.endswith('g'):
+                    memory_mb = int(float(ml[:-1]) * 1024)
+                elif ml.endswith('m'):
+                    memory_mb = int(float(ml[:-1]))
+                else:
+                    memory_mb = int(float(ml))
+            else:
+                memory_mb = int(status.get('memory_mb') or 512)
+            disk_total_mb = int(status.get('disk_total_mb') or 5000)
+            success = runtime.update_resources(cpu_percent, memory_mb, disk_total_mb)
 
             if not success:
                 logger.warning(f"Échec de la mise à jour des limites pour la tâche {task_id}")
                 return False
-            
-            # Mettre à jour les informations Docker de la tâche
+
+            info = task.docker_information or {}
             if cpu_limit is not None:
-                task.docker_information['cpu_limit'] = cpu_limit
+                info['cpu_limit'] = cpu_limit
             if memory_limit is not None:
-                task.docker_information['memory_limit'] = memory_limit
+                info['memory_limit'] = memory_limit
+            task.docker_information = info
             task.save()
             
             # Notifier le frontend de la mise à jour des limites
@@ -1025,7 +1042,7 @@ class TaskManager:
         """
         from django.apps import apps
         Task = apps.get_model('volontaire', 'Task')
-        from volontaire.docker_manager import DockerManager
+        from volontaire.services.runtime_client import RuntimeClient
         from redis_communication.file_server import start_task_file_server
         import os
         
@@ -1033,11 +1050,7 @@ class TaskManager:
             # Récupérer la tâche
             task = Task.objects.get(task_id=task_id)
             
-            
-            # Arrêter le conteneur Docker si nécessaire
-            docker_manager = DockerManager.get_instance()
-            docker_manager.stop_task(task_id)
-            
+
             # Déterminer le chemin des fichiers de sortie
             output_dir = os.path.join(TASKS_DIR, str(task.task_id), 'output')
             if not os.path.exists(output_dir):
@@ -1197,21 +1210,71 @@ class TaskManager:
             import traceback
             logger.error(traceback.format_exc())
     
+    def _apply_runtime_resources(self, runtime):
+        """Pousse les préférences volontaire vers le runtime vc-uyr."""
+        try:
+            from volontaire.preferences_payload import build_preferences_payload
+            prefs = build_preferences_payload()
+            cpu_percent = int(prefs.get("cpu_max_utilisation") or 80)
+            memory_mb = int((prefs.get("max_ram_gb") or 1) * 1024)
+            disk_total_mb = int((prefs.get("max_disk_gb") or 1) * 1024)
+            runtime.update_resources(cpu_percent, memory_mb, disk_total_mb)
+        except Exception as e:
+            logger.warning("Impossible d'appliquer les préférences au runtime: %s", e)
+
+    def _poll_runtime_until_done(self, runtime, task, poll_interval=2, timeout_secs=3600):
+        """Poll /api/status puis /api/result pour la tâche soumise."""
+        deadline = time.time() + timeout_secs
+        while time.time() < deadline:
+            status = runtime.status()
+            if status is None:
+                time.sleep(poll_interval)
+                continue
+            state = status.get("state")
+            if state == "Executing":
+                time.sleep(poll_interval)
+                continue
+            result = runtime.get_result()
+            if result is not None:
+                result_task_id = (result.get("result") or {}).get("task_id")
+                if result_task_id == task.task_id:
+                    return result
+            time.sleep(poll_interval)
+        return None
+
+    def _write_runtime_result_files(self, task, result):
+        """Décode les fichiers base64 de GET /api/result dans TASKS_DIR/.../output."""
+        import base64
+        import os
+
+        output_dir = os.path.join(TASKS_DIR, str(task.task_id), "output")
+        os.makedirs(output_dir, exist_ok=True)
+        output_files = []
+        for f in (result.get("files") or []):
+            name = f.get("name")
+            content_b64 = f.get("content_b64")
+            if not name or content_b64 is None:
+                continue
+            with open(os.path.join(output_dir, name), "wb") as out:
+                out.write(base64.b64decode(content_b64))
+            output_files.append(name)
+        return output_files
+
     def _execute_task(self, task):
         """
-        Exécute une tâche dans un thread séparé en utilisant Docker.
-        
-        Args:
-            task: Tâche à exécuter
+        Exécute une tâche via le runtime vc-uyr (bundle self-contained, sans Docker).
         """
-        # Import des modèles ici pour éviter les importations circulaires
         from django.apps import apps
         import traceback
-        from volontaire.docker_manager import DockerManager
-        
-        TaskProgress = apps.get_model('volontaire', 'TaskProgress')
-        
-        # Slot already reserved by _try_claim_and_start; keep ownership if we are the runner.
+        from volontaire.services.runtime_client import (
+            RuntimeClient,
+            RuntimeUnavailableError,
+            RuntimeBusyError,
+        )
+        from volontaire.services.bundle_utils import resolve_task_bundle
+
+        TaskProgress = apps.get_model("volontaire", "TaskProgress")
+
         with self._execution_lock:
             if self.current_task is not None and getattr(self.current_task, "task_id", None) != getattr(task, "task_id", None):
                 logger.warning(
@@ -1222,11 +1285,9 @@ class TaskManager:
                 return
             self.current_task = task
 
-        # Marquer la tâche comme démarrée
-        task.status = 'Running'
+        task.status = "Running"
         task.save()
-        
-        # Notifier le frontend du démarrage
+
         from channels.layers import get_channel_layer
         from asgiref.sync import async_to_sync
         channel_layer = get_channel_layer()
@@ -1239,133 +1300,87 @@ class TaskManager:
                     "task_id": task.task_id,
                     "name": task.name,
                     "status": task.status,
-                }
-            }
+                },
+            },
         )
-        
-        # Créer un événement de progression pour le démarrage
+
         TaskProgress.objects.create(
             task=task,
-            progress_type='progress',
+            progress_type="progress",
             percentage=2,
-            message="Exécution de la tâche démarrée"
+            message="Exécution de la tâche démarrée (vc-uyr)",
         )
-        
-        # Envoyer une notification de démarrage
         self._send_task_status_update(task)
-        
+
         try:
-            # Récupérer l'instance unique de DockerManager
-            docker_manager = DockerManager.get_instance()
-            
-            # Récupérer les informations Docker
-            docker_info = task.docker_information or {}
-            image_name = (
-                docker_info.get("image_name")
-                or docker_info.get("name")
-                or docker_info.get("image")
+            runtime = RuntimeClient()
+            if not runtime.health():
+                raise RuntimeUnavailableError(
+                    "Le runtime vc-uyr (localhost:7070) ne répond pas. "
+                    "Démarrez-le avant d'exécuter des tâches."
+                )
+
+            current_status = runtime.status()
+            if current_status and current_status.get("state") == "Executing":
+                raise RuntimeBusyError(
+                    f"Le runtime exécute déjà la tâche {current_status.get('task_id')}"
+                )
+
+            self._apply_runtime_resources(runtime)
+            bundle_path = resolve_task_bundle(task)
+            with open(bundle_path, "rb") as bundle_file:
+                bundle_bytes = bundle_file.read()
+
+            logger.info(
+                "Soumission bundle %s (%d octets) au runtime pour tâche %s",
+                bundle_path,
+                len(bundle_bytes),
+                task.task_id,
             )
-            tag = docker_info.get("tag", "latest")
-            if image_name and ":" not in image_name:
-                image_name = f"{image_name}:{tag}"
+            if not runtime.submit_task(task.task_id, bundle_bytes):
+                raise RuntimeError(f"Échec soumission bundle pour {task.task_id}")
 
-            if not image_name:
-                raise ValueError("Nom d'image Docker manquant dans les informations de la tâche")
-
-            # Définir les limites de ressources
-            cpu_limit = docker_info.get("cpu_limit", 1.0)  # Par défaut, 1 CPU
-            mem_limit = docker_info.get("memory_limit", "1g")  # Par défaut, 1GB
-
-            import os
-            from pathlib import Path
-
-            # Préparer les volumes pour monter les fichiers d'entrée/sortie
-            volumes = {}
-            if hasattr(task, 'local_input_path') and task.local_input_path:
-                # Monter le dossier parent du fichier d'entree pour exposer data.pkl / scenario.xml
-                input_path = task.local_input_path
-                if os.path.isfile(input_path):
-                    input_path = os.path.dirname(input_path)
-                volumes[input_path] = {'bind': '/input', 'mode': 'ro'}
-
-            # Créer un répertoire de sortie
-            output_dir = Path(f"{TASKS_DIR}/{task.task_id}/output")
-            output_dir.mkdir(parents=True, exist_ok=True)
-            volumes[str(output_dir)] = {'bind': '/output', 'mode': 'rw'}
-
-            # Démarrer le conteneur Docker
-            logger.error(f"Démarrage du conteneur Docker pour la tâche {task.task_id} avec l'image {image_name}")
-            container = docker_manager.run_container(
-                image_name=image_name,
-                task_id=task.task_id,
-                cpu_limit=cpu_limit,
-                mem_limit=mem_limit,
-                volumes=volumes,
-            )
-            
-            if not container:
-                raise Exception(f"Impossible de démarrer le conteneur Docker pour la tâche {task.task_id}")
-            
-            # Démarrer le monitoring de progression dans un thread séparé
-            import threading
             monitor_thread = threading.Thread(target=self._monitor_task_progress, args=(task,))
             monitor_thread.daemon = True
             monitor_thread.start()
-            
-            # Attendre que le conteneur soit terminé
-            import time
-            container = docker_manager.get_container_by_task(task.task_id)
-            while container and container.status in ['created', 'running']:
-                time.sleep(5)
-                container = docker_manager.get_container_by_task(task.task_id)
-            
-            if not container:
-                raise Exception(f"Conteneur Docker perdu pour la tâche {task.task_id}")
-            
-            # Récupérer les logs
-            logs = container.logs().decode('utf-8', errors='replace')
-            stdout = logs
-            stderr = ""
-            
-            # Vérifier le code de retour
-            exit_code = container.attrs.get('State', {}).get('ExitCode', -1)
-            
+
+            result = self._poll_runtime_until_done(runtime, task)
+            if result is None:
+                raise TimeoutError(f"Timeout runtime pour la tâche {task.task_id}")
+
+            task_result_data = result.get("result") or {}
+            exit_code = task_result_data.get("exit_code", task_result_data.get("return_code", -1))
+            stdout = task_result_data.get("stdout", "") or ""
+            logger.info("Code de sortie runtime tâche %s: %s", task.task_id, exit_code)
+
             if exit_code == 0:
-                from channels.layers import get_channel_layer
-                from asgiref.sync import async_to_sync
-                channel_layer = get_channel_layer()
                 async_to_sync(channel_layer.group_send)(
-                        "task_updates",
-                        {
-                            "type": "send_task_progress",
-                            "data": {
-                                "event": "progress",
-                                "task_id": task.task_id,
-                                "name": task.name,
-                                "status": task.status,
-                                "progress": 100,
-                            }
-                        }
-                    )
-                # Tâche réussie
-                result = {
-                    'stdout': stdout[-1000:],  # Limiter la taille de la sortie
-                    'return_code': 0
-                }
-                
-                # Collecter les fichiers de sortie
-                output_files = self._collect_output_files(task)
-                
-                # Marquer la tâche comme terminée
-                task.status = 'completed'
+                    "task_updates",
+                    {
+                        "type": "send_task_progress",
+                        "data": {
+                            "event": "progress",
+                            "task_id": task.task_id,
+                            "name": task.name,
+                            "status": task.status,
+                            "progress": 100,
+                        },
+                    },
+                )
+                task_result = {"stdout": stdout[-1000:] if stdout else "", "return_code": 0}
+                output_files = self._write_runtime_result_files(task, result)
+                if not output_files:
+                    output_files = self._collect_output_files(task)
+
+                task.status = "completed"
                 task.end_date = timezone.now()
-                task.results = result
-                task.output_data = {'files': output_files}
-                task.actual_execution_time = (task.end_date - task.start_date).total_seconds() if task.start_date else 0
+                task.results = task_result
+                task.output_data = {"files": output_files}
+                task.actual_execution_time = (
+                    (task.end_date - task.start_date).total_seconds() if task.start_date else 0
+                )
                 task.save()
-                
-                # Notifier le frontend de la complétion
-                
+
                 async_to_sync(channel_layer.group_send)(
                     "task_updates",
                     {
@@ -1375,38 +1390,24 @@ class TaskManager:
                             "task_id": task.task_id,
                             "name": task.name,
                             "status": task.status,
-                        }
-                    }
+                        },
+                    },
                 )
-                
-                # Créer un événement de progression pour la complétion
                 TaskProgress.objects.create(
                     task=task,
-                    progress_type='complete',
+                    progress_type="complete",
                     percentage=100,
-                    message="Tâche terminée avec succès"
+                    message="Tâche terminée avec succès",
                 )
-
-                # Lancer le server d'ecoute pour les fichiers de sortie
                 self.complete_task(task.task_id)
-                
-                
-                
-                logger.info(f"Tâche {task.task_id} terminée avec succès")
+                logger.info("Tâche %s terminée avec succès (vc-uyr)", task.task_id)
             else:
-                # Tâche échouée
-                error = f"Code de retour: {exit_code}\nStderr: {stderr}\nStdout: {stdout[-1000:]}"
-                
-                task.status = 'error'
+                error = f"Code de retour: {exit_code}\nStdout: {stdout[-1000:] if stdout else ''}"
+                task.status = "error"
                 task.end_date = timezone.now()
                 task.error_message = error
                 task.error_code = str(exit_code)
                 task.save()
-                
-                # Notifier le frontend de l'échec
-                from channels.layers import get_channel_layer
-                from asgiref.sync import async_to_sync
-                channel_layer = get_channel_layer()
                 async_to_sync(channel_layer.group_send)(
                     "task_updates",
                     {
@@ -1417,30 +1418,17 @@ class TaskManager:
                             "name": task.name,
                             "status": task.status,
                             "error_message": error,
-                        }
-                    }
+                        },
+                    },
                 )
-                
-                # Créer un événement de progression pour l'erreur
-                
-                
-                # Envoyer une notification d'échec
                 self._send_task_failure(task, error)
-                
-                logger.error(f"Tâche {task.task_id} échouée: {error}")
-        except Exception as e:
-            # Erreur lors de l'exécution
-            error = f"Erreur lors de l'exécution: {str(e)}"
-            
-            task.status = 'failed'
+                logger.error("Tâche %s échouée: %s", task.task_id, error)
+        except (RuntimeUnavailableError, RuntimeBusyError) as runtime_error:
+            error = str(runtime_error)
+            task.status = "failed"
             task.end_date = timezone.now()
             task.error_message = error
             task.save()
-            
-            # Notifier le frontend de l'échec
-            from channels.layers import get_channel_layer
-            from asgiref.sync import async_to_sync
-            channel_layer = get_channel_layer()
             async_to_sync(channel_layer.group_send)(
                 "task_updates",
                 {
@@ -1451,14 +1439,33 @@ class TaskManager:
                         "name": task.name,
                         "status": task.status,
                         "error_message": error,
-                    }
-                }
+                        "error_type": "runtime",
+                    },
+                },
             )
-            
-            # Envoyer une notification d'échec
             self._send_task_failure(task, error)
-            
-            logger.error(f"Erreur lors de l'exécution de la tâche {task.task_id}: {e}")
+            logger.error("Erreur runtime vc-uyr pour %s: %s", task.task_id, error)
+        except Exception as e:
+            error = f"Erreur lors de l'exécution: {str(e)}"
+            task.status = "failed"
+            task.end_date = timezone.now()
+            task.error_message = error
+            task.save()
+            async_to_sync(channel_layer.group_send)(
+                "task_updates",
+                {
+                    "type": "send_task_update",
+                    "data": {
+                        "event": "error",
+                        "task_id": task.task_id,
+                        "name": task.name,
+                        "status": task.status,
+                        "error_message": error,
+                    },
+                },
+            )
+            self._send_task_failure(task, error)
+            logger.error("Erreur exécution tâche %s: %s", task.task_id, e)
             logger.error(traceback.format_exc())
         finally:
             with self._execution_lock:
@@ -1466,69 +1473,50 @@ class TaskManager:
                     self.current_task = None
                 self.task_process = None
             self._start_next_assigned_task()
-    
+
     def _monitor_task_progress(self, task):
         """
-        Surveille la progression d'une tâche et envoie des mises à jour périodiques.
-        Cette fonction est conçue pour être exécutée dans un thread séparé.
-        
-        Args:
-            task: Tâche à surveiller
+        Surveille la progression d'une tâche via le statut du runtime vc-uyr.
         """
-        # Import des modèles ici pour éviter les importations circulaires
         from django.apps import apps
-        TaskProgress = apps.get_model('volontaire', 'TaskProgress')
-        
-        # Attendre un peu pour laisser le conteneur démarrer
+        TaskProgress = apps.get_model("volontaire", "TaskProgress")
+        from volontaire.services.runtime_client import RuntimeClient
+
         time.sleep(2)
-        
         start_time = time.time()
-        last_progress_value = 2  # Déjà à 2% après le démarrage
-    
-        from volontaire.docker_manager import DockerManager
-        docker_manager = DockerManager.get_instance()
-        
-        logger.info(f"Démarrage du monitoring de progression pour la tâche {task.task_id}")
-        
-        # Boucle de surveillance de la progression
+        last_progress_value = 2
+        runtime = RuntimeClient()
+        logger.info("Monitoring progression (vc-uyr) pour %s", task.task_id)
+
         while True:
             try:
-                # Récupérer l'état actuel du conteneur
-                container = docker_manager.get_container_by_task(task.task_id)
-                
-                # Vérifier si le conteneur existe et s'il est toujours en cours d'exécution
-                if not container:
-                    logger.info(f"Monitoring terminé pour la tâche {task.task_id}: conteneur non trouvé")
+                runtime_status = runtime.status()
+                if not runtime_status:
+                    logger.info("Monitoring terminé %s: runtime injoignable", task.task_id)
                     break
-                    
-                if container.status not in ['created', 'running']:
-                    logger.info(f"Monitoring terminé pour la tâche {task.task_id}: conteneur {container.status}")
+                if runtime_status.get("state") not in ("Executing", "Paused"):
+                    logger.info(
+                        "Monitoring terminé %s: état runtime %s",
+                        task.task_id,
+                        runtime_status.get("state"),
+                    )
                     break
-                
-                # Calculer la progression basée sur le temps écoulé et le temps estimé
+
                 elapsed_time = time.time() - start_time
                 if task.estimated_execution_time and task.estimated_execution_time > 0:
                     progress = round(min(98.0, (elapsed_time / task.estimated_execution_time) * 100.0), 2)
                 else:
-                    # Si pas de temps estimé, incrémenter progressivement jusqu'à 95%
-                    progress = min(98.0, last_progress_value + 2.0)  # Augmenter de 2% à chaque fois
-                
-                # Mettre à jour la progression seulement si elle a changé significativement
-                if progress - last_progress_value >= 2.0 and progress < 100:  # Mise à jour tous les 2%
-                    # Créer un événement de progression
+                    progress = min(98.0, last_progress_value + 2.0)
+
+                if progress - last_progress_value >= 2.0 and progress < 100:
                     TaskProgress.objects.create(
                         task=task,
-                        progress_type='progress',
+                        progress_type="progress",
                         percentage=progress,
                         message=f"Progression: {int(progress)}%",
-                        details={
-                            'elapsed_time': elapsed_time,
-                            'timestamp': timezone.now().isoformat()
-                        }
+                        details={"elapsed_time": elapsed_time, "timestamp": timezone.now().isoformat()},
                     )
                     last_progress_value = progress
-                    
-                    # Notifier le frontend de la progression
                     from channels.layers import get_channel_layer
                     from asgiref.sync import async_to_sync
                     channel_layer = get_channel_layer()
@@ -1542,31 +1530,27 @@ class TaskManager:
                                 "name": task.name,
                                 "status": task.status,
                                 "progress": progress,
-                            }
-                        }
+                            },
+                        },
                     )
-                    
-                    # Envoyer la progression au manager
                     self._send_task_progress(task, progress)
-                    logger.info(f"Progression de la tâche {task.name}: {int(progress)}%")
-                
-                # Vérifier le statut de la tâche dans la base de données
+                    logger.info("Progression tâche %s: %s%%", task.name, int(progress))
+
                 try:
-                    Task = apps.get_model('volontaire', 'Task')
+                    Task = apps.get_model("volontaire", "Task")
                     updated_task = Task.objects.get(task_id=task.task_id)
-                    if updated_task.status not in ['Running', 'progress']:
-                        logger.info(f"Monitoring arrêté pour la tâche {task.name}: statut {updated_task.status}")
+                    if updated_task.status not in ["Running", "progress", "paused"]:
+                        logger.info("Monitoring arrêté %s: statut %s", task.name, updated_task.status)
                         break
                 except Exception as e:
-                    logger.error(f"Erreur lors de la vérification du statut de la tâche: {e}")
+                    logger.error("Erreur vérif statut monitoring: %s", e)
             except Exception as e:
-                logger.error(f"Erreur dans le monitoring de la tâche {task.task_id}: {e}")
+                logger.error("Erreur monitoring tâche %s: %s", task.task_id, e)
                 import traceback
                 logger.error(traceback.format_exc())
-            
-            # Attendre avant la prochaine vérification
+
             time.sleep(3.0)
-    
+
     def _download_input_files(self, task):
         """
         Télécharge les fichiers d'entrée pour une tâche.
