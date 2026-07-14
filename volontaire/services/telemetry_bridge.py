@@ -349,13 +349,14 @@ def _predict(snap: Dict[str, Any]) -> Dict[str, Any]:
     else:
         linear = 0.7 if snap.get("is_available") else 0.2
 
-    # Gate secteur uniquement (réseau non bloquant pour éviter faux 0)
-    if not snap.get("power_plugged"):
-        linear = 0.0
-
-    # Sans GRU (torch) : hybrid = linear, gru = proxy ARX
+    # Gate lancement sur secteur : on garde les scores ARX visibles (pas de zero artificiel)
+    plugged = bool(snap.get("power_plugged"))
     hybrid = linear
-    launch = hybrid >= threshold
+    launch = bool(plugged and hybrid >= threshold)
+    if not plugged:
+        # launch refuse, mais les scores restent ceux du modèle
+        pass
+
     res = _resource_summary(
         float(snap.get("cpu_percent") or 0),
         float(snap.get("ram_percent") or snap.get("ram_percent_used") or 0),
@@ -374,8 +375,9 @@ def _predict(snap: Dict[str, Any]) -> Dict[str, Any]:
         "model": "arx_bridge",
         "machine_id": snap.get("machine_id"),
         "is_available_now": bool(snap.get("is_available")),
-        "power_plugged": bool(snap.get("power_plugged")),
+        "power_plugged": plugged,
         "network_ok": bool(snap.get("network_ok")),
+        "launch_block_reason": (None if launch else ("power_unplugged" if not plugged else "below_threshold")),
         **res,
     }
 
