@@ -487,24 +487,25 @@ def _loop() -> None:
 
 
 def start_telemetry_bridge() -> bool:
-    """Démarre API :7071 + boucle sync (idempotent)."""
+    """Démarre API predict locale + boucle sync (idempotent)."""
     global _started
     if _started:
         return True
-    # si un vrai agent occupe déjà 7071, ne rien faire
-    try:
-        import urllib.request
-
-        with urllib.request.urlopen("http://127.0.0.1:7071/health", timeout=1) as resp:
-            if resp.status == 200:
-                _started = True
-                logger.info("Agent/API déjà actif sur :7071")
-                return True
-    except Exception:
-        pass
 
     host = os.environ.get("VC_AGENT_API_HOST", "127.0.0.1")
     port = int(os.environ.get("VC_AGENT_API_PORT", "7071"))
+
+    # Si une API est déjà active sur NOTRE port, ne pas en relancer une deuxième
+    try:
+        import urllib.request
+
+        with urllib.request.urlopen(f"http://{host}:{port}/health", timeout=1) as resp:
+            if resp.status == 200:
+                _started = True
+                logger.info("Agent/API déjà actif sur :%s", port)
+                return True
+    except Exception:
+        pass
 
     def _serve():
         try:
