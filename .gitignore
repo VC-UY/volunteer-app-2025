@@ -13,3 +13,9 @@ volontaire/venv/
 volontaire/.env
 volontaire/.volunteer/
 volontaire/db.sqlite3
+
+agent/.venv/
+data/
+.volunteer/
+volontaire/.volunteer_id
+**/__pycache__/

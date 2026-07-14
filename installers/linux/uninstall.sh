@@ -114,6 +114,19 @@ systemctl daemon-reload
 systemctl reset-failed
 echo -e "${GREEN}✓ Systemd rechargé${NC}"
 
+# Arrêter aussi l'agent de prédiction / collecte (service utilisateur)
+echo "Arrêt de l'agent de recherche (vc-agent)..."
+if command -v runuser >/dev/null 2>&1 && id "$USER" &>/dev/null; then
+  runuser -u "$USER" -- systemctl --user disable --now vc-agent.service 2>/dev/null || true
+  runuser -u "$USER" -- rm -f "$HOME/.config/systemd/user/vc-agent.service" 2>/dev/null || true
+fi
+# Cas install locale (utilisateur courant)
+systemctl --user disable --now vc-agent.service 2>/dev/null || true
+rm -f "${SUDO_USER:+/home/$SUDO_USER}/.config/systemd/user/vc-agent.service" 2>/dev/null || true
+pkill -f "agent/main.py" 2>/dev/null || true
+pkill -f "vc-agent" 2>/dev/null || true
+echo -e "${GREEN}✓ Agent de collecte arrêté${NC}"
+
 # Supprimer le répertoire d'installation
 if [ -d "$INSTALL_DIR" ]; then
     echo "Suppression du répertoire d'installation..."

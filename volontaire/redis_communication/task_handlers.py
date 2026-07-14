@@ -98,6 +98,13 @@ class TaskManager:
         self.redis_client.subscribe('task/assignment', self.handle_task_assignment)
         self.redis_client.subscribe('task/cancel', self.handle_task_cancel)
 
+        try:
+            from redis_communication.availability_handlers import register_availability_handlers
+
+            register_availability_handlers(self.redis_client)
+        except Exception as exc:
+            logger.warning("Handlers disponibilité non enregistrés: %s", exc)
+
         # Présence coordinateur : heartbeat immédiat puis toutes les 20s
         self._send_heartbeat()
         self.heartbeat_thread = threading.Thread(

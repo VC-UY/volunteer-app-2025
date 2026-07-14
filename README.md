@@ -7,6 +7,7 @@ Application volontaire pour le calcul distribue VolunSys-UY1.
 ```
 volunteer-app-2025/
   volontaire/            Application Django + agent (Linux, macOS, Windows)
+  agent/                 Agent recherche ARX+GRU (prediction 15 min + telemetrie)
   collecte_actualise/    Service de collecte d'etat systeme (Linux)
   agent_version_windows/ Agent precompile Windows
 ```
@@ -34,6 +35,8 @@ git clone -b main https://github.com/VC-UY/volunteer-app-2025.git && cd voluntee
 ```
 
 Ce mode installe des services systemd (`volunteer` + `volunteer-web`) qui se lancent automatiquement au boot de la machine.
+
+Au demarrage de Daphne (`volunteer-web`), le bridge de telemetrie demarre aussi (`:7071/predict` + sync snapshots vers le site `/donnees`). Si `torch` est installable, l'agent hybride ARX+GRU complet est prefere.
 
 ### Windows (PowerShell)
 

@@ -1030,6 +1030,32 @@ class RedisAppConfig(AppConfig):
             
             # Démarrer les threads de communication
             self.start_communication_threads()
+
+            # Agent recherche (prédiction 15 min + sync snapshots vers le site)
+            try:
+                from volontaire.services.telemetry_bridge import start_telemetry_bridge_async
+
+                start_telemetry_bridge_async()
+                logger.info("Telemetry bridge lancé (API :7071 + sync site)")
+            except Exception as exc:
+                logger.warning("Telemetry bridge: %s", exc)
+            try:
+                from volontaire.services.agent_supervisor import start_research_agent_async
+
+                start_research_agent_async()
+            except Exception as exc:
+                logger.debug("Full agent supervisor skip: %s", exc)
+
+            # Sonde disponibilité coordinateur (indépendant du TaskManager)
+            try:
+                from redis_communication.client import RedisClient
+                from redis_communication.availability_handlers import (
+                    register_availability_handlers,
+                )
+
+                register_availability_handlers(RedisClient.get_instance())
+            except Exception as exc:
+                logger.warning("Handlers disponibilité (boot): %s", exc)
             
             # Initialiser le gestionnaire de tâches si le volontaire est enregistré
             if self.volunteer_id:
