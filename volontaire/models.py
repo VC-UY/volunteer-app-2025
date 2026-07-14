@@ -77,7 +77,7 @@ class MachineInfo(models.Model):
     raw_data = models.JSONField(default=dict, null=True, blank=True, help_text="Données brutes collectées")
 
     def __str__(self):
-        return f"{self.hostname} ({self.machine_type})"
+        return f"{self.hostname} ({self.machine_tipe})"
 
 # Modèle des informations variables de la machine
 

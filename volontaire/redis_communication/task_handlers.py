@@ -143,10 +143,84 @@ class TaskManager:
             from django.apps import apps
             Task = apps.get_model('volontaire', 'Task')
             return Task.objects.filter(
-                status__in=['pending', 'assigned', 'in_progress', 'running', 'started']
+                status__in=[
+                    'pending', 'assigned', 'ready', 'in_progress',
+                    'running', 'started', 'Running',
+                ]
             ).exists()
         except Exception:
             return bool(self.current_task)
+
+    def _release_stuck_execution_slot(self) -> bool:
+        """Libère le slot si current_task / DB sont bloqués sans exécution réelle."""
+        released = False
+        with self._execution_lock:
+            task = self.current_task
+            task_id = getattr(task, 'task_id', None) if task is not None else None
+        try:
+            from django.apps import apps
+            Task = apps.get_model('volontaire', 'Task')
+            # Tâches "Running" orphelines (processus redémarré ou thread mort)
+            # → remettre en ready pour reprise, sinon heartbeat reste busy à jamais.
+            if self.current_task is None:
+                for orphan in Task.objects.filter(
+                    status__in=['Running', 'running', 'in_progress', 'started']
+                ):
+                    orphan.status = 'ready'
+                    orphan.error_message = (
+                        (orphan.error_message or '')
+                        + ' | récupération auto: Running orphelin'
+                    ).strip(' |')
+                    orphan.save(update_fields=['status', 'error_message'] if hasattr(orphan, 'error_message') else ['status'])
+                    logger.warning(
+                        "Running orphelin remis en ready: %s",
+                        orphan.task_id,
+                    )
+                    released = True
+                return released
+
+            if not task_id:
+                with self._execution_lock:
+                    self.current_task = None
+                return True
+
+            fresh = Task.objects.filter(task_id=task_id).first()
+            if not fresh:
+                with self._execution_lock:
+                    self.current_task = None
+                return True
+            st = (fresh.status or '').lower()
+            if st in ('ready', 'failed', 'error', 'completed', 'complete', 'cancelled'):
+                with self._execution_lock:
+                    if self.current_task is not None and str(getattr(self.current_task, 'task_id', '')) == str(task_id):
+                        self.current_task = None
+                return True
+            if st in ('assigned', 'pending') and self.task_process is None:
+                with self._execution_lock:
+                    if self.current_task is not None:
+                        self.current_task = None
+                return True
+            # Running mais runtime libre depuis un moment → orphelin
+            if st in ('running',):
+                try:
+                    from volontaire.services.runtime_client import RuntimeClient
+                    rs = RuntimeClient().status() or {}
+                    if rs.get('state') == 'Ready' or str(rs.get('task_id') or '') != str(task_id):
+                        fresh.status = 'ready'
+                        fresh.save(update_fields=['status'])
+                        with self._execution_lock:
+                            if self.current_task is not None and str(getattr(self.current_task, 'task_id', '')) == str(task_id):
+                                self.current_task = None
+                        logger.warning(
+                            "Running sans runtime actif remis en ready: %s",
+                            task_id,
+                        )
+                        return True
+                except Exception as exc:
+                    logger.debug("runtime probe stuck: %s", exc)
+        except Exception as exc:
+            logger.debug("release stuck slot: %s", exc)
+        return released
 
     def _try_claim_and_start(self, task) -> bool:
         """
@@ -173,7 +247,7 @@ class TaskManager:
             from django.apps import apps
             Task = apps.get_model('volontaire', 'Task')
             next_task = (
-                Task.objects.filter(status='assigned')
+                Task.objects.filter(status__in=['assigned', 'ready'])
                 .select_related('workflow')
                 .order_by('start_date', 'id')
                 .first()
@@ -189,6 +263,9 @@ class TaskManager:
         """Signale au coordinateur que ce volontaire est en ligne."""
         if not self.volunteer_id:
             return
+        self._release_stuck_execution_slot()
+        if self.current_task is None:
+            self._start_next_assigned_task()
         try:
             from .utils import get_volunteer_auth_token
             from preferences_payload import (
@@ -1232,20 +1309,39 @@ class TaskManager:
     def _poll_runtime_until_done(self, runtime, task, poll_interval=2, timeout_secs=3600):
         """Poll /api/status puis /api/result pour la tâche soumise."""
         deadline = time.time() + timeout_secs
+        ready_mismatches = 0
         while time.time() < deadline:
             status = runtime.status()
             if status is None:
                 time.sleep(poll_interval)
                 continue
             state = status.get("state")
+            status_task = status.get("task_id")
             if state == "Executing":
+                # Runtime occupé par une autre tâche → conflit (ex. 2 vols sur 1 runtime)
+                if status_task and str(status_task) != str(task.task_id):
+                    raise RuntimeBusyError(
+                        f"Runtime détourné: exécute {status_task} au lieu de {task.task_id}"
+                    )
+                ready_mismatches = 0
                 time.sleep(poll_interval)
                 continue
             result = runtime.get_result()
             if result is not None:
                 result_task_id = (result.get("result") or {}).get("task_id")
-                if result_task_id == task.task_id:
+                if result_task_id is None or str(result_task_id) == str(task.task_id):
                     return result
+                ready_mismatches += 1
+            elif state == "Ready":
+                ready_mismatches += 1
+            else:
+                ready_mismatches = 0
+            # Ready sans notre résultat trop longtemps = runtime partagé écrasé
+            if ready_mismatches >= 5:
+                raise RuntimeError(
+                    f"Runtime Ready sans résultat pour {task.task_id} "
+                    f"(conflit probable avec un autre volontaire)"
+                )
             time.sleep(poll_interval)
         return None
 
@@ -1271,67 +1367,82 @@ class TaskManager:
         """
         Exécute une tâche via le runtime vc-uyr (bundle self-contained, sans Docker).
         """
-        from django.apps import apps
-        import traceback
-        from volontaire.services.runtime_client import (
-            RuntimeClient,
-            RuntimeUnavailableError,
-            RuntimeBusyError,
-        )
-        from volontaire.services.bundle_utils import resolve_task_bundle
-
-        TaskProgress = apps.get_model("volontaire", "TaskProgress")
-
-        with self._execution_lock:
-            if self.current_task is not None and getattr(self.current_task, "task_id", None) != getattr(task, "task_id", None):
-                logger.warning(
-                    "Abandon exécution %s: slot déjà pris par %s",
-                    getattr(task, "task_id", None),
-                    getattr(self.current_task, "task_id", None),
-                )
-                return
-            self.current_task = task
-
-        task.status = "Running"
-        task.save()
-
-        from channels.layers import get_channel_layer
-        from asgiref.sync import async_to_sync
-        channel_layer = get_channel_layer()
-        async_to_sync(channel_layer.group_send)(
-            "task_updates",
-            {
-                "type": "send_task_update",
-                "data": {
-                    "event": "started",
-                    "task_id": task.task_id,
-                    "name": task.name,
-                    "status": task.status,
-                },
-            },
-        )
-
-        TaskProgress.objects.create(
-            task=task,
-            progress_type="progress",
-            percentage=2,
-            message="Exécution de la tâche démarrée (vc-uyr)",
-        )
-        self._send_task_status_update(task)
-
+        channel_layer = None
         try:
+            from django.apps import apps
+            import traceback
+            from volontaire.services.runtime_client import (
+                RuntimeClient,
+                RuntimeUnavailableError,
+                RuntimeBusyError,
+            )
+            from volontaire.services.bundle_utils import resolve_task_bundle
+
+            TaskProgress = apps.get_model("volontaire", "TaskProgress")
+
+            with self._execution_lock:
+                if self.current_task is not None and getattr(self.current_task, "task_id", None) != getattr(task, "task_id", None):
+                    logger.warning(
+                        "Abandon exécution %s: slot déjà pris par %s",
+                        getattr(task, "task_id", None),
+                        getattr(self.current_task, "task_id", None),
+                    )
+                    return
+                self.current_task = task
+
+            task.status = "Running"
+            task.save()
+
+            from channels.layers import get_channel_layer
+            from asgiref.sync import async_to_sync
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                "task_updates",
+                {
+                    "type": "send_task_update",
+                    "data": {
+                        "event": "started",
+                        "task_id": task.task_id,
+                        "name": task.name,
+                        "status": task.status,
+                    },
+                },
+            )
+
+            TaskProgress.objects.create(
+                task=task,
+                progress_type="progress",
+                percentage=2,
+                message="Exécution de la tâche démarrée (vc-uyr)",
+            )
+            self._send_task_status_update(task)
             runtime = RuntimeClient()
             if not runtime.health():
                 raise RuntimeUnavailableError(
-                    "Le runtime vc-uyr (localhost:7070) ne répond pas. "
+                    f"Le runtime vc-uyr ({runtime.base_url}) ne répond pas. "
                     "Démarrez-le avant d'exécuter des tâches."
                 )
 
-            current_status = runtime.status()
-            if current_status and current_status.get("state") == "Executing":
-                raise RuntimeBusyError(
-                    f"Le runtime exécute déjà la tâche {current_status.get('task_id')}"
+            # Attendre que le runtime soit libre (évite le blocage à 2% si
+            # un autre volontaire partage encore le même runtime, ou race locale).
+            wait_deadline = time.time() + 180
+            while True:
+                current_status = runtime.status() or {}
+                state = current_status.get("state")
+                other_id = current_status.get("task_id")
+                if state != "Executing" or str(other_id) == str(task.task_id):
+                    break
+                if time.time() >= wait_deadline:
+                    raise RuntimeBusyError(
+                        f"Le runtime exécute déjà la tâche {other_id} "
+                        f"(attente >180s sur {runtime.base_url})"
+                    )
+                logger.info(
+                    "Runtime occupé par %s — nouvelle tentative dans 5s pour %s",
+                    other_id,
+                    task.task_id,
                 )
+                time.sleep(5)
 
             self._apply_runtime_resources(runtime)
             bundle_path = resolve_task_bundle(task)
@@ -1430,37 +1541,26 @@ class TaskManager:
                 )
                 self._send_task_failure(task, error)
                 logger.error("Tâche %s échouée: %s", task.task_id, error)
-        except (RuntimeUnavailableError, RuntimeBusyError) as runtime_error:
-            error = str(runtime_error)
-            task.status = "failed"
-            task.end_date = timezone.now()
-            task.error_message = error
-            task.save()
-            async_to_sync(channel_layer.group_send)(
-                "task_updates",
-                {
-                    "type": "send_task_update",
-                    "data": {
-                        "event": "error",
-                        "task_id": task.task_id,
-                        "name": task.name,
-                        "status": task.status,
-                        "error_message": error,
-                        "error_type": "runtime",
-                    },
-                },
-            )
-            self._send_task_failure(task, error)
-            logger.error("Erreur runtime vc-uyr pour %s: %s", task.task_id, error)
         except Exception as e:
-            error = f"Erreur lors de l'exécution: {str(e)}"
+            import traceback
+            from asgiref.sync import async_to_sync
+
+            try:
+                from volontaire.services.runtime_client import (
+                    RuntimeUnavailableError,
+                    RuntimeBusyError,
+                )
+                is_runtime = isinstance(e, (RuntimeUnavailableError, RuntimeBusyError))
+            except Exception:
+                is_runtime = False
+
+            error = str(e) if is_runtime else f"Erreur lors de l'exécution: {str(e)}"
             task.status = "failed"
             task.end_date = timezone.now()
             task.error_message = error
             task.save()
-            async_to_sync(channel_layer.group_send)(
-                "task_updates",
-                {
+            if channel_layer is not None:
+                payload = {
                     "type": "send_task_update",
                     "data": {
                         "event": "error",
@@ -1469,10 +1569,15 @@ class TaskManager:
                         "status": task.status,
                         "error_message": error,
                     },
-                },
-            )
+                }
+                if is_runtime:
+                    payload["data"]["error_type"] = "runtime"
+                try:
+                    async_to_sync(channel_layer.group_send)("task_updates", payload)
+                except Exception:
+                    pass
             self._send_task_failure(task, error)
-            logger.error("Erreur exécution tâche %s: %s", task.task_id, e)
+            logger.error("Erreur exécution tâche %s: %s", task.task_id, error)
             logger.error(traceback.format_exc())
         finally:
             with self._execution_lock:

@@ -29,8 +29,13 @@ class RuntimeClient:
     """Petit wrapper autour de l'API REST exposée par vc-uyr sur RUNTIME_URL."""
 
     def __init__(self):
-        self.base_url = getattr(settings, 'RUNTIME_URL', 'http://localhost:7070')
-        self.timeout = getattr(settings, 'RUNTIME_HEALTH_TIMEOUT', 5)
+        import os
+        self.base_url = (
+            os.environ.get("RUNTIME_URL")
+            or getattr(settings, "RUNTIME_URL", None)
+            or "http://localhost:7070"
+        )
+        self.timeout = getattr(settings, "RUNTIME_HEALTH_TIMEOUT", 5)
 
     def health(self) -> bool:
         try:

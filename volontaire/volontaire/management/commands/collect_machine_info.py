@@ -109,8 +109,8 @@ class Command(BaseCommand):
                     'os_version': platform.version(),
                     'os_release': platform.release(),
                     'os_architecture': platform.machine(),
-                    'machine_type': machine_type,
-                    'cpu_type': platform.processor(),
+                    'machine_tipe': machine_type,
+                    'cpu_modele': platform.processor(),
                     'cpu_architecture': platform.machine(),
                     'cpu_bits': "64-bit" if platform.machine().endswith('64') else "32-bit",
                     'cpu_cores_physical': cpu_cores_physical,
@@ -141,8 +141,8 @@ class Command(BaseCommand):
                 machine.os_version = platform.version()
                 machine.os_release = platform.release()
                 machine.os_architecture = platform.machine()
-                machine.machine_type = machine_type
-                machine.cpu_type = platform.processor()
+                machine.machine_tipe = machine_type
+                machine.cpu_modele = platform.processor()
                 machine.cpu_cores_physical = cpu_cores_physical
                 machine.cpu_cores_logical = cpu_cores_logical
                 machine.ram_total = memory.total
@@ -188,7 +188,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS('\n📊 Informations collectées:'))
             self.stdout.write(f'  • Hostname: {machine.hostname}')
             self.stdout.write(f'  • OS: {machine.os_name} {machine.os_release}')
-            self.stdout.write(f'  • CPU: {machine.cpu_type} ({machine.cpu_cores_physical} cœurs physiques, {machine.cpu_cores_logical} cœurs logiques)')
+            self.stdout.write(f'  • CPU: {machine.cpu_modele} ({machine.cpu_cores_physical} cœurs physiques, {machine.cpu_cores_logical} cœurs logiques)')
             self.stdout.write(f'  • RAM: {machine.ram_total_human}')
             self.stdout.write(f'  • Disque: {machine.disk_total_human}')
             self.stdout.write(f'  • Résolution: {machine.screen_resolution}')
