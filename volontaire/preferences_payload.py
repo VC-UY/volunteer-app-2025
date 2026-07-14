@@ -7,7 +7,7 @@ from datetime import datetime, time
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-PREFS_FILE = Path(__file__).resolve().parent.parent / ".volunteer" / "preferences.json"
+PREFS_FILE = Path(__file__).resolve().parent / ".volunteer" / "preferences.json"
 SCHEDULE_TZ = ZoneInfo("Europe/Paris")
 
 DAY_ALIASES = {
