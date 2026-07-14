@@ -37,6 +37,7 @@ _DETAIL_KEYS = (
     "power_plugged",
     "network_ok",
     "hybrid_alpha",
+    "launch_block_reason",
 )
 
 
