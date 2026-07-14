@@ -1732,6 +1732,15 @@ class TaskManager:
         # Import des modèles ici pour éviter les importations circulaires
         from django.apps import apps
         TaskProgress = apps.get_model('volontaire', 'TaskProgress')
+
+        try:
+            task.refresh_from_db()
+        except Exception:
+            pass
+        st = str(getattr(task, "status", "") or "").lower()
+        if st in ("completed", "failed", "cancelled", "canceled", "timeout"):
+            logger.debug("Skip status update: tâche %s déjà %s", task.task_id, st)
+            return
         
         # Récupérer la dernière progression enregistrée
         latest_progress = TaskProgress.objects.filter(task=task).order_by('-timestamp').first()
@@ -1758,6 +1767,15 @@ class TaskManager:
             task: Tâche pour laquelle envoyer une mise à jour
             progress: Valeur de progression actuelle
         """
+        try:
+            task.refresh_from_db()
+        except Exception:
+            pass
+        st = str(getattr(task, "status", "") or "").lower()
+        if st in ("completed", "failed", "cancelled", "canceled", "timeout"):
+            logger.debug("Skip progress update: tâche %s déjà %s", task.task_id, st)
+            return
+
         from redis_communication.utils import get_volunteer_auth_token
         self.redis_client.publish('task/progress', {
                 'task_id': task.task_id,
