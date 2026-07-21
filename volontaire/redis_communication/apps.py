@@ -68,6 +68,25 @@ def load_agent_module():
         logger.error(traceback.format_exc())
         return None
 
+def _apply_e2e_overrides(static_data: dict) -> dict:
+    """Permet plusieurs volontaires E2E sur une même machine (MAC/hostname distincts)."""
+    fake_mac = os.environ.get("VCUY_E2E_MAC", "").strip()
+    fake_host = os.environ.get("VCUY_E2E_HOSTNAME", "").strip()
+    if not fake_mac and not fake_host:
+        return static_data
+    if fake_mac:
+        static_data["adresse_mac"] = fake_mac
+        reseau = static_data.setdefault("reseau", {})
+        if isinstance(reseau, dict):
+            reseau["mac"] = [fake_mac]
+    if fake_host:
+        os_info = static_data.setdefault("os", {})
+        if isinstance(os_info, dict):
+            os_info["hostname"] = fake_host
+        static_data["hostname"] = fake_host
+    return static_data
+
+
 def get_machine_info():
     """
     Récupère les informations statiques de la machine du volontaire en utilisant l'agent.
@@ -83,7 +102,7 @@ def get_machine_info():
             logger.info("Utilisation de l'agent pour collecter les données statiques")
             static_data = agent_module.collect_initial_data()
             logger.info("Données statiques collectées avec succès via l'agent")
-            return static_data
+            return _apply_e2e_overrides(static_data)
         
         # Fallback: collecter les informations manuellement
         logger.warning("Impossible d'utiliser l'agent, collecte manuelle des informations statiques")
@@ -188,7 +207,7 @@ def get_machine_info():
         }
         
         logger.info("Informations statiques collectées manuellement avec succès")
-        return static_data
+        return _apply_e2e_overrides(static_data)
     except Exception as e:
         logger.error(f"Erreur lors de la collecte des informations statiques: {e}")
         import traceback
