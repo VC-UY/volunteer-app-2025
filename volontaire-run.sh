@@ -66,31 +66,16 @@ fi
 
 # Fonction d'installation pour Debian/Ubuntu
 install_debian() {
-    echo -e "${YELLOW}[1/6] Mise à jour des paquets système...${NC}"
+    echo -e "${YELLOW}[1/5] Mise à jour des paquets système...${NC}"
     apt-get update
 
-    echo -e "${YELLOW}[2/6] Installation de Python et pip...${NC}"
+    echo -e "${YELLOW}[2/5] Installation de Python et pip...${NC}"
     apt-get install -y python3 python3-pip python3-venv python3-dev build-essential
 
-    echo -e "${YELLOW}[3/6] Installation de Docker...${NC}"
-    if ! command_exists docker; then
-        apt-get install -y apt-transport-https ca-certificates curl software-properties-common
-        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -
-        add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
-        apt-get update
-        apt-get install -y docker-ce docker-ce-cli containerd.io
-        systemctl enable docker
-        systemctl start docker
+    echo -e "${YELLOW}[3/5] Runtime vc-uyr (bundles) — pas de Docker requis${NC}"
+    echo -e "${GREEN}Les tâches s'exécutent via le runtime vc-uyr local (voir volontaire/run.sh).${NC}"
 
-        # Ajouter l'utilisateur au groupe docker
-        if [ -n "$SUDO_USER" ]; then
-            usermod -aG docker "$SUDO_USER"
-        fi
-    else
-        echo -e "${GREEN}Docker est déjà installé${NC}"
-    fi
-
-    echo -e "${YELLOW}[4/6] Installation de Redis...${NC}"
+    echo -e "${YELLOW}[4/5] Installation de Redis...${NC}"
     if ! command_exists redis-server; then
         apt-get install -y redis-server
         systemctl enable redis-server
@@ -99,10 +84,10 @@ install_debian() {
         echo -e "${GREEN}Redis est déjà installé${NC}"
     fi
 
-    echo -e "${YELLOW}[5/6] Installation de Git et autres outils...${NC}"
+    echo -e "${YELLOW}[5/5] Installation de Git et autres outils...${NC}"
     apt-get install -y git curl wget tmux
 
-    echo -e "${YELLOW}[6/6] Installation de Node.js et npm...${NC}"
+    echo -e "${YELLOW}Installation de Node.js et npm...${NC}"
     if ! command_exists node; then
         curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
         apt-get install -y nodejs
@@ -113,25 +98,13 @@ install_debian() {
 
 # Fonction d'installation pour RedHat/CentOS/Fedora
 install_redhat() {
-    echo -e "${YELLOW}[1/6] Installation de Python et pip...${NC}"
+    echo -e "${YELLOW}[1/5] Installation de Python et pip...${NC}"
     yum install -y python3 python3-pip python3-devel gcc
 
-    echo -e "${YELLOW}[2/6] Installation de Docker...${NC}"
-    if ! command_exists docker; then
-        yum install -y yum-utils
-        yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
-        yum install -y docker-ce docker-ce-cli containerd.io
-        systemctl enable docker
-        systemctl start docker
+    echo -e "${YELLOW}[2/5] Runtime vc-uyr — pas de Docker requis${NC}"
+    echo -e "${GREEN}Les tâches s'exécutent via le runtime vc-uyr local (voir volontaire/run.sh).${NC}"
 
-        if [ -n "$SUDO_USER" ]; then
-            usermod -aG docker "$SUDO_USER"
-        fi
-    else
-        echo -e "${GREEN}Docker est déjà installé${NC}"
-    fi
-
-    echo -e "${YELLOW}[3/6] Installation de Redis...${NC}"
+    echo -e "${YELLOW}[3/5] Installation de Redis...${NC}"
     if ! command_exists redis-server; then
         yum install -y redis
         systemctl enable redis
@@ -140,10 +113,10 @@ install_redhat() {
         echo -e "${GREEN}Redis est déjà installé${NC}"
     fi
 
-    echo -e "${YELLOW}[4/6] Installation de Git et autres outils...${NC}"
+    echo -e "${YELLOW}[4/5] Installation de Git et autres outils...${NC}"
     yum install -y git curl wget tmux
 
-    echo -e "${YELLOW}[5/6] Installation de Node.js et npm...${NC}"
+    echo -e "${YELLOW}[5/5] Installation de Node.js et npm...${NC}"
     if ! command_exists node; then
         curl -fsSL https://rpm.nodesource.com/setup_18.x | bash -
         yum install -y nodejs
@@ -158,25 +131,17 @@ install_macos() {
         error_exit "Homebrew n'est pas installé. Installez-le depuis https://brew.sh"
     fi
 
-    echo -e "${YELLOW}[1/5] Installation de Python...${NC}"
+    echo -e "${YELLOW}[1/4] Installation de Python...${NC}"
     brew install python3
 
-    echo -e "${YELLOW}[2/5] Installation de Docker...${NC}"
-    if ! command_exists docker; then
-        brew install --cask docker
-        echo -e "${YELLOW}Veuillez démarrer Docker Desktop manuellement${NC}"
-    else
-        echo -e "${GREEN}Docker est déjà installé${NC}"
-    fi
-
-    echo -e "${YELLOW}[3/5] Installation de Redis...${NC}"
+    echo -e "${YELLOW}[2/4] Installation de Redis...${NC}"
     brew install redis
     brew services start redis
 
-    echo -e "${YELLOW}[4/5] Installation de Git et autres outils...${NC}"
+    echo -e "${YELLOW}[3/4] Installation de Git et autres outils...${NC}"
     brew install git tmux
 
-    echo -e "${YELLOW}[5/5] Installation de Node.js...${NC}"
+    echo -e "${YELLOW}[4/4] Installation de Node.js...${NC}"
     brew install node
 }
 

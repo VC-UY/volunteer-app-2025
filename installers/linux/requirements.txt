@@ -12,7 +12,6 @@ daphne==4.2.0
 Django==5.2.3
 django-restframework==0.0.1
 djangorestframework==3.16.0
-docker==7.1.0
 hyperlink==21.0.0
 idna==3.10
 incremental==24.7.2
