@@ -99,7 +99,7 @@ def build_bundle_from_directory(
 def resolve_task_bundle(task) -> str:
     """
     Localise le bundle manager, sinon en construit un à partir des fichiers
-    téléchargés + task.command (ou docker_information.command en secours).
+    téléchargés + task.command (ou runtime_info.command en secours).
     """
     input_path = getattr(task, "local_input_path", None)
     if not input_path:
@@ -117,9 +117,9 @@ def resolve_task_bundle(task) -> str:
         return bundle
 
     command = getattr(task, "command", None) or ""
-    docker_info = getattr(task, "docker_information", None) or {}
-    if not command and isinstance(docker_info, dict):
-        command = docker_info.get("command") or docker_info.get("cmd") or ""
+    runtime_info = getattr(task, "runtime_info", None) or {}
+    if not command and isinstance(runtime_info, dict):
+        command = runtime_info.get("command") or runtime_info.get("cmd") or ""
     if not command:
         command = "python3 run_simulation.py"
 

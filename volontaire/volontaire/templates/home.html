@@ -1026,9 +1026,11 @@
         type: 'GET',
         success: function(task) {
           // Formatage de l'image Docker
-          var dockerImage = 'N/A';
-          if (task.docker_info) {
-            dockerImage = task.docker_info.image || (task.docker_info.name + ':' + (task.docker_info.tag || 'latest'));
+          var runtimeLabel = 'N/A';
+          if (task.runtime_info) {
+            runtimeLabel = task.runtime_info.runtime
+              || task.runtime_info.image
+              || (task.runtime_info.name ? (task.runtime_info.name + ':' + (task.runtime_info.tag || 'latest')) : 'vc-uyr');
           }
 
           // Formatage des fichiers
@@ -1057,7 +1059,7 @@
                 <div class="task-detail-item"><strong>Priorité:</strong> <span style="color: #94A3B8;">${task.execution_priority || 0}</span></div>
               </div>
               <div class="col-md-6">
-                <div class="task-detail-item"><strong>Image Docker:</strong> <span style="color: #94A3B8;">${dockerImage}</span></div>
+                <div class="task-detail-item"><strong>Runtime:</strong> <span style="color: #94A3B8;">${runtimeLabel}</span></div>
                 <div class="task-detail-item"><strong>Container ID:</strong> <span style="color: #94A3B8; font-size: 0.85rem;">${task.container_id ? task.container_id.substring(0, 12) + '...' : 'N/A'}</span></div>
                 <div class="task-detail-item"><strong>Workflow:</strong> <span style="color: #94A3B8;">${task.workflow_id || 'N/A'}</span></div>
                 <div class="task-detail-item"><strong>Créé le:</strong> <span style="color: #94A3B8;">${task.created_at ? new Date(task.created_at).toLocaleString() : 'N/A'}</span></div>

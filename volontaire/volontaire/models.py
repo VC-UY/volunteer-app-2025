@@ -30,10 +30,10 @@ class MachineInfo(models.Model):
     hostname = models.CharField(max_length=255, default="", help_text="Nom d'hôte de la machine")
     
     # Type de machine
-    machine_type = models.CharField(max_length=50, default="", help_text="Type de machine (Portable, PC de bureau, etc.)")
+    machine_tipe = models.CharField(max_length=50, default="", help_text="Type de machine (Portable, PC de bureau, etc.)")
     
     # Informations sur le processeur
-    cpu_type = models.CharField(max_length=100, default="", help_text="Type de processeur")
+    cpu_modele = models.CharField(max_length=100, default="", help_text="Type de processeur")
     cpu_architecture = models.CharField(max_length=50, default="", help_text="Architecture du processeur")
     cpu_bits = models.CharField(max_length=10, default="", help_text="Nombre de bits du processeur (32-bit, 64-bit)")
     cpu_cores_physical = models.IntegerField(default=1, help_text="Nombre de cœurs physiques")
@@ -77,7 +77,7 @@ class MachineInfo(models.Model):
     raw_data = models.JSONField(default=dict, null=True, blank=True, help_text="Données brutes collectées")
 
     def __str__(self):
-        return f"{self.hostname} ({self.machine_type})"
+        return f"{self.hostname} ({self.machine_tipe})"
 
 # Modèle des informations variables de la machine
 
@@ -174,38 +174,39 @@ class EtatMachine(models.Model):
 
 # --------------------------------------------- Modèle de préférences
 class PreferenceModel(models.Model):
-    # Machine associée
+    # Machine associée (nullable pour permettre la création sans machine)
     machine = models.OneToOneField(MachineInfo, on_delete=models.CASCADE, related_name='preferences', null=True, blank=True)
-
+    
     # Préférences d'utilisation des ressources
     cpu_max_utilisation = models.IntegerField(default=80, help_text="Utilisation maximale du CPU en pourcentage")
     ram_max_utilisation = models.IntegerField(default=80, help_text="Utilisation maximale de la RAM en pourcentage")
     disk_max_utilisation = models.IntegerField(default=90, help_text="Utilisation maximale du disque en pourcentage")
-
+    
     # Préférences de collecte de données
     collection_interval = models.IntegerField(default=60, help_text="Intervalle de collecte des données en secondes")
     send_interval = models.IntegerField(default=300, help_text="Intervalle d'envoi des données en secondes")
-
+    
     # Préférences de disponibilité
     available_hours_start = models.TimeField(null=True, blank=True, help_text="Heure de début de disponibilité")
     available_hours_end = models.TimeField(null=True, blank=True, help_text="Heure de fin de disponibilité")
     available_days = models.JSONField(default=list, help_text="Jours de disponibilité (0-6, 0=lundi)")
-
+    
     # Préférences de notification
     notify_on_task_assignment = models.BooleanField(default=True, help_text="Notifier lors de l'assignation d'une tâche")
     notify_on_resource_threshold = models.BooleanField(default=True, help_text="Notifier lorsqu'un seuil de ressource est atteint")
+    
+    def __str__(self):
+        return f"Préférences pour {self.machine.hostname}"
 
-    # Préférences additionnelles
-    priorite_min_acceptee = models.IntegerField(default=0, help_text="Priorité minimale acceptée pour les tâches")
-    duree_max_execution = models.IntegerField(default=0, help_text="Durée maximale d'exécution en minutes")
-    notification_email = models.BooleanField(default=False, help_text="Activer les notifications par email")
-    pauseActiviteUser = models.BooleanField(default=False, help_text="Pause lors de l'activité utilisateur")
-    playInactiviteUser = models.IntegerField(default=0, help_text="Temps d'inactivité avant reprise (en minutes)")
-    types_calcul_autorises = models.CharField(max_length=100, blank=True, null=True, help_text="Types de calcul autorisés")
+    ram_max_utilisation = models.IntegerField(default=100)
+    priorite_min_acceptee = models.IntegerField(default=0)
+    duree_max_execution = models.IntegerField(default=0)
+    notification_email = models.BooleanField(default=False)
+    pauseActiviteUser = models.BooleanField(default=False)
+    playInactiviteUser = models.IntegerField(default=0)
+    types_calcul_autorises = models.CharField(max_length=100, blank=True, null=True)
 
     def __str__(self):
-        if self.machine:
-            return f"Préférences pour {self.machine.hostname}"
         return f"Préférence #{self.id}"
 
     class Meta:
@@ -295,6 +296,7 @@ class Task(models.Model):
     task_id = models.CharField(max_length=50)
     workflow = models.ForeignKey(Workflow, on_delete=models.CASCADE)
     name = models.CharField(max_length=255)
+    command = models.CharField(max_length=500, null=True, blank=True)
     parameters = models.JSONField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     start_date = models.DateTimeField(null=True, blank=True)
@@ -313,9 +315,9 @@ class Task(models.Model):
     checkpoints = models.JSONField(null=True, blank=True)
     input_data = models.JSONField(null=True, blank=True)
     output_data = models.JSONField(null=True, blank=True)
-    docker_information = models.JSONField(null=True, blank=True)
-    command = models.CharField(max_length=500, null=True, blank=True)
-    # Chemin local des fichiers d'entrée téléchargés (utilisé par resolve_task_bundle)
+    runtime_info = models.JSONField(null=True, blank=True)
+
+    # Chemin local des fichiers d'entrée téléchargés
     local_input_path = models.CharField(max_length=500, null=True, blank=True)
 
     # New field to store Docker container ID

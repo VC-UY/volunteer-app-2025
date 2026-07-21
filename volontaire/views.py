@@ -241,8 +241,8 @@ def home(request):
             100 if task.status in ('completed', 'complete') else 0
         )
         command = getattr(task, 'command', None)
-        if not command and task.docker_information:
-            command = task.docker_information.get('command') or task.docker_information.get('cmd')
+        if not command and task.runtime_info:
+            command = task.runtime_info.get('command') or task.runtime_info.get('cmd')
         if not command and isinstance(task.parameters, dict):
             command = task.parameters.get('command')
         task.command = command or '—'
@@ -276,8 +276,8 @@ def _task_command_and_description(task):
     command = getattr(task, 'command', None)
     description = ''
     params = task.parameters if isinstance(task.parameters, dict) else {}
-    if not command and task.docker_information:
-        command = task.docker_information.get('command', task.docker_information.get('cmd'))
+    if not command and task.runtime_info:
+        command = task.runtime_info.get('command', task.runtime_info.get('cmd'))
     if not command and params:
         command = params.get('command')
     if params:
@@ -406,7 +406,7 @@ def task_details(request, task_id):
             'status': task.status,
             'progress': progress,
             'command': command,
-            'docker_info': task.docker_information,
+            'runtime_info': task.runtime_info,
             'input_files': input_files,
             'output_files': output_files,
             'workflow_id': str(task.workflow.workflow_id) if task.workflow else None,

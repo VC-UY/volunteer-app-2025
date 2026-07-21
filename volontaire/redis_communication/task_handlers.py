@@ -492,8 +492,11 @@ class TaskManager:
                 existing_task.input_data_size = task_data.get(
                     'input_data_size', existing_task.input_data_size or 0
                 )
-                existing_task.docker_information = task_data.get(
-                    'docker_information', existing_task.docker_information or {}
+                existing_task.runtime_info = (
+                    task_data.get('runtime_info')
+                    or task_data.get('docker_information')
+                    or existing_task.runtime_info
+                    or {}
                 )
                 existing_task.end_date = None
                 existing_task.save()
@@ -515,7 +518,11 @@ class TaskManager:
                     input_data=task_data.get('input_data', {}),
                     estimated_execution_time=task_data.get('estimated_execution_time', 0),
                     input_data_size=task_data.get('input_data_size', 0),
-                    docker_information=task_data.get('docker_information', {}),
+                    runtime_info=(
+                        task_data.get('runtime_info')
+                        or task_data.get('docker_information')
+                        or {}
+                    ),
                 )
                 task.save()
 
@@ -1055,12 +1062,12 @@ class TaskManager:
                 logger.warning(f"Échec de la mise à jour des limites pour la tâche {task_id}")
                 return False
 
-            info = task.docker_information or {}
+            info = task.runtime_info or {}
             if cpu_limit is not None:
                 info['cpu_limit'] = cpu_limit
             if memory_limit is not None:
                 info['memory_limit'] = memory_limit
-            task.docker_information = info
+            task.runtime_info = info
             task.save()
             
             # Notifier le frontend de la mise à jour des limites

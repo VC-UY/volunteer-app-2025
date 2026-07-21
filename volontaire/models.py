@@ -315,7 +315,7 @@ class Task(models.Model):
     checkpoints = models.JSONField(null=True, blank=True)
     input_data = models.JSONField(null=True, blank=True)
     output_data = models.JSONField(null=True, blank=True)
-    docker_information = models.JSONField(null=True, blank=True)
+    runtime_info = models.JSONField(null=True, blank=True)
 
     # Chemin local des fichiers d'entrée téléchargés
     local_input_path = models.CharField(max_length=500, null=True, blank=True)
