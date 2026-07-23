@@ -16,6 +16,7 @@ import argparse
 import base64
 import json
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -258,20 +259,26 @@ def _run_task(task_id: str, bundle_bytes: bytes) -> None:
             except OSError:
                 pass
         env = os.environ.copy()
-        # Prefer an interpreter that already has torch (slim app venv often does not).
-        py = (
-            os.environ.get("VCUY_PYTHON")
-            or os.environ.get("RUNTIME_PYTHON")
-            or ""
+        # Slim: toujours préférer le venv app (numpy, etc.).
+        # Override VCUY_PYTHON seulement s'il pointe vers un vrai venv (lab DL / e2e).
+        # Jamais /usr/bin/python3.x (pas de deps Matrix/OpenMalaria).
+        app_py = ""
+        for cand in (
+            Path(__file__).resolve().parent / "venv" / "bin" / "python",
+            Path(__file__).resolve().parent / "venv" / "bin" / "python3",
+        ):
+            if cand.is_file():
+                app_py = str(cand.resolve())
+                break
+        override = (
+            os.environ.get("VCUY_PYTHON") or os.environ.get("RUNTIME_PYTHON") or ""
         ).strip()
-        if not py:
-            for cand in (
-                Path(__file__).resolve().parent / "venv" / "bin" / "python",
-                Path(__file__).resolve().parent / "venv" / "bin" / "python3",
-            ):
-                if cand.is_file():
-                    py = str(cand.resolve())
-                    break
+        if override and Path(override).is_file() and (
+            "/venv/" in override or "runtime-dl-venv" in override or ".vcuy" in override
+        ):
+            py = str(Path(override).resolve())
+        else:
+            py = app_py or (override if override and Path(override).is_file() else "") or sys.executable
         # Cache dataset (rempli à la 1ʳᵉ tâche DL, pas à l'install app).
         cache = (os.environ.get("VCUY_DATASET_CACHE") or "").strip()
         if not cache:
@@ -307,8 +314,11 @@ def _run_task(task_id: str, bundle_bytes: bytes) -> None:
                 env["PATH"] = str(Path(py).parent) + os.pathsep + env.get("PATH", "")
                 try:
                     text = run_sh.read_text(encoding="utf-8", errors="replace")
-                    rewritten = text.replace("${VCUY_PYTHON:-python3}", py)
-                    rewritten = rewritten.replace("python3 ", f"{py} ")
+                    rewritten = re.sub(r"\$\{VCUY_PYTHON:-[^}]+\}", py, text)
+                    # Couvre python3, python3.14, /usr/bin/python3.x
+                    rewritten = re.sub(
+                        r"(?:/usr/bin/)?python3(?:\.\d+)?\b", py, rewritten
+                    )
                     if rewritten != text:
                         run_sh.write_text(rewritten, encoding="utf-8")
                 except Exception:
