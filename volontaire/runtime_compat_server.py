@@ -262,23 +262,31 @@ def _run_task(task_id: str, bundle_bytes: bytes) -> None:
         # Slim: toujours préférer le venv app (numpy, etc.).
         # Override VCUY_PYTHON seulement s'il pointe vers un vrai venv (lab DL / e2e).
         # Jamais /usr/bin/python3.x (pas de deps Matrix/OpenMalaria).
+        # Ne pas Path.resolve() le binaire venv : sur Linux c'est un symlink vers
+        # /usr/bin/python3.x — on perdrait site-packages (numpy, etc.).
         app_py = ""
         for cand in (
             Path(__file__).resolve().parent / "venv" / "bin" / "python",
             Path(__file__).resolve().parent / "venv" / "bin" / "python3",
         ):
             if cand.is_file():
-                app_py = str(cand.resolve())
+                app_py = str(cand.absolute())
                 break
         override = (
             os.environ.get("VCUY_PYTHON") or os.environ.get("RUNTIME_PYTHON") or ""
         ).strip()
         if override and Path(override).is_file() and (
-            "/venv/" in override or "runtime-dl-venv" in override or ".vcuy" in override
+            "/venv/" in override
+            or "runtime-dl-venv" in override
+            or ".vcuy" in override
         ):
-            py = str(Path(override).resolve())
+            py = str(Path(override).absolute())
         else:
-            py = app_py or (override if override and Path(override).is_file() else "") or sys.executable
+            py = (
+                app_py
+                or (str(Path(override).absolute()) if override and Path(override).is_file() else "")
+                or sys.executable
+            )
         # Cache dataset (rempli à la 1ʳᵉ tâche DL, pas à l'install app).
         cache = (os.environ.get("VCUY_DATASET_CACHE") or "").strip()
         if not cache:
@@ -314,10 +322,13 @@ def _run_task(task_id: str, bundle_bytes: bytes) -> None:
                 env["PATH"] = str(Path(py).parent) + os.pathsep + env.get("PATH", "")
                 try:
                     text = run_sh.read_text(encoding="utf-8", errors="replace")
-                    rewritten = re.sub(r"\$\{VCUY_PYTHON:-[^}]+\}", py, text)
-                    # Couvre python3, python3.14, /usr/bin/python3.x
+                    # Remplace le placeholder en entier (évite de matcher
+                    # le "python3" à l'intérieur de ${VCUY_PYTHON:-python3}).
+                    rewritten = re.sub(r"\$\{VCUY_PYTHON:-[^}]*\}", py, text)
                     rewritten = re.sub(
-                        r"(?:/usr/bin/)?python3(?:\.\d+)?\b", py, rewritten
+                        r"(?<!\{)(?<!-)(?:/usr/bin/)?python3(?:\.\d+)?\b",
+                        py,
+                        rewritten,
                     )
                     if rewritten != text:
                         run_sh.write_text(rewritten, encoding="utf-8")
