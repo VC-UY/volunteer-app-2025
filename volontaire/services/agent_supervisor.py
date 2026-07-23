@@ -19,14 +19,39 @@ _started = False
 _lock = threading.Lock()
 
 
+def _find_up(start: Path, marker: str) -> Path | None:
+    cur = start.resolve()
+    for p in [cur, *cur.parents]:
+        if (p / marker).exists():
+            return p
+    return None
+
+
 def _vcuy_root() -> Path:
-    # .../VL/volunteer-app-2025/volontaire/services → VC-UY
+    # Remonte jusqu'à la racine monorepo (présence de .vcuy/ ou MG+VL).
+    here = Path(__file__).resolve().parent
+    found = _find_up(here, ".vcuy")
+    if found:
+        return found
+    # Fallback: .../VC-UY depuis volontaire/services ou volontaire/volontaire/services
+    for depth in (4, 5):
+        try:
+            cand = Path(__file__).resolve().parents[depth]
+            if (cand / "VL").is_dir() or (cand / "MG").is_dir():
+                return cand
+        except IndexError:
+            pass
     return Path(__file__).resolve().parents[4]
 
 
 def _agent_dir() -> Path:
-    # .../volontaire/services → .../volunteer-app-2025/agent
-    return Path(__file__).resolve().parents[2] / "agent"
+    # Remonte jusqu'à volunteer-app-2025/agent/main.py
+    here = Path(__file__).resolve().parent
+    for p in [here, *here.parents]:
+        agent = p / "agent"
+        if (agent / "main.py").is_file():
+            return agent
+    raise FileNotFoundError("dossier agent/ introuvable depuis agent_supervisor")
 
 
 def _pid_file() -> Path:
