@@ -87,7 +87,7 @@ fi
 mv "$SRC" "$APP_DIR"
 
 cd "$APP_DIR/volontaire"
-chmod +x install-volontaire.sh install.sh run.sh install_daemon.sh 2>/dev/null || true
+chmod +x install-volontaire.sh install.sh run.sh install_daemon.sh install_runtime.sh 2>/dev/null || true
 
 echo
 echo "🚀 Lancement de l'installateur..."

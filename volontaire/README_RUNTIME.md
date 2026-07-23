@@ -1,20 +1,32 @@
-# Exécution sans Docker (vc-uyr)
+# Exécution sans Docker — runtime Ashley uniquement (vc-uyr)
 
-Par défaut, l'app démarre un **runtime local compatible** (`runtime_compat_server.py`)
-sur `http://127.0.0.1:7070`. Même API que le binaire Rust Ashley, sans root ni Docker.
+Le binaire isolant `vc-uyr` remplace Docker pour **tous** les workflows.
+Le shim Python `runtime_compat` n’est **plus** utilisé.
 
-## Démarrage
+## Install / démarrage
+
 ```bash
 cd volontaire
-bash start_with_runtime.sh
+./install_runtime.sh
+sudo bash ./install_runtime_system.sh   # OBLIGATOIRE (namespaces root)
+./install_daemon.sh
 ```
 
-## Binaire Rust (optionnel)
+Sans `sudo`, le binaire Ashley crash (`unshare EPERM`). Pas de fallback compat.
+
+Commande volontaire (install complète) :
 ```bash
-USE_RUST_BINARY=1 bash start_with_runtime.sh
+curl -fsSL https://raw.githubusercontent.com/VC-UY/volunteer-app-2025/main/get-volontaire.sh | bash
 ```
-Nécessite souvent `sudo` (namespaces) + le shim auth (`runtime_auth_shim.py`).
+
+## Vérifier
+
+```bash
+curl -s http://127.0.0.1:7070/api/health
+# ne doit PAS contenir "vc-uyr-compat"
+```
 
 ## Contrat tâche
+
 Bundle `.tar.gz` self-contained avec `run.sh` à la racine.
 Env: `vc_INPUT`, `vc_OUTPUT`, `vc_STATE`, `vc_LOGS`, `vc_TASK_ID`.

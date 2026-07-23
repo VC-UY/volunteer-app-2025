@@ -17,7 +17,7 @@ volunteer-app-2025/
 - Python 3.10+
 - Connexion Internet stable
 - 4 Go RAM recommandes
-- **Pas de Docker** — exécution via runtime local `vc-uyr-compat` (léger)
+- **Pas de Docker** — exécution via runtime isolant `vc-uyr` (binaire) ; fallback `vc-uyr-compat` si besoin
 
 > Le volontaire **n'a pas besoin de Git**. L'installation utilise une archive (snapshot), sans historique `.git`.
 > **Pas de PyTorch / CIFAR à l'install** : installés seulement à la 1ʳᵉ tâche `DISTRIBUTED_LEARNING`
