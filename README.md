@@ -34,7 +34,11 @@ curl -fsSL https://raw.githubusercontent.com/VC-UY/volunteer-app-2025/main/get-v
 Cette commande :
 1. telecharge une **archive legere** (pas de clone Git, pas d'historique)
 2. nettoie les binaires inutiles (Windows-only, anciennes collectes)
-3. installe et lance le volontaire automatiquement sous `~/VC-UY/volunteer-app-2025`
+3. installe et lance le volontaire sous `~/VC-UY/volunteer-app-2025`
+4. **Linux** : demarre en arriere-plan via systemd utilisateur (`vc-uy-runtime`, `vc-uy-agent`, `vc-uy-volunteer`) — fermer le terminal OK, relance au reboot
+
+Logs : `~/VC-UY/volunteer-app-2025/volontaire/.volunteer/logs/`  
+Agent : prediction `:7071` + sync snapshots (outbox, retention locale 72 h apres envoi). Predicteur **ARX** par defaut ; hybride ARX+GRU si torch est present.
 
 ### Windows (PowerShell)
 
@@ -42,16 +46,11 @@ Cette commande :
 irm https://raw.githubusercontent.com/VC-UY/volunteer-app-2025/main/get-volontaire.ps1 | iex
 ```
 
-### Linux (mode service/daemon auto-demarrage)
+### Linux — relancer les services (deja installe)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/VC-UY/volunteer-app-2025/main/get-volontaire.sh | bash
-cd ~/VC-UY/volunteer-app-2025 && chmod +x install-volontaire-service.sh && ./install-volontaire-service.sh
+cd ~/VC-UY/volunteer-app-2025/volontaire && ./install_daemon.sh
 ```
-
-Ce mode installe des services systemd (`volunteer` + `volunteer-web`) qui se lancent automatiquement au boot de la machine.
-
-Au demarrage de Daphne (`volunteer-web`), le bridge de telemetrie demarre aussi (`:7071/predict` + sync snapshots vers le site `/donnees`). Predicteur **ARX** par defaut (leger) ; hybride ARX+GRU si torch est deja present.
 
 ### Developpeurs (clone Git — optionnel)
 
@@ -75,13 +74,14 @@ Les volontaires n'ont **rien a configurer**. L'application utilise par defaut :
 
 http://localhost:8003
 
-## Quitter le programme volontaire en une commande (Linux)
+## Quitter le programme volontaire (Linux)
 
 ```bash
-cd volunteer-app-2025 && chmod +x uninstall-volontaire.sh && ./uninstall-volontaire.sh
+systemctl --user disable --now vc-uy-volunteer vc-uy-agent vc-uy-runtime 2>/dev/null
+cd ~/VC-UY/volunteer-app-2025 && chmod +x uninstall-volontaire.sh && ./uninstall-volontaire.sh
 ```
 
-Cette commande arrête les services, les désactive au démarrage et supprime l'installation locale.
+Cela arrete les services systemd, les desactive au demarrage et peut supprimer l'installation locale.
 
 ## Depot
 
