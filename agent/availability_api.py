@@ -56,8 +56,13 @@ def _run_predict() -> dict[str, Any]:
             "hybrid": float(detail.get("hybrid", 0)),
             "launch": bool(detail.get("launch")),
             "horizon_min": int(detail.get("horizon_min") or 15),
+            "model": detail.get("model") or "hybrid_arx_gru",
+            "require_ac": bool(detail.get("require_ac", False)),
+            "chassis": detail.get("chassis") or "",
             "is_available_now": bool(snapshot.get("is_available")),
             "machine_id": collector.get_mac_address(),
+            "power_plugged": bool(snapshot.get("power_plugged", True)),
+            "battery_percent": snapshot.get("battery_percent"),
         }
         return dict(_last_detail)
 
