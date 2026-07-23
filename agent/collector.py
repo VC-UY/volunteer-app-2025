@@ -15,6 +15,55 @@ from collections import deque
 HISTORY_FILE = "collector_history.json"
 PREFERENCES_FILE = "preferences.json"
 
+# Laptop sur batterie = toujours OK sauf batterie vraiment critique.
+# (Débranché ≠ indisponible — flotte VC-UY = surtout des portables.)
+MIN_BATTERY_PERCENT = float(os.environ.get("VC_MIN_BATTERY_PERCENT", "15"))
+
+
+def read_power_state() -> dict:
+    """
+    Chassis + alimentation.
+
+    - has_battery True  → laptop/portable : autonomie autorisée
+    - has_battery False → desktop : pas de contrainte batterie (toujours « secteur »)
+    - outage_active     → uniquement si laptop débranché ET batterie < seuil
+                          (jamais juste parce que le câble est retiré)
+    """
+    power_plugged = True
+    has_battery = False
+    battery_percent = None
+    try:
+        battery = psutil.sensors_battery()
+        if battery is not None:
+            has_battery = True
+            power_plugged = bool(battery.power_plugged)
+            if battery.percent is not None:
+                battery_percent = float(battery.percent)
+    except Exception:
+        pass
+
+    chassis = "laptop" if has_battery else "desktop"
+    # Desktop sans capteur batterie : considéré sur secteur.
+    if not has_battery:
+        power_plugged = True
+
+    critical_battery = (
+        has_battery
+        and not power_plugged
+        and battery_percent is not None
+        and battery_percent < MIN_BATTERY_PERCENT
+    )
+    outage_active = 1 if critical_battery else 0
+
+    return {
+        "power_plugged": power_plugged,
+        "has_battery": has_battery,
+        "battery_percent": battery_percent,
+        "chassis": chassis,
+        "outage_active": outage_active,
+        "require_ac": chassis == "desktop",
+    }
+
 class FeatureEngine:
     def __init__(self):
         # Historique du CPU LIBRE (aligné spec / feature_schema)
@@ -71,14 +120,10 @@ class FeatureEngine:
 
         return avg_1h, avg_6h, avg_24h, std_1h
 
-    def get_outage_stats(self):
-        outage_in_progress = 0
-        try:
-            battery = psutil.sensors_battery()
-            if battery and not battery.power_plugged:
-                outage_in_progress = 1
-        except Exception:
-            pass
+    def get_outage_stats(self, power_state: dict | None = None):
+        """outage = batterie critique (laptop), pas simple débranchement."""
+        state = power_state or read_power_state()
+        outage_in_progress = int(state.get("outage_active") or 0)
 
         now = time.time()
         if outage_in_progress == 1 and not self._prev_outage:
@@ -205,13 +250,14 @@ def get_stats(aggregate=True):
     cpu_free = 100.0 - cpu_percent
     is_conn = 1 if check_connectivity() else 0
     
-    # Dim 16-17: Outage
-    log_h, outage_active = engine.get_outage_stats()
-    
+    # Dim 16-17: Outage (batterie critique seulement — pas le simple débranchement laptop)
+    power_state = read_power_state()
+    log_h, outage_active = engine.get_outage_stats(power_state)
+
     # Dim 18: Preferences
     compat_score = engine.get_compatibility_score(local_now)
 
-    # Disponibilite effective (5 composantes — spec memoire)
+    # Disponibilite : laptop débranché OK si batterie >= seuil ; desktop = pas de gate AC
     is_available = int(
         cpu_percent < 90.0
         and ram.percent < 90.0
@@ -219,21 +265,21 @@ def get_stats(aggregate=True):
         and outage_active == 0
         and compat_score >= 0.5
     )
-    
+
     # 3. Build Result
     return {
         "ts_utc": now.isoformat(),
         "ts_local": local_now.isoformat(),
-        
+
         # --- THE 18 DIMENSIONS ---
         "features": [
-            s_hour, c_hour, s_dow, c_dow, s_dom, c_dom, s_mon, c_mon, # 1-8
-            avg1, avg6, avg24, std1,                                 # 9-12
-            cpu_free, float(ram_available_mb), is_conn,              # 13-15
-            log_h, outage_active,                                    # 16-17
-            compat_score                                             # 18
+            s_hour, c_hour, s_dow, c_dow, s_dom, c_dom, s_mon, c_mon,  # 1-8
+            avg1, avg6, avg24, std1,                                  # 9-12
+            cpu_free, float(ram_available_mb), is_conn,               # 13-15
+            log_h, float(outage_active),                              # 16-17
+            compat_score                                              # 18
         ],
-        
+
         # --- RAW METRICS FOR DATABASE & DASHBOARD ---
         "cpu_percent": cpu_percent,
         "ram_available_mb": ram_available_mb,
@@ -250,7 +296,11 @@ def get_stats(aggregate=True):
         "load_avg_15m": load15,
         "process_count": process_count,
         "is_connected": is_conn == 1,
-        "power_plugged": outage_active == 0,
+        "power_plugged": bool(power_state["power_plugged"]),
+        "has_battery": bool(power_state["has_battery"]),
+        "battery_percent": power_state["battery_percent"],
+        "chassis": power_state["chassis"],
+        "require_ac": bool(power_state["require_ac"]),
         "compat_score": compat_score,
         "is_available": is_available == 1,
         "idle_seconds": get_idle_time()

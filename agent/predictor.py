@@ -295,9 +295,25 @@ class SlidingWindowBuffer:
         return np.stack(rows[-seq_len:])
 
 
-def _fuse_hybrid(p_lin: float, p_gru: float, x_arx: np.ndarray, alpha: float = HYBRID_ALPHA) -> float:
-    """Porte secteur/reseau + melange ARX/GRU (les deux branches toujours utilisees)."""
-    if float(x_arx[6]) < 0.5 or float(x_arx[7]) < 0.5:
+def _fuse_hybrid(
+    p_lin: float,
+    p_gru: float,
+    x_arx: np.ndarray,
+    alpha: float = HYBRID_ALPHA,
+    *,
+    require_ac: bool = False,
+) -> float:
+    """
+    Porte reseau (toujours) + porte secteur seulement pour desktop.
+
+    Laptop débranché : le score hybride n'est PAS forcé à 0 — l'autonomie batterie
+    est normale pour la flotte VC-UY. Le modèle ARX voit encore power_plugged en soft feature.
+    """
+    # index 7 = is_connected
+    if float(x_arx[7]) < 0.5:
+        return 0.0
+    # index 6 = power_plugged — hard gate desktop uniquement
+    if require_ac and float(x_arx[6]) < 0.5:
         return 0.0
     return float(alpha * p_lin + (1.0 - alpha) * p_gru)
 
@@ -423,7 +439,22 @@ class HybridRuntimePredictor:
             else:
                 seq = np.zeros((self.seq_len, 18), dtype=np.float32)
         p_gru = self._gru_proba(seq)
-        p_hybrid = _fuse_hybrid(p_lin, p_gru, x_arx, alpha=self.hybrid_alpha)
+        # Desktop only : require AC. Laptop (has_battery / chassis=laptop) : autonomie OK.
+        chassis = str(snapshot.get("chassis") or "").lower()
+        has_battery = snapshot.get("has_battery")
+        if has_battery is None:
+            # Heuristique si snapshot ancien : power_plugged=False + pas de chassis → laptop
+            require_ac = chassis == "desktop"
+        else:
+            require_ac = bool(snapshot.get("require_ac", chassis == "desktop" or not has_battery))
+        # Env override explicite (tests / lab)
+        env_ac = os.getenv("VC_REQUIRE_AC")
+        if env_ac is not None:
+            require_ac = env_ac.strip() in ("1", "true", "True", "yes")
+
+        p_hybrid = _fuse_hybrid(
+            p_lin, p_gru, x_arx, alpha=self.hybrid_alpha, require_ac=require_ac
+        )
         res = self._resource_summary(snapshot, minutes=15)
 
         return {
@@ -438,6 +469,8 @@ class HybridRuntimePredictor:
             "arx_weights": self.rls.weights_path,
             "gru_checkpoint": self.gru_path,
             "label": "stay_soft_15m",
+            "require_ac": require_ac,
+            "chassis": chassis or ("laptop" if has_battery else "desktop"),
             **res,
         }
 

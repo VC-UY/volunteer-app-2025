@@ -59,7 +59,9 @@ Les deux fichiers sous `models/` sont **obligatoires**. Sans l'un d'eux,
 - **ARX** : logistique frugal, label `stay_soft` (≥ 80 % dispo sur 15 min).
 - **GRU** : séquence temporelle 18D (besoin de PyTorch).
 - **Hybride** : `hybrid = α * ARX + (1-α) * GRU` (défaut α = 0.5),
-  avec porte secteur/réseau (si off → score 0).
+  avec porte **réseau** (si offline → score 0). La porte **secteur** ne s'applique
+  qu'aux **desktops** : un laptop débranché reste prédictible (autonomie batterie).
+  Seule une batterie critique (`VC_MIN_BATTERY_PERCENT`, défaut 15 %) bloque.
 - **`launch`** : `hybrid >= seuil` (défaut ≈ 0.32, lu depuis les poids ARX).
 
 Ce n'est **pas** optionnel : les deux branches doivent tourner.
@@ -104,6 +106,8 @@ predictor.observe(snapshot, y_now)
 | `VC_LAUNCH_THRESHOLD` | depuis poids ARX (~0.32) | Seuil oui/non |
 | `VC_HYBRID_ALPHA` | `0.5` | Poids ARX dans le mélange |
 | `VC_ENABLE_RLS` | `0` | Adaptation locale RLS (désactivée par défaut) |
+| `VC_MIN_BATTERY_PERCENT` | `15` | Sous ce % (laptop débranché) → indisponible |
+| `VC_REQUIRE_AC` | auto | `1` force porte secteur même sur laptop |
 
 ---
 
