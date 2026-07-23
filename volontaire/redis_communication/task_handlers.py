@@ -270,9 +270,11 @@ class TaskManager:
             from .utils import get_volunteer_auth_token
             from preferences_payload import (
                 build_preferences_payload,
+                ensure_default_preferences,
                 is_available_now,
             )
 
+            ensure_default_preferences()
             prefs = build_preferences_payload()
             busy = bool(self.current_task) or self._has_active_tasks()
             available_now = is_available_now(prefs) and not busy

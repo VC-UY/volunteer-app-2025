@@ -934,35 +934,43 @@
         <div class="modal-body">
           <form id="preferenceForm">
             <div class="form-group mb-4">
+              <label class="d-flex align-items-center gap-2" style="cursor:pointer;">
+                <input type="checkbox" id="alwaysAvailable" checked style="width:1.1rem;height:1.1rem;">
+                <span><i class="fas fa-infinity me-2"></i><strong>Toujours disponible</strong> (24h/24, 7j/7) — recommandé</span>
+              </label>
+              <small class="text-muted d-block mt-1">Décochez uniquement si vous voulez limiter les jours / horaires.</small>
+            </div>
+
+            <div class="form-group mb-4" id="scheduleDaysBlock">
               <label><i class="fas fa-calendar-alt me-2"></i>Jours disponibles:</label>
               <div class="days-container">
-                <input type="checkbox" id="day-lundi" class="day-checkbox" value="lundi">
+                <input type="checkbox" id="day-lundi" class="day-checkbox" value="lundi" checked>
                 <label for="day-lundi" class="day-label">Lundi</label>
-                <input type="checkbox" id="day-mardi" class="day-checkbox" value="mardi">
+                <input type="checkbox" id="day-mardi" class="day-checkbox" value="mardi" checked>
                 <label for="day-mardi" class="day-label">Mardi</label>
-                <input type="checkbox" id="day-mercredi" class="day-checkbox" value="mercredi">
+                <input type="checkbox" id="day-mercredi" class="day-checkbox" value="mercredi" checked>
                 <label for="day-mercredi" class="day-label">Mercredi</label>
-                <input type="checkbox" id="day-jeudi" class="day-checkbox" value="jeudi">
+                <input type="checkbox" id="day-jeudi" class="day-checkbox" value="jeudi" checked>
                 <label for="day-jeudi" class="day-label">Jeudi</label>
-                <input type="checkbox" id="day-vendredi" class="day-checkbox" value="vendredi">
+                <input type="checkbox" id="day-vendredi" class="day-checkbox" value="vendredi" checked>
                 <label for="day-vendredi" class="day-label">Vendredi</label>
-                <input type="checkbox" id="day-samedi" class="day-checkbox" value="samedi">
+                <input type="checkbox" id="day-samedi" class="day-checkbox" value="samedi" checked>
                 <label for="day-samedi" class="day-label">Samedi</label>
-                <input type="checkbox" id="day-dimanche" class="day-checkbox" value="dimanche">
+                <input type="checkbox" id="day-dimanche" class="day-checkbox" value="dimanche" checked>
                 <label for="day-dimanche" class="day-label">Dimanche</label>
               </div>
             </div>
             
             <div id="timeSlotsContainer" class="mb-4"></div>
             
-            <div class="form-group time-range mb-4">
+            <div class="form-group time-range mb-4" id="scheduleTimeBlock">
               <div>
                 <label for="startTime"><i class="fas fa-clock me-2"></i>Heure début:</label>
-                <input type="time" id="startTime" value="08:00">
+                <input type="time" id="startTime" value="00:00">
               </div>
               <div>
                 <label for="endTime"><i class="fas fa-clock me-2"></i>Heure fin:</label>
-                <input type="time" id="endTime" value="22:00">
+                <input type="time" id="endTime" value="23:59">
               </div>
             </div>
             
@@ -1482,15 +1490,29 @@
     }
 
     function initPreferenceModalDefaults() {
+      const always = document.getElementById('alwaysAvailable');
+      if (always) always.checked = true;
       document.querySelectorAll('.day-checkbox').forEach(cb => { cb.checked = true; });
-      if (!document.getElementById('startTime').value) {
-        document.getElementById('startTime').value = '08:00';
-      }
-      if (!document.getElementById('endTime').value) {
-        document.getElementById('endTime').value = '22:00';
-      }
+      document.getElementById('startTime').value = '00:00';
+      document.getElementById('endTime').value = '23:59';
+      toggleScheduleBlocks();
       renderTimeSlots();
     }
+
+    function toggleScheduleBlocks() {
+      const always = document.getElementById('alwaysAvailable');
+      const on = always ? always.checked : false;
+      ['scheduleDaysBlock', 'scheduleTimeBlock', 'timeSlotsContainer'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.opacity = on ? '0.45' : '1';
+        if (el) el.style.pointerEvents = on ? 'none' : 'auto';
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const always = document.getElementById('alwaysAvailable');
+      if (always) always.addEventListener('change', toggleScheduleBlocks);
+    });
 
     function addTimeSlot() {
       const startTime = document.getElementById('startTime').value;
@@ -1519,8 +1541,8 @@
       const ram = document.getElementById('ram').value;
       const disk = document.getElementById('disk').value;
       const maxTime = document.getElementById('maxTime').value;
-      const startTime = document.getElementById('startTime').value;
-      const endTime = document.getElementById('endTime').value;
+      const startTime = document.getElementById('startTime').value || '00:00';
+      const endTime = document.getElementById('endTime').value || '23:59';
 
       if (tempTimeSlots.length > 0) {
         return tempTimeSlots.slice();
@@ -1528,7 +1550,7 @@
       if (startTime && endTime && startTime < endTime) {
         return [{ startTime, endTime, cpu, ram, disk, maxTime }];
       }
-      return [];
+      return [{ startTime: '00:00', endTime: '23:59', cpu, ram, disk, maxTime }];
     }
 
     function renderTimeSlots() {
@@ -1536,8 +1558,8 @@
       container.innerHTML = '';
       
       if (tempTimeSlots.length === 0) {
-        const st = document.getElementById('startTime')?.value || '08:00';
-        const et = document.getElementById('endTime')?.value || '22:00';
+        const st = document.getElementById('startTime')?.value || '00:00';
+        const et = document.getElementById('endTime')?.value || '23:59';
         container.innerHTML = '<p style="color: #94A3B8; text-align: center; padding: 1rem;">Aucun créneau ajouté — à l\'enregistrement, le créneau <strong style="color:#00D4FF">' + st + ' – ' + et + '</strong> sera utilisé.</p>';
         return;
       }
@@ -1567,16 +1589,19 @@
     }
 
     function savePreferences() {
+      const alwaysAvailable = !!(document.getElementById('alwaysAvailable') && document.getElementById('alwaysAvailable').checked);
       const selectedDays = Array.from(document.querySelectorAll('.day-checkbox:checked')).map(cb => cb.value.toLowerCase());
       
-      if (selectedDays.length === 0) {
-        showToast('Sélectionnez au moins un jour (Lun–Dim).', false);
+      if (!alwaysAvailable && selectedDays.length === 0) {
+        showToast('Sélectionnez au moins un jour (Lun–Dim), ou cochez « Toujours disponible ».', false);
         return;
       }
 
-      const slots = collectSlotsForSave();
-      if (slots.length === 0) {
-        showToast('Indiquez un créneau horaire valide (ex. 08:00 → 22:00).', false);
+      const slots = alwaysAvailable
+        ? [{ startTime: '00:00', endTime: '23:59', cpu: document.getElementById('cpu').value, ram: document.getElementById('ram').value, disk: document.getElementById('disk').value, maxTime: document.getElementById('maxTime').value }]
+        : collectSlotsForSave();
+      if (!alwaysAvailable && slots.length === 0) {
+        showToast('Indiquez un créneau horaire valide (ex. 00:00 → 23:59).', false);
         return;
       }
 
@@ -1586,8 +1611,11 @@
       const disk = parseInt(document.getElementById('disk').value, 10) || 10;
       const maxTime = parseInt(document.getElementById('maxTime').value, 10) || 0;
       
+      const days = alwaysAvailable
+        ? ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche']
+        : selectedDays;
       const allPrefs = [];
-      selectedDays.forEach(day => {
+      days.forEach(day => {
         slots.forEach(slot => {
           allPrefs.push({
             day,
@@ -1603,6 +1631,7 @@
       
       const payload = {
         preferences: allPrefs,
+        always_available: alwaysAvailable,
         cpu_max_utilisation: cpu,
         max_ram_gb: ram,
         max_disk_gb: disk,
@@ -1657,7 +1686,12 @@
       list.innerHTML = '';
 
       if (!currentPreferences || currentPreferences.length === 0) {
-        list.innerHTML = '<div class="slot-empty">Aucun créneau configuré.<br>Cliquez sur « Configurer préférences ».</div>';
+        list.innerHTML = '<div class="slot-empty">Toujours disponible (24h/24, 7j/7).<br>Cliquez sur « Configurer préférences » pour restreindre.</div>';
+        return;
+      }
+
+      if (currentPreferences.length === 1 && currentPreferences[0].always_available) {
+        list.innerHTML = '<div class="slot-card"><div class="slot-card-top"><span class="slot-day">Toujours</span><span class="slot-time">00:00 – 23:59 · 7j/7</span></div></div>';
         return;
       }
 

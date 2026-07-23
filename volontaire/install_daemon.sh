@@ -23,6 +23,10 @@ if [[ ! -x "$PY" ]]; then
   echo "❌ venv introuvable. Lancez d'abord ./install.sh"
   exit 1
 fi
+
+# Seed default prefs (24/7) so machines receive tasks without schedule setup
+mkdir -p "$BASE/.volunteer"
+(cd "$BASE" && "$PY" -c "from preferences_payload import ensure_default_preferences; ensure_default_preferences()") || true
 if [[ ! -x "$DAPHNE" ]]; then
   "$PY" -m pip install -q daphne channels
 fi

@@ -43,6 +43,10 @@ source venv/bin/activate
 
 mkdir -p .volunteer/tasks .volunteer/temp_data
 
+# Seed default prefs (24/7) so machines receive tasks without schedule setup
+mkdir -p .volunteer
+python -c "from preferences_payload import ensure_default_preferences; ensure_default_preferences()" || true
+
 # --- Dépendances Python (requirements à la racine du repo ou local) ---
 echo "📦 Installation des dépendances Python..."
 pip install --upgrade pip -q

@@ -738,7 +738,7 @@
         </div>
 
         <div class="d-flex align-items-center flex-wrap gap-2 mb-3">
-          <h4 class="me-auto mb-0"><i class="fas fa-tasks me-2"></i>Tâches</h4>
+          <h4 class="me-auto mb-0"><i class="fas fa-diagram-project me-2"></i>Workflows & Tâches</h4>
           <button type="button" class="filter-btn active" data-filter="all">Toutes</button>
           <button type="button" class="filter-btn" data-filter="running">En cours</button>
           <button type="button" class="filter-btn" data-filter="pending">Attente</button>
@@ -747,8 +747,10 @@
           <input type="text" id="search-task" class="form-control" style="max-width:220px;background:rgba(15,23,42,.5);border:1px solid rgba(0,180,240,.3);color:#fff;" placeholder="Rechercher…">
           <button type="button" class="btn btn-outline-light btn-sm" onclick="reloadTasks()" title="Actualiser"><i class="fa fa-sync"></i></button>
         </div>
-        
-        <div class="table-responsive">
+
+        <div id="workflow-board"></div>
+
+        <div class="table-responsive d-none">
           <table class="table align-middle" id="tasks-table">
             <thead>
               <tr>
@@ -794,6 +796,28 @@
           </table>
         </div>
       </main>
+    </div>
+  </div>
+
+  <!-- Modal Info Workflow -->
+  <div class="modal fade" id="workflowInfoModal" tabindex="-1" aria-labelledby="workflowInfoModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content" style="background: linear-gradient(180deg, #0A1929 0%, #0D1F2D 100%); border: 1px solid rgba(0, 180, 240, 0.3); color: #FFFFFF;">
+        <div class="modal-header" style="border-bottom: 1px solid rgba(0, 180, 240, 0.2);">
+          <h5 class="modal-title" id="workflowInfoModalLabel" style="color: #00D4FF;">
+            <i class="fas fa-diagram-project me-2"></i>Workflow
+          </h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body" id="workflowInfoContent" style="padding: 1.5rem;">
+          <div class="text-center py-4">
+            <i class="fas fa-spinner fa-spin fa-2x" style="color: #00B0F0;"></i>
+          </div>
+        </div>
+        <div class="modal-footer" style="border-top: 1px solid rgba(0, 180, 240, 0.2);">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+        </div>
+      </div>
     </div>
   </div>
   
@@ -857,6 +881,44 @@
       background: linear-gradient(135deg, #9CA3AF, #6B7280) !important;
       color: #FFF;
     }
+    .workflow-card {
+      background: rgba(15, 23, 42, 0.55);
+      border: 1px solid rgba(0, 180, 240, 0.25);
+      border-radius: 12px;
+      margin-bottom: 1rem;
+      overflow: hidden;
+    }
+    .workflow-card-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.9rem 1rem;
+      background: rgba(0, 176, 240, 0.12);
+      border-bottom: 1px solid rgba(0, 180, 240, 0.15);
+    }
+    .workflow-card-header h5 {
+      margin: 0;
+      color: #7DD3FC;
+      font-size: 1rem;
+      font-weight: 700;
+    }
+    .workflow-card-meta {
+      color: #94A3B8;
+      font-size: 0.8rem;
+    }
+    .workflow-task-table {
+      margin: 0;
+      color: #fff;
+    }
+    .workflow-task-table th {
+      color: #7DD3FC;
+      font-size: 0.8rem;
+      border-color: rgba(0, 180, 240, 0.1);
+    }
+    .workflow-task-table td {
+      border-color: rgba(0, 180, 240, 0.08);
+      vertical-align: middle;
+    }
   </style>
 
   <!-- Modal Préférences -->
@@ -872,35 +934,43 @@
         <div class="modal-body">
           <form id="preferenceForm">
             <div class="form-group mb-4">
+              <label class="d-flex align-items-center gap-2" style="cursor:pointer;">
+                <input type="checkbox" id="alwaysAvailable" checked style="width:1.1rem;height:1.1rem;">
+                <span><i class="fas fa-infinity me-2"></i><strong>Toujours disponible</strong> (24h/24, 7j/7) — recommandé</span>
+              </label>
+              <small class="text-muted d-block mt-1">Décochez uniquement si vous voulez limiter les jours / horaires.</small>
+            </div>
+
+            <div class="form-group mb-4" id="scheduleDaysBlock">
               <label><i class="fas fa-calendar-alt me-2"></i>Jours disponibles:</label>
               <div class="days-container">
-                <input type="checkbox" id="day-lundi" class="day-checkbox" value="lundi">
+                <input type="checkbox" id="day-lundi" class="day-checkbox" value="lundi" checked>
                 <label for="day-lundi" class="day-label">Lundi</label>
-                <input type="checkbox" id="day-mardi" class="day-checkbox" value="mardi">
+                <input type="checkbox" id="day-mardi" class="day-checkbox" value="mardi" checked>
                 <label for="day-mardi" class="day-label">Mardi</label>
-                <input type="checkbox" id="day-mercredi" class="day-checkbox" value="mercredi">
+                <input type="checkbox" id="day-mercredi" class="day-checkbox" value="mercredi" checked>
                 <label for="day-mercredi" class="day-label">Mercredi</label>
-                <input type="checkbox" id="day-jeudi" class="day-checkbox" value="jeudi">
+                <input type="checkbox" id="day-jeudi" class="day-checkbox" value="jeudi" checked>
                 <label for="day-jeudi" class="day-label">Jeudi</label>
-                <input type="checkbox" id="day-vendredi" class="day-checkbox" value="vendredi">
+                <input type="checkbox" id="day-vendredi" class="day-checkbox" value="vendredi" checked>
                 <label for="day-vendredi" class="day-label">Vendredi</label>
-                <input type="checkbox" id="day-samedi" class="day-checkbox" value="samedi">
+                <input type="checkbox" id="day-samedi" class="day-checkbox" value="samedi" checked>
                 <label for="day-samedi" class="day-label">Samedi</label>
-                <input type="checkbox" id="day-dimanche" class="day-checkbox" value="dimanche">
+                <input type="checkbox" id="day-dimanche" class="day-checkbox" value="dimanche" checked>
                 <label for="day-dimanche" class="day-label">Dimanche</label>
               </div>
             </div>
             
             <div id="timeSlotsContainer" class="mb-4"></div>
             
-            <div class="form-group time-range mb-4">
+            <div class="form-group time-range mb-4" id="scheduleTimeBlock">
               <div>
                 <label for="startTime"><i class="fas fa-clock me-2"></i>Heure début:</label>
-                <input type="time" id="startTime" value="08:00">
+                <input type="time" id="startTime" value="00:00">
               </div>
               <div>
                 <label for="endTime"><i class="fas fa-clock me-2"></i>Heure fin:</label>
-                <input type="time" id="endTime" value="22:00">
+                <input type="time" id="endTime" value="23:59">
               </div>
             </div>
             
@@ -957,14 +1027,117 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
   <script>
-    // Recherche tâche
-    $('#search-task').on('keyup', function() {
-      var value = $(this).val().toLowerCase();
-      $('#tasks-table tbody tr').filter(function() {
-        $(this).toggle($(this).text().toLowerCase().indexOf(value) > -1)
-      });
+    // Recherche et filtres (workflow board)
+    function normStatus(s) { return (s || '').toLowerCase(); }
+    function isRunningSt(s) { return ['running','progress','started','in_progress'].includes(normStatus(s)); }
+    function isPausedSt(s) { return ['paused','pause'].includes(normStatus(s)); }
+    function isStartableSt(s) { return ['pending','queued','assigned','created','accepted','paused','pause'].includes(normStatus(s)); }
+    function isStoppableSt(s) {
+      return ['running','progress','started','in_progress','paused','pause','pending','queued','assigned','created','accepted'].includes(normStatus(s));
+    }
+    function isFinishedSt(s) {
+      return ['completed','complete','failed','error','terminate','stopped','cancelled','canceled'].includes(normStatus(s));
+    }
+    function filterCategory(s) {
+      const st = normStatus(s);
+      if (isRunningSt(st)) return 'running';
+      if (['pending','queued','assigned','created','accepted'].includes(st)) return 'pending';
+      if (['completed','complete'].includes(st)) return 'completed';
+      if (['failed','error','terminate','stopped'].includes(st)) return 'failed';
+      return 'pending';
+    }
+
+    function renderActionButtons(task) {
+      const tid = task.task_id || task.id;
+      const st = task.status;
+      return `
+        <button class="btn btn-sm btn-warning pause-btn me-1" data-task-id="${tid}" ${!isRunningSt(st) ? 'disabled' : ''} title="Pause"><i class="fa fa-pause"></i></button>
+        <button class="btn btn-sm btn-success resume-btn me-1" data-task-id="${tid}" ${!isStartableSt(st) ? 'disabled' : ''} title="Reprendre"><i class="fa fa-play"></i></button>
+        <button class="btn btn-sm btn-danger stop-btn" data-task-id="${tid}" ${!isStoppableSt(st) ? 'disabled' : ''} title="Arrêter"><i class="fa fa-stop"></i></button>
+        <button class="btn btn-sm btn-info details-btn ms-1" data-task-id="${tid}" title="Détails"><i class="fa fa-info"></i></button>`;
+    }
+
+    function renderWorkflowBoard(workflows) {
+      const board = $('#workflow-board');
+      if (!workflows || !workflows.length) {
+        board.html('<div class="text-center py-4" style="color:#00B0F0;"><i class="fas fa-inbox fa-3x mb-3" style="opacity:.5;"></i><div>Aucun workflow pour le moment</div></div>');
+        return;
+      }
+      const html = workflows.map(wf => {
+        const counts = wf.task_counts || {};
+        const tasksHtml = (wf.tasks || []).map(t => `
+          <tr data-task-id="${t.task_id || t.id}" data-status="${normStatus(t.status)}" data-name="${(t.name||'').toLowerCase()}">
+            <td style="color:#00D4FF;font-weight:600;">
+              <div>${t.name || '—'}</div>
+              ${t.description ? `<div style="font-size:.75rem;color:#94A3B8;">${t.description}</div>` : ''}
+            </td>
+            <td style="color:#94A3B8;font-size:.85rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${t.command||''}">${(t.command||'—').substring(0,40)}</td>
+            <td><span class="badge badge-${t.status}">${statusLabel(t.status)}</span></td>
+            <td>
+              <div class="d-flex align-items-center">
+                <div class="progress me-2" style="width:80px;height:8px;background:rgba(0,180,240,.2);border-radius:4px;">
+                  <div class="progress-bar" style="width:${t.progress||0}%;background:linear-gradient(90deg,#00B0F0,#00D4FF);"></div>
+                </div>
+                <span>${t.progress||0}%</span>
+              </div>
+            </td>
+            <td>${renderActionButtons(t)}</td>
+          </tr>`).join('');
+        return `
+          <div class="workflow-card" data-workflow-id="${wf.workflow_id}">
+            <div class="workflow-card-header">
+              <div class="flex-grow-1">
+                <h5><i class="fa fa-diagram-project me-2"></i>${wf.name || 'Workflow'}</h5>
+                <div class="workflow-card-meta">${counts.total||0} tâche(s) · ${counts.running||0} en cours · ${counts.pending||0} en attente</div>
+              </div>
+              <button class="btn btn-sm btn-info workflow-info-btn" data-workflow-id="${wf.workflow_id}" title="Infos workflow">
+                <i class="fa fa-info-circle me-1"></i>Workflow
+              </button>
+            </div>
+            <div class="table-responsive">
+              <table class="table table-sm workflow-task-table mb-0">
+                <thead><tr><th>Tâche</th><th>Commande</th><th>Statut</th><th>Progression</th><th>Actions</th></tr></thead>
+                <tbody>${tasksHtml || '<tr><td colspan="5" class="text-center text-muted py-3">Aucune tâche</td></tr>'}</tbody>
+              </table>
+            </div>
+          </div>`;
+      }).join('');
+      board.html(html);
+    }
+
+    function showWorkflowInfo(workflowId) {
+      const modal = new bootstrap.Modal(document.getElementById('workflowInfoModal'));
+      $('#workflowInfoContent').html('<div class="text-center py-4"><i class="fas fa-spinner fa-spin fa-2x" style="color:#00B0F0;"></i></div>');
+      modal.show();
+      $.get('/api/workflow/' + workflowId + '/')
+        .done(function(wf) {
+          $('#workflowInfoModalLabel').html('<i class="fas fa-diagram-project me-2"></i>' + (wf.name || 'Workflow'));
+          const tasksList = (wf.tasks || []).map(t =>
+            '<li class="mb-2"><strong>' + t.name + '</strong> — <span class="badge badge-' + t.status + '">' + statusLabel(t.status) + '</span> <span class="text-muted">' + (t.progress||0) + '%</span></li>'
+          ).join('');
+          $('#workflowInfoContent').html(`
+            <div class="mb-3"><h6 style="color:#7DD3FC;">Description</h6>
+              <p style="color:#CBD5E1;">${wf.description || 'Aucune description disponible pour ce workflow.'}</p>
+            </div>
+            <div class="row mb-3">
+              <div class="col-md-6"><small class="text-muted">ID</small><br><code style="color:#94A3B8;">${wf.workflow_id}</code></div>
+              <div class="col-md-6"><small class="text-muted">Statut</small><br>${wf.active ? '<span class="badge bg-success">Actif</span>' : '<span class="badge bg-secondary">Inactif</span>'}</div>
+            </div>
+            <div><h6 style="color:#7DD3FC;">Tâches (${(wf.tasks||[]).length})</h6>
+              <ul class="list-unstyled">${tasksList || '<li class="text-muted">Aucune tâche</li>'}</ul>
+            </div>`);
+        })
+        .fail(function(xhr) {
+          let msg = 'Erreur chargement workflow';
+          try { msg = JSON.parse(xhr.responseText).error || msg; } catch(e) {}
+          $('#workflowInfoContent').html('<div class="alert alert-danger">' + msg + '</div>');
+        });
+    }
+
+    $(document).on('click', '.workflow-info-btn', function() {
+      showWorkflowInfo($(this).data('workflow-id'));
     });
-    
+
     // Actions tâches
     function sendTaskAction(taskId, action) {
       var csrftoken = getCookie('csrftoken');
@@ -974,58 +1147,49 @@
         headers: {'X-CSRFToken': csrftoken},
         success: function(data) {
           Toastify({
-            text: 'Action réussie',
+            text: data.message || 'Action réussie',
             duration: 2000,
             gravity: 'top',
             position: 'right',
-            style: {
-              background: 'linear-gradient(135deg, rgba(0, 255, 136, 0.9) 0%, rgba(0, 200, 100, 0.9) 100%)',
-            }
+            style: { background: 'linear-gradient(135deg, rgba(0, 255, 136, 0.9) 0%, rgba(0, 200, 100, 0.9) 100%)' }
           }).showToast();
-          // Recharger les tâches après l'action
-          setTimeout(reloadTasks, 500);
+          setTimeout(reloadTasks, 400);
         },
         error: function(xhr) {
+          var msg = 'Erreur inconnue';
+          try { msg = JSON.parse(xhr.responseText).error || xhr.responseText; } catch(e) { msg = xhr.responseText || msg; }
           Toastify({
-            text: 'Erreur: ' + xhr.responseText,
-            duration: 3000,
+            text: 'Erreur: ' + msg,
+            duration: 3500,
             gravity: 'top',
             position: 'right',
-            style: {
-              background: 'linear-gradient(135deg, rgba(220, 38, 38, 0.9) 0%, rgba(185, 28, 28, 0.9) 100%)',
-            }
+            style: { background: 'linear-gradient(135deg, rgba(220, 38, 38, 0.9) 0%, rgba(185, 28, 28, 0.9) 100%)' }
           }).showToast();
         }
       });
     }
-    
-    // Confirmation et actions
-    $('#tasks-table').on('click', '.pause-btn', function() {
-      var row = $(this).closest('tr');
-      var taskId = row.data('task-id');
+
+    $(document).on('click', '.pause-btn:not(:disabled)', function() {
+      var taskId = $(this).data('task-id') || $(this).closest('tr').data('task-id');
       if (confirm('Mettre en pause cette tâche ?')) sendTaskAction(taskId, 'pause');
     });
-    
-    $('#tasks-table').on('click', '.resume-btn', function() {
-      var row = $(this).closest('tr');
-      var taskId = row.data('task-id');
-      if (confirm('Reprendre cette tâche ?')) sendTaskAction(taskId, 'resume');
+    $(document).on('click', '.resume-btn:not(:disabled)', function() {
+      var taskId = $(this).data('task-id') || $(this).closest('tr').data('task-id');
+      if (confirm('Reprendre / démarrer cette tâche ?')) sendTaskAction(taskId, 'resume');
     });
-    
-    $('#tasks-table').on('click', '.stop-btn', function() {
-      var row = $(this).closest('tr');
-      var taskId = row.data('task-id');
+    $(document).on('click', '.stop-btn:not(:disabled)', function() {
+      var taskId = $(this).data('task-id') || $(this).closest('tr').data('task-id');
       if (confirm('Arrêter cette tâche ?')) sendTaskAction(taskId, 'stop');
     });
 
     // Gestionnaire pour le bouton détails
-    $('#tasks-table').on('click', '.details-btn', function() {
+    $(document).on('click', '.details-btn', function() {
       var taskId = $(this).data('task-id');
       $.ajax({
         url: '/api/task/' + taskId + '/details/',
         type: 'GET',
         success: function(task) {
-          // Formatage de l'image Docker
+          // Runtime d'exécution (vc-uyr)
           var runtimeLabel = 'N/A';
           if (task.runtime_info) {
             runtimeLabel = task.runtime_info.runtime
@@ -1061,7 +1225,9 @@
               <div class="col-md-6">
                 <div class="task-detail-item"><strong>Runtime:</strong> <span style="color: #94A3B8;">${runtimeLabel}</span></div>
                 <div class="task-detail-item"><strong>Container ID:</strong> <span style="color: #94A3B8; font-size: 0.85rem;">${task.container_id ? task.container_id.substring(0, 12) + '...' : 'N/A'}</span></div>
-                <div class="task-detail-item"><strong>Workflow:</strong> <span style="color: #94A3B8;">${task.workflow_id || 'N/A'}</span></div>
+                <div class="task-detail-item"><strong>Workflow:</strong> <span style="color: #94A3B8;">${task.workflow_name || task.workflow_id || 'N/A'}</span></div>
+                ${task.workflow_description ? `<div class="task-detail-item"><strong>Description workflow:</strong> <span style="color: #94A3B8;">${task.workflow_description}</span></div>` : ''}
+                ${task.description ? `<div class="task-detail-item"><strong>Description:</strong> <span style="color: #94A3B8;">${task.description}</span></div>` : ''}
                 <div class="task-detail-item"><strong>Créé le:</strong> <span style="color: #94A3B8;">${task.created_at ? new Date(task.created_at).toLocaleString() : 'N/A'}</span></div>
                 <div class="task-detail-item"><strong>Terminé le:</strong> <span style="color: #94A3B8;">${task.end_date ? new Date(task.end_date).toLocaleString() : 'En cours'}</span></div>
               </div>
@@ -1116,17 +1282,21 @@
 
     function applyTaskFilter() {
       const q = ($('#search-task').val() || '').toLowerCase();
-      $('#tasks-table-body tr').each(function() {
-        if ($(this).hasClass('empty-row')) return;
-        const st = ($(this).data('status') || '').toLowerCase();
-        const text = $(this).text().toLowerCase();
-        let show = true;
-        if (currentFilter === 'running') show = ['running', 'progress', 'started', 'in_progress'].includes(st);
-        else if (currentFilter === 'pending') show = ['pending', 'queued', 'assigned', 'created', 'accepted'].includes(st);
-        else if (currentFilter === 'completed') show = ['completed', 'complete'].includes(st);
-        else if (currentFilter === 'failed') show = ['failed', 'error', 'terminate', 'stopped'].includes(st);
-        if (q && text.indexOf(q) === -1) show = false;
-        $(this).toggle(show);
+      $('#workflow-board .workflow-card').each(function() {
+        let anyVisible = false;
+        $(this).find('tbody tr').each(function() {
+          const st = normStatus($(this).data('status'));
+          const text = $(this).text().toLowerCase();
+          let show = true;
+          if (currentFilter === 'running') show = isRunningSt(st);
+          else if (currentFilter === 'pending') show = ['pending','queued','assigned','created','accepted'].includes(st);
+          else if (currentFilter === 'completed') show = ['completed','complete'].includes(st);
+          else if (currentFilter === 'failed') show = ['failed','error','terminate','stopped'].includes(st);
+          if (q && text.indexOf(q) === -1) show = false;
+          $(this).toggle(show);
+          if (show) anyVisible = true;
+        });
+        $(this).toggle(anyVisible);
       });
     }
 
@@ -1140,70 +1310,46 @@
 
     const reloadTasks = () => {
       $.ajax({
-        url: '/tasks/',
+        url: '/api/workflows/',
         type: 'GET',
-        success: function(data) {
-          var tbody = $('#tasks-table-body');
-          tbody.empty();
-          updateStats(data);
-          if (!data || data.length === 0) {
-            tbody.append('<tr class="empty-row"><td colspan="5" class="text-center" style="color: #00B0F0; padding: 2rem;"><i class="fas fa-inbox fa-3x mb-3" style="opacity: 0.5;"></i><div>Aucune tâche reçue</div></td></tr>');
-          } else {
-            const sortedTasks = [...data].sort((a, b) => {
-              const wa = (a.workflow_name || a.workflow_id || '').toLowerCase();
-              const wb = (b.workflow_name || b.workflow_id || '').toLowerCase();
-              if (wa !== wb) return wa.localeCompare(wb);
-              return String(a.task_id || '').localeCompare(String(b.task_id || ''));
-            });
-            let currentWorkflowGroup = null;
-            sortedTasks.forEach(task => {
-              const taskId = task.task_id || task.id;
-              const st = (task.status || '').toLowerCase();
-              const isRunning = st === 'running' || st === 'progress' || st === 'started';
-              const isPaused = st === 'paused';
-              const isFinished = ['completed', 'complete', 'failed', 'terminate', 'error', 'stopped'].includes(st);
-              const prog = task.progress || 0;
-              const workflowLabel = task.workflow_name || task.workflow_id || 'Workflow inconnu';
-              if (workflowLabel !== currentWorkflowGroup) {
-                currentWorkflowGroup = workflowLabel;
-                tbody.append(`
-                  <tr class="workflow-group-row" style="background: rgba(0, 176, 240, 0.15);">
-                    <td colspan="5" style="color: #7DD3FC; font-weight: 700;">
-                      <i class="fa fa-diagram-project me-2"></i>${workflowLabel}
-                    </td>
-                  </tr>
-                `);
-              }
-              tbody.append(`
-                <tr data-task-id="${taskId}" data-status="${st}" style="color: #FFFFFF !important;">
-                  <td style="color: #00D4FF; font-weight: 600;">
-                    <div>${task.name || '—'}</div>
-                    <div style="font-size: 0.75rem; color: #94A3B8;">${workflowLabel}</div>
-                  </td>
-                  <td style="color: #94A3B8; font-size: 0.85rem; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${task.command || ''}">${(task.command || '—').substring(0, 40)}</td>
-                  <td><span class="badge badge-${task.status}" id="status-${taskId}">${statusLabel(task.status)}</span></td>
-                  <td style="color: #FFFFFF;">
-                    <div class="d-flex align-items-center">
-                      <div class="progress me-2" style="width: 80px; height: 8px; background: rgba(0, 180, 240, 0.2); border-radius: 4px;">
-                        <div class="progress-bar" role="progressbar" style="width: ${prog}%; background: linear-gradient(90deg, #00B0F0, #00D4FF);" id="progress-bar-${taskId}"></div>
-                      </div>
-                      <span id="progress-${taskId}">${prog}%</span>
-                    </div>
-                  </td>
-                  <td>
-                    <button class="btn btn-sm btn-warning pause-btn me-1" ${!isRunning ? 'disabled' : ''} title="Pause"><i class="fa fa-pause"></i></button>
-                    <button class="btn btn-sm btn-success resume-btn me-1" ${!isPaused ? 'disabled' : ''} title="Reprendre"><i class="fa fa-play"></i></button>
-                    <button class="btn btn-sm btn-danger stop-btn" ${isFinished ? 'disabled' : ''} title="Arrêter"><i class="fa fa-stop"></i></button>
-                    <button class="btn btn-sm btn-info details-btn ms-1" data-task-id="${taskId}" title="Détails"><i class="fa fa-info"></i></button>
-                  </td>
-                </tr>
-              `);
-            });
-          }
+        success: function(workflows) {
+          const flat = [];
+          (workflows || []).forEach(wf => (wf.tasks || []).forEach(t => flat.push({...t, workflow_name: wf.name})));
+          updateStats(flat);
+          renderWorkflowBoard(workflows);
           applyTaskFilter();
         },
-        error: function(xhr) {
-          console.error('Erreur lors du chargement des tâches:', xhr);
+        error: function() {
+          $.ajax({
+            url: '/tasks/',
+            type: 'GET',
+            success: function(data) {
+              updateStats(data);
+              const grouped = {};
+              (data || []).forEach(t => {
+                const wid = t.workflow_id || 'unknown';
+                if (!grouped[wid]) {
+                  grouped[wid] = {
+                    workflow_id: wid,
+                    name: t.workflow_name || 'Workflow',
+                    description: t.workflow_description || '',
+                    task_counts: { total: 0, running: 0, pending: 0, completed: 0, failed: 0 },
+                    tasks: []
+                  };
+                }
+                const g = grouped[wid];
+                g.task_counts.total++;
+                const cat = filterCategory(t.status);
+                if (cat === 'running') g.task_counts.running++;
+                else if (cat === 'pending') g.task_counts.pending++;
+                else if (cat === 'completed') g.task_counts.completed++;
+                else g.task_counts.failed++;
+                g.tasks.push(t);
+              });
+              renderWorkflowBoard(Object.values(grouped));
+              applyTaskFilter();
+            }
+          });
         }
       });
     };
@@ -1242,36 +1388,9 @@
         }
 
         const payload = data.data || {};
-        if (type === 'send_task_progress' || type === 'send_task_update' || type === 'send_task_status_change') {
-          const taskId = payload.task_id;
-          if (!taskId) { reloadTasks(); return; }
-          var row = $('#tasks-table-body tr[data-task-id="' + taskId + '"]');
-          if (row.length === 0) {
-            reloadTasks();
-            return;
-          }
-          const st = (payload.status || '').toLowerCase();
-          row.attr('data-status', st);
-          row.find('span[id^="status-"]').text(statusLabel(payload.status)).attr('class', 'badge badge-' + payload.status);
-          if (payload.progress !== undefined) {
-            const p = payload.progress;
-            row.find('span[id^="progress-"]').text(p + '%');
-            row.find('.progress-bar').css('width', p + '%');
-          }
-          if (st === 'complete' || st === 'completed') {
-            row.find('span[id^="progress-"]').text('100%');
-            row.find('.progress-bar').css('width', '100%');
-          }
-          const isRunning = ['running', 'progress', 'started'].includes(st);
-          const isPaused = st === 'paused';
-          const isFinished = ['failed', 'complete', 'completed', 'terminate', 'error', 'stopped'].includes(st);
-          row.find('.pause-btn').prop('disabled', !isRunning);
-          row.find('.resume-btn').prop('disabled', !isPaused);
-          row.find('.stop-btn').prop('disabled', isFinished);
+        if (type === 'send_task_progress' || type === 'send_task_update' || type === 'send_task_status_change' || type === 'send_add_task' || type === 'send_task_deleted') {
           reloadTasks();
-        } else if (type === 'send_add_task') {
-          reloadTasks();
-          if (payload.name) {
+          if (type === 'send_add_task' && payload.name) {
             Toastify({
               text: 'Nouvelle tâche: ' + payload.name,
               duration: 2500,
@@ -1282,8 +1401,6 @@
               }
             }).showToast();
           }
-        } else if (type === 'send_task_deleted') {
-          reloadTasks();
         }
       };
 
@@ -1373,15 +1490,29 @@
     }
 
     function initPreferenceModalDefaults() {
+      const always = document.getElementById('alwaysAvailable');
+      if (always) always.checked = true;
       document.querySelectorAll('.day-checkbox').forEach(cb => { cb.checked = true; });
-      if (!document.getElementById('startTime').value) {
-        document.getElementById('startTime').value = '08:00';
-      }
-      if (!document.getElementById('endTime').value) {
-        document.getElementById('endTime').value = '22:00';
-      }
+      document.getElementById('startTime').value = '00:00';
+      document.getElementById('endTime').value = '23:59';
+      toggleScheduleBlocks();
       renderTimeSlots();
     }
+
+    function toggleScheduleBlocks() {
+      const always = document.getElementById('alwaysAvailable');
+      const on = always ? always.checked : false;
+      ['scheduleDaysBlock', 'scheduleTimeBlock', 'timeSlotsContainer'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.opacity = on ? '0.45' : '1';
+        if (el) el.style.pointerEvents = on ? 'none' : 'auto';
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const always = document.getElementById('alwaysAvailable');
+      if (always) always.addEventListener('change', toggleScheduleBlocks);
+    });
 
     function addTimeSlot() {
       const startTime = document.getElementById('startTime').value;
@@ -1410,8 +1541,8 @@
       const ram = document.getElementById('ram').value;
       const disk = document.getElementById('disk').value;
       const maxTime = document.getElementById('maxTime').value;
-      const startTime = document.getElementById('startTime').value;
-      const endTime = document.getElementById('endTime').value;
+      const startTime = document.getElementById('startTime').value || '00:00';
+      const endTime = document.getElementById('endTime').value || '23:59';
 
       if (tempTimeSlots.length > 0) {
         return tempTimeSlots.slice();
@@ -1419,7 +1550,7 @@
       if (startTime && endTime && startTime < endTime) {
         return [{ startTime, endTime, cpu, ram, disk, maxTime }];
       }
-      return [];
+      return [{ startTime: '00:00', endTime: '23:59', cpu, ram, disk, maxTime }];
     }
 
     function renderTimeSlots() {
@@ -1427,8 +1558,8 @@
       container.innerHTML = '';
       
       if (tempTimeSlots.length === 0) {
-        const st = document.getElementById('startTime')?.value || '08:00';
-        const et = document.getElementById('endTime')?.value || '22:00';
+        const st = document.getElementById('startTime')?.value || '00:00';
+        const et = document.getElementById('endTime')?.value || '23:59';
         container.innerHTML = '<p style="color: #94A3B8; text-align: center; padding: 1rem;">Aucun créneau ajouté — à l\'enregistrement, le créneau <strong style="color:#00D4FF">' + st + ' – ' + et + '</strong> sera utilisé.</p>';
         return;
       }
@@ -1458,16 +1589,19 @@
     }
 
     function savePreferences() {
+      const alwaysAvailable = !!(document.getElementById('alwaysAvailable') && document.getElementById('alwaysAvailable').checked);
       const selectedDays = Array.from(document.querySelectorAll('.day-checkbox:checked')).map(cb => cb.value.toLowerCase());
       
-      if (selectedDays.length === 0) {
-        showToast('Sélectionnez au moins un jour (Lun–Dim).', false);
+      if (!alwaysAvailable && selectedDays.length === 0) {
+        showToast('Sélectionnez au moins un jour (Lun–Dim), ou cochez « Toujours disponible ».', false);
         return;
       }
 
-      const slots = collectSlotsForSave();
-      if (slots.length === 0) {
-        showToast('Indiquez un créneau horaire valide (ex. 08:00 → 22:00).', false);
+      const slots = alwaysAvailable
+        ? [{ startTime: '00:00', endTime: '23:59', cpu: document.getElementById('cpu').value, ram: document.getElementById('ram').value, disk: document.getElementById('disk').value, maxTime: document.getElementById('maxTime').value }]
+        : collectSlotsForSave();
+      if (!alwaysAvailable && slots.length === 0) {
+        showToast('Indiquez un créneau horaire valide (ex. 00:00 → 23:59).', false);
         return;
       }
 
@@ -1477,8 +1611,11 @@
       const disk = parseInt(document.getElementById('disk').value, 10) || 10;
       const maxTime = parseInt(document.getElementById('maxTime').value, 10) || 0;
       
+      const days = alwaysAvailable
+        ? ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche']
+        : selectedDays;
       const allPrefs = [];
-      selectedDays.forEach(day => {
+      days.forEach(day => {
         slots.forEach(slot => {
           allPrefs.push({
             day,
@@ -1494,6 +1631,7 @@
       
       const payload = {
         preferences: allPrefs,
+        always_available: alwaysAvailable,
         cpu_max_utilisation: cpu,
         max_ram_gb: ram,
         max_disk_gb: disk,
@@ -1548,7 +1686,12 @@
       list.innerHTML = '';
 
       if (!currentPreferences || currentPreferences.length === 0) {
-        list.innerHTML = '<div class="slot-empty">Aucun créneau configuré.<br>Cliquez sur « Configurer préférences ».</div>';
+        list.innerHTML = '<div class="slot-empty">Toujours disponible (24h/24, 7j/7).<br>Cliquez sur « Configurer préférences » pour restreindre.</div>';
+        return;
+      }
+
+      if (currentPreferences.length === 1 && currentPreferences[0].always_available) {
+        list.innerHTML = '<div class="slot-card"><div class="slot-card-top"><span class="slot-day">Toujours</span><span class="slot-time">00:00 – 23:59 · 7j/7</span></div></div>';
         return;
       }
 
@@ -1642,9 +1785,13 @@
     }
 
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', initPreferenceUi);
+      document.addEventListener('DOMContentLoaded', function() {
+        initPreferenceUi();
+        reloadTasks();
+      });
     } else {
       initPreferenceUi();
+      reloadTasks();
     }
   </script>
 </body>

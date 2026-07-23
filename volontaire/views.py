@@ -445,6 +445,8 @@ def save_preferences(request):
         try:
             from .preferences_payload import (
                 normalize_day,
+                normalize_hhmm,
+                normalize_schedule_for_storage,
                 save_preferences_file,
                 _machine_resources,
             )
@@ -462,6 +464,7 @@ def save_preferences(request):
                     pref = PreferenceModel.objects.create()
 
             slots = data.get("preferences") or []
+            always_available = bool(data.get("always_available"))
             # Ressources: top-level ou premier créneau
             first = slots[0] if slots else {}
             cpu_pct = int(data.get("cpu_max_utilisation") or first.get("cpu") or 80)
@@ -488,21 +491,31 @@ def save_preferences(request):
             pref.save()
 
             pref.jours.all().delete()
-            schedule = []
+            raw_schedule = []
             for jour_data in slots:
                 jour_nom = normalize_day(jour_data.get("day") or jour_data.get("jour") or "")
                 if not jour_nom:
                     continue
-                jour_obj = JourDisponible.objects.create(preference=pref, jour=jour_nom)
-                start_s = jour_data.get("startTime") or jour_data.get("start") or "00:00"
-                end_s = jour_data.get("endTime") or jour_data.get("end") or "23:59"
-                heure_debut = time.fromisoformat(start_s)
-                heure_fin = time.fromisoformat(end_s)
-                PlageHoraire.objects.create(
-                    jour=jour_obj, heure_debut=heure_debut, heure_fin=heure_fin
+                start_s = normalize_hhmm(
+                    jour_data.get("startTime") or jour_data.get("start"), "00:00"
                 )
-                schedule.append(
-                    {"day": jour_nom, "start": start_s[:5], "end": end_s[:5]}
+                end_s = normalize_hhmm(
+                    jour_data.get("endTime") or jour_data.get("end"), "23:59"
+                )
+                raw_schedule.append({"day": jour_nom, "start": start_s, "end": end_s})
+
+            schedule = normalize_schedule_for_storage(
+                raw_schedule, always_available=always_available or not raw_schedule
+            )
+
+            for slot in schedule:
+                jour_obj = JourDisponible.objects.create(
+                    preference=pref, jour=slot["day"]
+                )
+                PlageHoraire.objects.create(
+                    jour=jour_obj,
+                    heure_debut=time.fromisoformat(slot["start"]),
+                    heure_fin=time.fromisoformat(slot["end"]),
                 )
 
             payload = {
@@ -514,6 +527,7 @@ def save_preferences(request):
                 "priorite_min_acceptee": pref.priorite_min_acceptee,
                 "types_calcul_autorises": pref.types_calcul_autorises or "",
                 "schedule": schedule,
+                "always_available": len(schedule) == 0,
                 "machine_cpu_cores": machine_res["cpu_cores"],
                 "machine_ram_mb": machine_res["ram_mb"],
                 "machine_disk_gb": machine_res["disk_gb"],
@@ -584,23 +598,40 @@ def preferences_list(request):
     from .preferences_payload import build_preferences_payload, load_preferences_file
 
     payload = load_preferences_file() or build_preferences_payload()
+    # Re-normalise (toujours dispo si schedule vide / full)
+    payload = build_preferences_payload()
     schedule = payload.get("schedule") or []
     prefs = []
-    for index, slot in enumerate(schedule):
+    if not schedule:
         prefs.append(
             {
-                "id": index,
-                "day": slot.get("day"),
-                "startTime": slot.get("start"),
-                "endTime": slot.get("end"),
+                "id": 0,
+                "day": "tous",
+                "startTime": "00:00",
+                "endTime": "23:59",
                 "cpu": payload.get("cpu_max_utilisation", 80),
                 "ram": payload.get("max_ram_gb", 4),
                 "disk": payload.get("max_disk_gb", 10),
                 "maxTime": payload.get("duree_max_execution", 0),
                 "types": payload.get("types_calcul_autorises", ""),
+                "always_available": True,
             }
         )
-    # Inclure aussi le résumé global pour l'UI
+    else:
+        for index, slot in enumerate(schedule):
+            prefs.append(
+                {
+                    "id": index,
+                    "day": slot.get("day"),
+                    "startTime": slot.get("start"),
+                    "endTime": slot.get("end"),
+                    "cpu": payload.get("cpu_max_utilisation", 80),
+                    "ram": payload.get("max_ram_gb", 4),
+                    "disk": payload.get("max_disk_gb", 10),
+                    "maxTime": payload.get("duree_max_execution", 0),
+                    "types": payload.get("types_calcul_autorises", ""),
+                }
+            )
     return JsonResponse(
         {
             "slots": prefs,
