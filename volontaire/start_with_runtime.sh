@@ -80,8 +80,8 @@ start_agent() {
     echo "ATTENTION: dossier agent introuvable ($AGENT_DIR) — sonde dispo désactivée"
     return 0
   fi
-  if [ ! -d "$AGENT_DIR/.venv" ]; then
-    echo "Création venv agent + deps (torch CPU, peut prendre quelques minutes)…"
+    if [ ! -d "$AGENT_DIR/.venv" ]; then
+    echo "Création venv agent (prédiction)…"
     python3 -m venv "$AGENT_DIR/.venv"
     # shellcheck disable=SC1091
     source "$AGENT_DIR/.venv/bin/activate"

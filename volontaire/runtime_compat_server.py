@@ -97,6 +97,107 @@ def _collect_files(output_dir: Path) -> list[dict]:
     return files
 
 
+def _looks_like_dl_bundle(run_sh: Path) -> bool:
+    """True si le bundle est une tâche d'apprentissage distribué."""
+    parent = run_sh.parent
+    markers = (
+        parent / "run_volunteer_vcuy.py",
+        parent / "dl_config.json",
+        parent / "volunteer_core.py",
+    )
+    if any(p.is_file() for p in markers):
+        return True
+    try:
+        text = run_sh.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    return "run_volunteer_vcuy" in text or "DISTRIBUTED_LEARNING" in text
+
+
+def _ensure_dl_deps(py: str, cache_dir: Path, logf) -> None:
+    """Installe torch + CIFAR seulement à la 1ʳᵉ tâche DL (pas à l'install app)."""
+    def _log(msg: str) -> None:
+        line = f"[runtime-dl-deps] {msg}\n"
+        try:
+            logf.write(line)
+            logf.flush()
+        except Exception:
+            pass
+        print(line, end="", file=sys.stderr)
+
+    if not py:
+        raise RuntimeError("VCUY_PYTHON manquant pour installer les deps DL")
+
+    # 1) PyTorch CPU
+    check = subprocess.run(
+        [py, "-c", "import torch, torchvision"],
+        capture_output=True,
+        text=True,
+    )
+    if check.returncode != 0:
+        _log("Installation PyTorch CPU (première tâche DL)…")
+        pip = str(Path(py).parent / "pip")
+        if not Path(pip).is_file():
+            pip = py
+            cmd = [py, "-m", "pip", "install", "-q", "torch", "torchvision",
+                   "--index-url", "https://download.pytorch.org/whl/cpu"]
+        else:
+            cmd = [pip, "install", "-q", "torch", "torchvision",
+                   "--index-url", "https://download.pytorch.org/whl/cpu"]
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+        if proc.returncode != 0:
+            raise RuntimeError(
+                f"pip torch failed: {proc.stderr or proc.stdout or proc.returncode}"
+            )
+        _log("PyTorch installé.")
+    else:
+        _log("PyTorch déjà présent.")
+
+    # 2) CIFAR-10 cache machine (une fois)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cifar = cache_dir / "cifar-10-batches-py"
+    if cifar.is_dir() and (cifar / "data_batch_1").is_file():
+        _log(f"CIFAR-10 déjà en cache: {cifar}")
+        return
+
+    _log(f"Préparation CIFAR-10 dans {cache_dir}…")
+    # Copie locale si disponible, sinon téléchargement torchvision
+    candidates = [
+        os.environ.get("VCUY_CIFAR_DIR", "").strip(),
+        str(Path.home() / ".vcuy" / "datasets" / "cifar-10-batches-py"),
+    ]
+    for cand in candidates:
+        if not cand:
+            continue
+        src = Path(cand)
+        if src.is_dir() and (src / "data_batch_1").is_file():
+            if src.resolve() != cifar.resolve():
+                if cifar.exists():
+                    shutil.rmtree(cifar)
+                shutil.copytree(src, cifar)
+            _log(f"CIFAR-10 copié depuis {src}")
+            return
+
+    dl = subprocess.run(
+        [
+            py,
+            "-c",
+            "import torchvision; from pathlib import Path; "
+            f"root=Path({str(cache_dir)!r}); root.mkdir(parents=True, exist_ok=True); "
+            "torchvision.datasets.CIFAR10(root=str(root), train=True, download=True); "
+            "torchvision.datasets.CIFAR10(root=str(root), train=False, download=True); "
+            "print('cifar_ok')",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if dl.returncode != 0 or not (cifar.is_dir() and (cifar / "data_batch_1").is_file()):
+        raise RuntimeError(
+            f"CIFAR-10 indisponible: {dl.stderr or dl.stdout or 'missing batches'}"
+        )
+    _log("CIFAR-10 prêt.")
+
+
 def _run_task(task_id: str, bundle_bytes: bytes) -> None:
     assert STATE is not None
     work = STATE.root / "tasks" / task_id / str(uuid.uuid4())[:8]
@@ -112,7 +213,51 @@ def _run_task(task_id: str, bundle_bytes: bytes) -> None:
     success = False
     try:
         run_sh = _extract_bundle(bundle_bytes, input_dir)
+        # Python 3.14+: un compression.py à la racine masque stdlib compression/ (gzip → crash).
+        root_compression = run_sh.parent / "compression.py"
+        src_compression = run_sh.parent / "src" / "compression.py"
+        if root_compression.is_file() and src_compression.is_file():
+            try:
+                root_compression.unlink()
+            except OSError:
+                pass
         env = os.environ.copy()
+        # Prefer the volunteer venv Python; fall back to PATH python3.
+        py = (
+            os.environ.get("VCUY_PYTHON")
+            or os.environ.get("RUNTIME_PYTHON")
+            or ""
+        ).strip()
+        if not py:
+            # Common layout: .../e2e-v1/venv/bin/python next to runtime_compat_server.py
+            for cand in (
+                Path(__file__).resolve().parent / "venv" / "bin" / "python",
+                Path(__file__).resolve().parent / "venv" / "bin" / "python3",
+            ):
+                if cand.is_file():
+                    py = str(cand.resolve())
+                    break
+        if py:
+            env["VCUY_PYTHON"] = py
+            env["PATH"] = str(Path(py).parent) + os.pathsep + env.get("PATH", "")
+            # Force absolute interpreter in run.sh so bare `python3` never wins.
+            try:
+                text = run_sh.read_text(encoding="utf-8", errors="replace")
+                rewritten = text.replace("${VCUY_PYTHON:-python3}", py)
+                rewritten = rewritten.replace("python3 ", f"{py} ")
+                if rewritten != text:
+                    run_sh.write_text(rewritten, encoding="utf-8")
+            except Exception:
+                pass
+        # Cache dataset (rempli à la 1ʳᵉ tâche DL, pas à l'install app).
+        cache = (os.environ.get("VCUY_DATASET_CACHE") or "").strip()
+        if not cache:
+            cache = str(Path.home() / ".vcuy" / "datasets")
+        env["VCUY_DATASET_CACHE"] = cache
+        # Identité DL stable pour multi-vols sur la même machine (lab E2E).
+        e2e_mac = (os.environ.get("VCUY_E2E_MAC") or "").strip()
+        if e2e_mac:
+            env["VCUY_E2E_MAC"] = e2e_mac
         env.update(
             {
                 "vc_INPUT": str(input_dir),
@@ -132,6 +277,8 @@ def _run_task(task_id: str, bundle_bytes: bytes) -> None:
 
         log_path = logs_dir / "run.log"
         with open(log_path, "w", encoding="utf-8") as logf:
+            if _looks_like_dl_bundle(run_sh):
+                _ensure_dl_deps(py, Path(cache), logf)
             proc = subprocess.Popen(
                 ["bash", str(run_sh)],
                 cwd=str(run_sh.parent),

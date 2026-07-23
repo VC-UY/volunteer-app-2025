@@ -4,7 +4,7 @@ from django.db import migrations
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("volontaire", "0008_task_command_local_input_path"),
+        ("volontaire", "0011_task_command"),
     ]
 
     operations = [

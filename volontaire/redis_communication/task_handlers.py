@@ -1147,10 +1147,13 @@ class TaskManager:
             if not os.path.exists(output_dir):
                 os.makedirs(output_dir, exist_ok=True)
 
-            output_files = [
-                f for f in os.listdir(output_dir)
-                if os.path.isfile(os.path.join(output_dir, f))
-            ]
+            # Inclure les fichiers imbriqués (stats/, dl_summary.json, …).
+            output_files = []
+            for root, _dirs, files in os.walk(output_dir):
+                for fname in files:
+                    full = os.path.join(root, fname)
+                    rel = os.path.relpath(full, output_dir).replace("\\", "/")
+                    output_files.append(rel)
 
             # Preferer l'upload HTTP vers le manager (fonctionne derriere NAT / Docker)
             uploaded = False
@@ -1365,9 +1368,18 @@ class TaskManager:
             content_b64 = f.get("content_b64")
             if not name or content_b64 is None:
                 continue
-            with open(os.path.join(output_dir, name), "wb") as out:
+            # Les chemins peuvent être imbriqués (ex. stats/volunteer_0/foo.json).
+            safe_name = str(name).replace("\\", "/").lstrip("/")
+            if ".." in safe_name.split("/"):
+                logger.warning("Ignore fichier résultat suspect: %s", name)
+                continue
+            dest = os.path.join(output_dir, safe_name)
+            parent = os.path.dirname(dest)
+            if parent:
+                os.makedirs(parent, exist_ok=True)
+            with open(dest, "wb") as out:
                 out.write(base64.b64decode(content_b64))
-            output_files.append(name)
+            output_files.append(safe_name)
         return output_files
 
     def _execute_task(self, task):
@@ -1815,22 +1827,23 @@ class TaskManager:
     
     def _collect_output_files(self, task):
         """
-        Collecte les fichiers de sortie d'une tâche.
+        Collecte les fichiers de sortie d'une tâche (récursif).
         
         Args:
             task: Tâche pour laquelle collecter les fichiers
             
         Returns:
-            list: Liste des noms de fichiers de sortie
+            list: Liste des chemins relatifs de fichiers de sortie
         """
         output_dir = os.path.join(TASKS_DIR, str(task.task_id), 'output')
         os.makedirs(output_dir, exist_ok=True)
         
-        # Lister tous les fichiers dans le répertoire de sortie
         output_files = []
-        for filename in os.listdir(output_dir):
-            if os.path.isfile(os.path.join(output_dir, filename)):
-                output_files.append(filename)
+        for root, _dirs, files in os.walk(output_dir):
+            for filename in files:
+                full = os.path.join(root, filename)
+                rel = os.path.relpath(full, output_dir).replace("\\", "/")
+                output_files.append(rel)
         
         return output_files
     

@@ -59,7 +59,7 @@ def ensure_agent_venv(agent_dir: Path) -> Path | None:
     py = agent_dir / ".venv" / "bin" / "python"
     if py.is_file():
         return py
-    logger.info("Création venv agent + installation deps (torch)…")
+    logger.info("Création venv agent + installation deps (prédiction)…")
     try:
         subprocess.run([sys.executable, "-m", "venv", str(agent_dir / ".venv")], check=True)
         pip = agent_dir / ".venv" / "bin" / "pip"

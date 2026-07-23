@@ -1,11 +1,13 @@
 #!/bin/bash
+# Install volontaire léger : app + runtime + deps de base.
+# PAS de PyTorch / CIFAR ici — téléchargés uniquement à la 1ʳᵉ tâche DL.
 
 set -e
 
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$BASE_DIR"
 
-echo "🔧 Installation volontaire VC-UY (tout automatique, sans Docker)..."
+echo "🔧 Installation volontaire VC-UY (léger, sans Docker, sans ML)..."
 
 # --- Sudo si nécessaire (uniquement pour installer Python/venv) ---
 need_sudo=false
@@ -32,12 +34,11 @@ if ! python3 -m venv --help &>/dev/null 2>&1; then
 fi
 echo "✅ Python 3 prêt."
 
-# Docker n'est plus requis : l'exécution passe par le runtime vc-uyr (voir run.sh).
-
 # --- Environnement virtuel Python ---
 echo "🐍 Création de l'environnement virtuel..."
 rm -rf venv
 python3 -m venv venv
+# shellcheck disable=SC1091
 source venv/bin/activate
 
 mkdir -p .volunteer/tasks .volunteer/temp_data
@@ -61,4 +62,7 @@ fi
 echo "🔧 Migrations..."
 python manage.py migrate --noinput
 
-echo "🎉 Installation terminée."
+echo "🎉 Installation terminée (app légère)."
+echo "   Démarrage : ./run.sh"
+echo "   PyTorch + datasets : installés automatiquement à la 1ʳᵉ tâche DISTRIBUTED_LEARNING."
+echo "   Python : $(pwd)/venv/bin/python"
