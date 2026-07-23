@@ -2,11 +2,17 @@ import platform
 import logging
 import subprocess
 import getpass
+import sys
+import os
 
 logger = logging.getLogger("VC-Persistence")
 
 def ensure_persistence():
     """Ensure the agent starts automatically on system boot."""
+    # Stack volontaire déjà gérée par vc-uy-*.service (install_daemon.sh)
+    if os.environ.get("VC_MANAGED_BY_SYSTEMD") == "1":
+        logger.info("Persistence déjà gérée par systemd (vc-uy-agent) — skip.")
+        return
     os_type = platform.system().lower()
     if os_type == "linux":
         # Enable User Lingering (Critical for boot-time start without login)
@@ -21,13 +27,15 @@ def ensure_persistence():
     elif os_type == "windows":
         setup_windows_persistence()
 
-import sys
-import os
-
 def setup_linux_persistence():
     """Create a systemd user service for the agent."""
     try:
+        # Si la stack complète est déjà installée, ne pas créer un 2e service agent
         home = os.path.expanduser("~")
+        stack_unit = os.path.join(home, ".config/systemd/user/vc-uy-agent.service")
+        if os.path.exists(stack_unit):
+            logger.info("vc-uy-agent.service présent — skip vc-agent.service.")
+            return
         service_dir = os.path.join(home, ".config/systemd/user")
         os.makedirs(service_dir, exist_ok=True)
 

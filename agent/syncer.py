@@ -159,21 +159,83 @@ def report_power_event(machine_id, event_type, gap_s):
         except Exception as e:
             logger.error("Failed to report power event on %s: %s", base, e)
 
-def sync_batch(machine_id, session_id, snapshots):
-    """Send a batch of snapshots to the site (et éventuellement le serveur recherche)."""
-    for s in snapshots:
+# File d'attente locale : aucune donnée perdue si hors-ligne.
+# Après envoi réussi → retrait de l'outbox. Rétention modèle = 72 h ailleurs.
+OUTBOX_FILE = os.environ.get("VC_SYNC_OUTBOX", "sync_outbox.json")
+OUTBOX_MAX = int(os.environ.get("VC_SYNC_OUTBOX_MAX", "20000"))
+
+
+def _load_outbox() -> list:
+    if not os.path.exists(OUTBOX_FILE):
+        return []
+    try:
+        with open(OUTBOX_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def _save_outbox(items: list) -> None:
+    try:
+        with open(OUTBOX_FILE, "w", encoding="utf-8") as f:
+            json.dump(items[-OUTBOX_MAX:], f)
+    except Exception as e:
+        logger.error("Outbox write failed: %s", e)
+
+
+def enqueue_snapshots(snapshots: list) -> None:
+    """Ajoute des snapshots à l'outbox (avant / pendant sync)."""
+    if not snapshots:
+        return
+    box = _load_outbox()
+    box.extend(snapshots)
+    _save_outbox(box)
+
+
+def flush_outbox(machine_id, session_id) -> bool:
+    """Envoie tout l'outbox au serveur. True si vide ou tout envoyé."""
+    box = _load_outbox()
+    if not box:
+        return True
+    return sync_batch(machine_id, session_id, [], include_outbox_only=True)
+
+
+def sync_batch(machine_id, session_id, snapshots, *, include_outbox_only: bool = False):
+    """
+    Envoie les snapshots au site (et serveur recherche si défini).
+
+    - Toujours fusionne avec l'outbox locale
+    - Succès HTTP 200 → retire de l'outbox (aucune perte : sync d'abord)
+    - Échec → conserve dans l'outbox pour retry
+    """
+    pending = [] if include_outbox_only else list(snapshots or [])
+    for s in pending:
         s["session_id"] = session_id
+
+    # Outbox d'abord (anciennes données non envoyées), puis nouveaux
+    box = _load_outbox()
+    for s in box:
+        if "session_id" not in s:
+            s["session_id"] = session_id
+    batch = box + pending
+    if not batch:
+        return True
+
+    # Persister immédiatement les nouveaux (hors ligne / crash)
+    if pending:
+        _save_outbox(box + pending)
 
     payload = {
         "machine_id": machine_id,
-        "snapshots": snapshots,
+        "snapshots": batch,
         "volunteer_id": os.environ.get("VCUY_VOLUNTEER_ID") or "",
     }
     ok = False
     for base in _targets():
         try:
             response = _session().post(
-                f"{base}/sync/snapshots", json=payload, timeout=15, verify=get_verify_path()
+                f"{base}/sync/snapshots", json=payload, timeout=30, verify=get_verify_path()
             )
             if response.status_code == 200:
                 ok = True
@@ -181,4 +243,10 @@ def sync_batch(machine_id, session_id, snapshots):
                 logger.warning("Sync %s → HTTP %s", base, response.status_code)
         except Exception as e:
             logger.error("Sync failed on %s: %s", base, e)
+
+    if ok:
+        _save_outbox([])
+        logger.info("Sync OK — %d snapshot(s) envoyés, outbox vidée", len(batch))
+    else:
+        logger.warning("Sync échoué — %d snapshot(s) conservés en outbox locale", len(batch))
     return ok

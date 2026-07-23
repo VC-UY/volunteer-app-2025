@@ -273,9 +273,45 @@ class SlidingWindowBuffer:
 
     def append(self, snapshot):
         self.buffer.append(snapshot)
-        if len(self.buffer) > MINUTES_IN_72H:
-            self.buffer = self.buffer[-MINUTES_IN_72H:]
+        # Garde-fou taille (échantillons) + prune horloge murale 72 h
+        if len(self.buffer) > MINUTES_IN_72H * 4:
+            self.buffer = self.buffer[-(MINUTES_IN_72H * 4) :]
+        self.prune_older_than_hours(MAX_BUFFER_HOURS, save=False)
         self.save_buffer()
+
+    def _snap_age_hours(self, snap: dict, now: datetime.datetime) -> float | None:
+        ts = snap.get("ts_utc") or snap.get("ts_local")
+        if not ts:
+            return None
+        try:
+            t = datetime.datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+            if t.tzinfo is not None:
+                t = t.replace(tzinfo=None)
+            return (now - t).total_seconds() / 3600.0
+        except Exception:
+            return None
+
+    def prune_older_than_hours(self, hours: float = MAX_BUFFER_HOURS, *, save: bool = True) -> int:
+        """
+        Supprime les snapshots locaux plus vieux que `hours` (horloge murale).
+        À appeler après sync réussi — les données non envoyées restent dans sync_outbox.
+        """
+        if not self.buffer:
+            return 0
+        now = datetime.datetime.utcnow()
+        before = len(self.buffer)
+        kept = []
+        for snap in self.buffer:
+            age = self._snap_age_hours(snap, now)
+            if age is None or age <= hours:
+                kept.append(snap)
+        removed = before - len(kept)
+        if removed:
+            self.buffer = kept
+            logger.info("Buffer local : %d snapshot(s) > %sh purgés (%d restants)", removed, hours, len(kept))
+            if save:
+                self.save_buffer()
+        return removed
 
     def get_all(self):
         return self.buffer

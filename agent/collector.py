@@ -14,6 +14,10 @@ from collections import deque
 # --- RESEARCH SPECIFICATIONS (18 DIMENSIONS) ---
 HISTORY_FILE = "collector_history.json"
 PREFERENCES_FILE = "preferences.json"
+# Historique local pour features ARX/GRU — 72 h max (horloge murale)
+LOCAL_RETENTION_HOURS = float(os.environ.get("VC_LOCAL_RETENTION_HOURS", "72"))
+# ~1 sample / 20 s → 72 h ≈ 12960 ; borne dure anti-disque
+HISTORY_MAXLEN = int(os.environ.get("VC_HISTORY_MAXLEN", str(int(LOCAL_RETENTION_HOURS * 180))))
 
 # Laptop sur batterie = toujours OK sauf batterie vraiment critique.
 # (Débranché ≠ indisponible — flotte VC-UY = surtout des portables.)
@@ -66,11 +70,38 @@ def read_power_state() -> dict:
 
 class FeatureEngine:
     def __init__(self):
-        # Historique du CPU LIBRE (aligné spec / feature_schema)
-        self.cpu_free_history = deque(maxlen=1440)  # 24 h à 60 s/sample
+        # Entrées : {"t": epoch_s, "v": cpu_free} — rétention 72 h
+        self.cpu_free_history = deque(maxlen=HISTORY_MAXLEN)
         self.last_outage_ts = None
         self._prev_outage = False
         self.load_history()
+
+    def _normalize_hist(self, hist):
+        """Accepte anciens dumps (floats) ou nouveaux ({t,v})."""
+        now = time.time()
+        out = []
+        if not hist:
+            return out
+        if hist and not isinstance(hist[0], dict):
+            n = len(hist)
+            for i, x in enumerate(hist):
+                try:
+                    out.append({"t": now - (n - i) * 60.0, "v": float(x)})
+                except (TypeError, ValueError):
+                    continue
+            return out
+        for item in hist:
+            if isinstance(item, dict) and "v" in item:
+                try:
+                    out.append({"t": float(item.get("t") or now), "v": float(item["v"])})
+                except (TypeError, ValueError):
+                    continue
+            else:
+                try:
+                    out.append({"t": now, "v": float(item)})
+                except (TypeError, ValueError):
+                    continue
+        return out
 
     def load_history(self):
         if os.path.exists(HISTORY_FILE):
@@ -79,10 +110,11 @@ class FeatureEngine:
                     data = json.load(f)
                     hist = data.get("cpu_free_history")
                     if hist is None:
-                        # Migration anciens dumps (CPU utilisé → approx. libre)
                         old = data.get("cpu_history", [])
                         hist = [max(0.0, 100.0 - float(x)) for x in old]
-                    self.cpu_free_history = deque(hist, maxlen=1440)
+                    self.cpu_free_history = deque(
+                        self._normalize_hist(hist), maxlen=HISTORY_MAXLEN
+                    )
                     self.last_outage_ts = data.get("last_outage_ts", None)
                     self._prev_outage = bool(data.get("prev_outage", False))
             except Exception:
@@ -99,6 +131,19 @@ class FeatureEngine:
         except Exception:
             pass
 
+    def prune_older_than_hours(self, hours: float = LOCAL_RETENTION_HOURS) -> int:
+        """Libère le disque : garde seulement les samples < hours."""
+        if not self.cpu_free_history:
+            return 0
+        cutoff = time.time() - hours * 3600.0
+        before = len(self.cpu_free_history)
+        kept = [e for e in self.cpu_free_history if float(e.get("t", 0)) >= cutoff]
+        removed = before - len(kept)
+        if removed:
+            self.cpu_free_history = deque(kept, maxlen=HISTORY_MAXLEN)
+            self.save_history()
+        return removed
+
     def get_cyclic_time(self, val, period):
         sin_val = math.sin(2 * math.pi * val / period)
         cos_val = math.cos(2 * math.pi * val / period)
@@ -106,7 +151,7 @@ class FeatureEngine:
 
     def get_moving_stats(self):
         # Dim 9-11 : moyennes glissantes du CPU libre ; dim 12 : std 1 h
-        history_list = list(self.cpu_free_history)
+        history_list = [float(e["v"]) for e in self.cpu_free_history]
         avg_1h = sum(history_list[-60:]) / len(history_list[-60:]) if history_list else 0
         avg_6h = sum(history_list[-360:]) / len(history_list[-360:]) if history_list else 0
         avg_24h = sum(history_list) / len(history_list) if history_list else 0
@@ -229,8 +274,8 @@ def get_stats(aggregate=True):
     except:
         process_count = 0
     
-    # Update history (CPU libre)
-    engine.cpu_free_history.append(100.0 - cpu_percent)
+    # Update history (CPU libre) — timestampé pour prune 72 h
+    engine.cpu_free_history.append({"t": time.time(), "v": 100.0 - cpu_percent})
     engine.save_history()
     
     now = datetime.datetime.utcnow()
@@ -322,4 +367,10 @@ def get_idle_time():
     return int(time.time() - _idle_ts)
 
 def clear_aggregation_buffers():
-    pass # No longer needed with new history engine
+    """Compat — le prune 72 h se fait après sync réussi (voir prune_local_after_sync)."""
+    pass
+
+
+def prune_local_after_sync(hours: float = LOCAL_RETENTION_HOURS) -> int:
+    """Après envoi serveur OK : libère l'historique local > 72 h."""
+    return engine.prune_older_than_hours(hours)

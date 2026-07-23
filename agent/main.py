@@ -251,11 +251,13 @@ def main():
     initial_stats["predicted_availability"] = pred_init["hybrid"]
     initial_stats["prediction_detail"] = pred_init
     
+    # Sync initial + flush outbox (données non envoyées pendant une coupure)
     syncer.sync_batch(machine_id, session_id, [initial_stats])
     
     # 5. Main collection loop (Privacy-Aware)
     # Intervalle sync configurable (défaut 20s) — assez fréquent pour la page /donnees
     sync_every = max(5, int(os.environ.get("VC_AGENT_SYNC_SECONDS", "20")))
+    retention_h = float(os.environ.get("VC_LOCAL_RETENTION_HOURS", "72"))
     last_power_status = None
     try:
         while True:
@@ -286,7 +288,11 @@ def main():
                 except Exception:
                     pass
 
+                # Envoi serveur d'abord (outbox) — aucune perte ; prune local seulement si OK
                 ok = syncer.sync_batch(machine_id, session_id, [final_stats])
+                if ok:
+                    predictor.buffer.prune_older_than_hours(retention_h)
+                    collector.prune_local_after_sync(retention_h)
                 collector.clear_aggregation_buffers()
                 logger.info(
                     "Snapshot sync=%s hybrid=%.3f launch=%s (every %ss)",

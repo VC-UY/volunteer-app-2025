@@ -1,9 +1,11 @@
 #!/bin/bash
-# Installation + lancement en une seule commande (coordinateur déjà configuré dans settings.py)
+# Installation + lancement silencieux en arrière-plan (systemd utilisateur).
+# Pas de logs interminables dans le terminal ; survit à la fermeture et au reboot.
 set -e
 cd "$(dirname "$0")"
-chmod +x install.sh run.sh
+chmod +x install.sh run.sh install_daemon.sh 2>/dev/null || true
+
 ./install.sh
 echo ""
-echo "🚀 Démarrage de l'application volontaire..."
-exec ./run.sh
+echo "🚀 Démarrage en arrière-plan (sans bloquer le terminal)..."
+./install_daemon.sh
