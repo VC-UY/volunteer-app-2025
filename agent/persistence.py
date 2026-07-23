@@ -30,7 +30,8 @@ def setup_linux_persistence():
         home = os.path.expanduser("~")
         service_dir = os.path.join(home, ".config/systemd/user")
         os.makedirs(service_dir, exist_ok=True)
-        
+
+        agent_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
         exe_path = os.path.abspath(sys.argv[0])
         python_path = sys.executable
         service_content = f"""[Unit]
@@ -38,6 +39,11 @@ Description=VC-UY1 Research Node (Persistent)
 After=network.target
 
 [Service]
+WorkingDirectory={agent_dir}
+Environment=VC_AGENT_API_HOST=127.0.0.1
+Environment=VC_AGENT_API_PORT=7071
+Environment=VCUY_SITE_API=https://vc-uy.npe-techs.com/api/agent
+Environment=VC_AGENT_SYNC_SECONDS=20
 ExecStart="{python_path}" "{exe_path}" --foreground
 Restart=always
 RestartSec=10

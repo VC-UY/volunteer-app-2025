@@ -62,6 +62,19 @@ def set_preferences():
     pref_file = "preferences.json"
     if os.path.exists(pref_file) and "--setup" not in sys.argv:
         return
+    # Mode démon / systemd : pas de TTY → defaults silencieux
+    if not sys.stdin.isatty() and "--setup" not in sys.argv:
+        prefs = {
+            "allowed_days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"],
+            "allowed_slots": ["00:00-23:59"],
+            "mode": "total",
+        }
+        try:
+            with open(pref_file, "w") as f:
+                json.dump(prefs, f, indent=4)
+        except Exception as e:
+            logger.error(f"Failed to write default preferences: {e}")
+        return
 
     print("\n" + "="*60)
     print("   PREFERENCES DE DISPONIBILITE DU VOLONTAIRE")

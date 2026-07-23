@@ -1050,20 +1050,29 @@ class RedisAppConfig(AppConfig):
             # Démarrer les threads de communication
             self.start_communication_threads()
 
-            # Agent recherche (prédiction 15 min + sync snapshots vers le site)
-            try:
-                from volontaire.services.telemetry_bridge import start_telemetry_bridge_async
-
-                start_telemetry_bridge_async()
-                logger.info("Telemetry bridge lancé (API :7071 + sync site)")
-            except Exception as exc:
-                logger.warning("Telemetry bridge: %s", exc)
+            # Agent hybride ARX+GRU d'abord (API :7071). Bridge ARX = fallback seulement.
             try:
                 from volontaire.services.agent_supervisor import start_research_agent_async
 
                 start_research_agent_async()
             except Exception as exc:
                 logger.debug("Full agent supervisor skip: %s", exc)
+            try:
+                from volontaire.services.telemetry_bridge import start_telemetry_bridge_async
+
+                # Délai : laisse le vrai agent binder :7071 avant le fallback dégradé.
+                def _bridge_after_agent():
+                    import time
+
+                    time.sleep(12)
+                    start_telemetry_bridge_async()
+
+                threading.Thread(
+                    target=_bridge_after_agent, name="telemetry-boot-delayed", daemon=True
+                ).start()
+                logger.info("Agent hybride lancé ; bridge ARX en secours si :7071 libre")
+            except Exception as exc:
+                logger.warning("Telemetry bridge: %s", exc)
 
             # Sonde disponibilité coordinateur (indépendant du TaskManager)
             try:
