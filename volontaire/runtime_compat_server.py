@@ -114,8 +114,48 @@ def _looks_like_dl_bundle(run_sh: Path) -> bool:
     return "run_volunteer_vcuy" in text or "DISTRIBUTED_LEARNING" in text
 
 
-def _ensure_dl_deps(py: str, cache_dir: Path, logf) -> None:
-    """Installe torch + CIFAR seulement à la 1ʳᵉ tâche DL (pas à l'install app)."""
+def _python_has_torch(py: str) -> bool:
+    if not py:
+        return False
+    check = subprocess.run(
+        [py, "-c", "import torch, torchvision"],
+        capture_output=True,
+        text=True,
+    )
+    return check.returncode == 0
+
+
+def _dl_venv_python(cache_dir: Path) -> Path:
+    return cache_dir / "runtime-dl-venv" / "bin" / "python"
+
+
+def _resolve_dl_python(preferred: str, cache_dir: Path) -> str:
+    """
+    Interpréteur pour tâches DL uniquement.
+    Priorité : venv dédié (runtime-dl-venv) déjà peuplé, puis VCUY_PYTHON s'il a torch.
+    Jamais d'install torch dans le venv app léger.
+    """
+    candidates = []
+    dl_py = _dl_venv_python(cache_dir)
+    if dl_py.is_file():
+        candidates.append(str(dl_py.resolve()))
+    for raw in (
+        preferred,
+        os.environ.get("VCUY_PYTHON", ""),
+        os.environ.get("RUNTIME_PYTHON", ""),
+    ):
+        p = (raw or "").strip()
+        if p and p not in candidates and Path(p).is_file():
+            candidates.append(p)
+    for cand in candidates:
+        if _python_has_torch(cand):
+            return cand
+    # Pas de torch trouvé → le caller créera runtime-dl-venv.
+    return ""
+
+
+def _ensure_dl_deps(py: str, cache_dir: Path, logf) -> str:
+    """Installe torch + CIFAR seulement à la 1ʳᵉ tâche DL, dans un venv dédié."""
     def _log(msg: str) -> None:
         line = f"[runtime-dl-deps] {msg}\n"
         try:
@@ -125,40 +165,35 @@ def _ensure_dl_deps(py: str, cache_dir: Path, logf) -> None:
             pass
         print(line, end="", file=sys.stderr)
 
-    if not py:
-        raise RuntimeError("VCUY_PYTHON manquant pour installer les deps DL")
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    py = _resolve_dl_python(py, cache_dir)
 
-    # 1) PyTorch CPU
-    check = subprocess.run(
-        [py, "-c", "import torch, torchvision"],
-        capture_output=True,
-        text=True,
-    )
-    if check.returncode != 0:
-        _log("Installation PyTorch CPU (première tâche DL)…")
-        pip = str(Path(py).parent / "pip")
-        if not Path(pip).is_file():
-            pip = py
-            cmd = [py, "-m", "pip", "install", "-q", "torch", "torchvision",
-                   "--index-url", "https://download.pytorch.org/whl/cpu"]
-        else:
-            cmd = [pip, "install", "-q", "torch", "torchvision",
-                   "--index-url", "https://download.pytorch.org/whl/cpu"]
+    if not py or not _python_has_torch(py):
+        dl_venv = cache_dir / "runtime-dl-venv"
+        py = str(_dl_venv_python(cache_dir))
+        if not Path(py).is_file():
+            _log(f"Création venv DL dédié (léger → deps lourdes à la demande) : {dl_venv}")
+            subprocess.run([sys.executable, "-m", "venv", str(dl_venv)], check=True)
+            py = str(_dl_venv_python(cache_dir))
+        _log(f"Installation PyTorch CPU dans {dl_venv} (1ʳᵉ tâche DISTRIBUTED_LEARNING)…")
+        cmd = [
+            py, "-m", "pip", "install", "-q", "torch", "torchvision",
+            "--index-url", "https://download.pytorch.org/whl/cpu",
+        ]
         proc = subprocess.run(cmd, capture_output=True, text=True)
         if proc.returncode != 0:
             raise RuntimeError(
-                f"pip torch failed: {proc.stderr or proc.stdout or proc.returncode}"
+                f"pip torch failed ({py}): {proc.stderr or proc.stdout or proc.returncode}"
             )
-        _log("PyTorch installé.")
+        _log("PyTorch installé (venv DL dédié — le venv app reste léger).")
     else:
-        _log("PyTorch déjà présent.")
+        _log(f"Interpréteur DL: {py} (PyTorch déjà présent).")
 
     # 2) CIFAR-10 cache machine (une fois)
-    cache_dir.mkdir(parents=True, exist_ok=True)
     cifar = cache_dir / "cifar-10-batches-py"
     if cifar.is_dir() and (cifar / "data_batch_1").is_file():
         _log(f"CIFAR-10 déjà en cache: {cifar}")
-        return
+        return py
 
     _log(f"Préparation CIFAR-10 dans {cache_dir}…")
     # Copie locale si disponible, sinon téléchargement torchvision
@@ -176,7 +211,7 @@ def _ensure_dl_deps(py: str, cache_dir: Path, logf) -> None:
                     shutil.rmtree(cifar)
                 shutil.copytree(src, cifar)
             _log(f"CIFAR-10 copié depuis {src}")
-            return
+            return py
 
     dl = subprocess.run(
         [
@@ -196,6 +231,7 @@ def _ensure_dl_deps(py: str, cache_dir: Path, logf) -> None:
             f"CIFAR-10 indisponible: {dl.stderr or dl.stdout or 'missing batches'}"
         )
     _log("CIFAR-10 prêt.")
+    return py
 
 
 def _run_task(task_id: str, bundle_bytes: bytes) -> None:
@@ -222,14 +258,13 @@ def _run_task(task_id: str, bundle_bytes: bytes) -> None:
             except OSError:
                 pass
         env = os.environ.copy()
-        # Prefer the volunteer venv Python; fall back to PATH python3.
+        # Prefer an interpreter that already has torch (slim app venv often does not).
         py = (
             os.environ.get("VCUY_PYTHON")
             or os.environ.get("RUNTIME_PYTHON")
             or ""
         ).strip()
         if not py:
-            # Common layout: .../e2e-v1/venv/bin/python next to runtime_compat_server.py
             for cand in (
                 Path(__file__).resolve().parent / "venv" / "bin" / "python",
                 Path(__file__).resolve().parent / "venv" / "bin" / "python3",
@@ -237,18 +272,6 @@ def _run_task(task_id: str, bundle_bytes: bytes) -> None:
                 if cand.is_file():
                     py = str(cand.resolve())
                     break
-        if py:
-            env["VCUY_PYTHON"] = py
-            env["PATH"] = str(Path(py).parent) + os.pathsep + env.get("PATH", "")
-            # Force absolute interpreter in run.sh so bare `python3` never wins.
-            try:
-                text = run_sh.read_text(encoding="utf-8", errors="replace")
-                rewritten = text.replace("${VCUY_PYTHON:-python3}", py)
-                rewritten = rewritten.replace("python3 ", f"{py} ")
-                if rewritten != text:
-                    run_sh.write_text(rewritten, encoding="utf-8")
-            except Exception:
-                pass
         # Cache dataset (rempli à la 1ʳᵉ tâche DL, pas à l'install app).
         cache = (os.environ.get("VCUY_DATASET_CACHE") or "").strip()
         if not cache:
@@ -278,7 +301,18 @@ def _run_task(task_id: str, bundle_bytes: bytes) -> None:
         log_path = logs_dir / "run.log"
         with open(log_path, "w", encoding="utf-8") as logf:
             if _looks_like_dl_bundle(run_sh):
-                _ensure_dl_deps(py, Path(cache), logf)
+                py = _ensure_dl_deps(py, Path(cache), logf)
+            if py:
+                env["VCUY_PYTHON"] = py
+                env["PATH"] = str(Path(py).parent) + os.pathsep + env.get("PATH", "")
+                try:
+                    text = run_sh.read_text(encoding="utf-8", errors="replace")
+                    rewritten = text.replace("${VCUY_PYTHON:-python3}", py)
+                    rewritten = rewritten.replace("python3 ", f"{py} ")
+                    if rewritten != text:
+                        run_sh.write_text(rewritten, encoding="utf-8")
+                except Exception:
+                    pass
             proc = subprocess.Popen(
                 ["bash", str(run_sh)],
                 cwd=str(run_sh.parent),

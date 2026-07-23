@@ -81,7 +81,7 @@ start_agent() {
     return 0
   fi
     if [ ! -d "$AGENT_DIR/.venv" ]; then
-    echo "Création venv agent (prédiction)…"
+    echo "Création venv agent (prédiction légère, sans torch)…"
     python3 -m venv "$AGENT_DIR/.venv"
     # shellcheck disable=SC1091
     source "$AGENT_DIR/.venv/bin/activate"

@@ -17,9 +17,11 @@ volunteer-app-2025/
 - Python 3.10+
 - Connexion Internet stable
 - 4 Go RAM recommandes
-- Docker (installe automatiquement par le script si besoin)
+- **Pas de Docker** — exécution via runtime local `vc-uyr-compat` (léger)
 
 > Le volontaire **n'a pas besoin de Git**. L'installation utilise une archive (snapshot), sans historique `.git`.
+> **Pas de PyTorch / CIFAR à l'install** : installés seulement à la 1ʳᵉ tâche `DISTRIBUTED_LEARNING`
+> (venv dédié). OpenMalaria, Matrix, etc. restent légers.
 
 ## Installation en une commande
 
@@ -49,7 +51,7 @@ cd ~/VC-UY/volunteer-app-2025 && chmod +x install-volontaire-service.sh && ./ins
 
 Ce mode installe des services systemd (`volunteer` + `volunteer-web`) qui se lancent automatiquement au boot de la machine.
 
-Au demarrage de Daphne (`volunteer-web`), le bridge de telemetrie demarre aussi (`:7071/predict` + sync snapshots vers le site `/donnees`). Si `torch` est installable, l'agent hybride ARX+GRU complet est prefere.
+Au demarrage de Daphne (`volunteer-web`), le bridge de telemetrie demarre aussi (`:7071/predict` + sync snapshots vers le site `/donnees`). Predicteur **ARX** par defaut (leger) ; hybride ARX+GRU si torch est deja present.
 
 ### Developpeurs (clone Git — optionnel)
 

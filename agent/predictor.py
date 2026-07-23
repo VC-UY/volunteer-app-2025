@@ -1,13 +1,12 @@
 """
 Predictors locaux pour l'agent volontaire VC-UY1.
 
-Architecture OBLIGATOIRE : hybride ARX 15D + GRU.
-Les deux artefacts doivent etre presents dans agent/models/ :
+Mode preferé : hybride ARX 15D + GRU (si torch + checkpoint presents).
+Mode leger (install sans torch) : ARX seul — OpenMalaria / Matrix / etc.
 
-  - weights_arx_stay_15m.json   (branche lineaire / logistique)
-  - gru_uy1_phase2.pt           (branche recurrentielle)
-
-Rien n'est optionnel : sans ARX ou sans GRU, l'agent refuse de demarrer.
+Artefacts dans agent/models/ :
+  - weights_arx_stay_15m.json   (obligatoire)
+  - gru_uy1_phase2.pt           (optionnel tant que torch n'est pas installe)
 """
 from __future__ import annotations
 
@@ -46,7 +45,7 @@ def _models_dir() -> str:
     return os.path.join(_agent_dir(), "models")
 
 
-def resolve_model_path(filename: str) -> str:
+def resolve_model_path(filename: str, *, required: bool = True) -> str:
     """
     Cherche un artefact modele, dans l'ordre :
       1. agent/models/<filename>
@@ -71,9 +70,11 @@ def resolve_model_path(filename: str) -> str:
     for path in candidates:
         if os.path.isfile(path):
             return path
+    if not required:
+        return candidates[0]
     raise FileNotFoundError(
         f"Artefact modele manquant : {filename}. "
-        f"Placez-le dans {_models_dir()}/ (architecture hybride ARX+GRU obligatoire)."
+        f"Placez-le dans {_models_dir()}/."
     )
 
 
@@ -320,7 +321,7 @@ def _fuse_hybrid(
 
 class HybridRuntimePredictor:
     """
-    Modele final volontaire : hybride ARX + GRU (les deux obligatoires).
+    Modele volontaire : hybride ARX+GRU si torch dispo, sinon ARX seul (install legere).
     """
 
     def __init__(self, launch_threshold: float | None = None):
@@ -338,28 +339,39 @@ class HybridRuntimePredictor:
         self.gru_model = None
         self.feature_mean = None
         self.feature_std = None
-        self.gru_path = resolve_model_path(GRU_CHECKPOINT_NAME)
+        self.model_name = "arx"
+        self.gru_path = resolve_model_path(GRU_CHECKPOINT_NAME, required=False)
         self._load_gru(self.gru_path)
         if self.gru_model is None:
-            raise RuntimeError(
-                "GRU obligatoire mais non charge. "
-                f"Verifiez {self.gru_path} et l'installation de torch."
+            # Install legere : pas de torch — ARX suffit pour lancer OpenMalaria / Matrix.
+            self.hybrid_alpha = 1.0
+            self.model_name = "arx"
+            logger.warning(
+                "Torch/GRU indisponible — mode ARX seul (seuil=%.3f). "
+                "Hybride active si torch est installe plus tard.",
+                self.launch_threshold,
             )
-        logger.info(
-            "Hybride ARX+GRU pret (alpha=%.2f, seuil=%.3f).",
-            self.hybrid_alpha,
-            self.launch_threshold,
-        )
+        else:
+            self.model_name = "hybrid_arx_gru"
+            logger.info(
+                "Hybride ARX+GRU pret (alpha=%.2f, seuil=%.3f).",
+                self.hybrid_alpha,
+                self.launch_threshold,
+            )
 
     def _load_gru(self, ckpt_path: str) -> None:
         try:
             import torch
             import torch.nn as nn
-        except ImportError as e:
-            raise RuntimeError(
-                "PyTorch est obligatoire pour le hybride ARX+GRU. "
-                "Installez : pip install torch --index-url https://download.pytorch.org/whl/cpu"
-            ) from e
+        except ImportError:
+            logger.info("PyTorch absent — predicteur ARX seul (volontaire leger).")
+            self.gru_model = None
+            return
+
+        if not ckpt_path or not os.path.isfile(ckpt_path):
+            logger.warning("Checkpoint GRU manquant (%s) — mode ARX seul.", ckpt_path)
+            self.gru_model = None
+            return
 
         class _GRU(nn.Module):
             def __init__(self, hidden_dim=128, num_layers=2, dropout=0.2, n_out=1):
@@ -396,6 +408,8 @@ class HybridRuntimePredictor:
         logger.info("GRU charge (%s, seq_len=%d).", ckpt_path, self.seq_len)
 
     def _gru_proba(self, seq: np.ndarray) -> float:
+        if self.gru_model is None:
+            return 0.0
         import torch
 
         x = seq.copy()
@@ -465,9 +479,9 @@ class HybridRuntimePredictor:
             "horizon_min": self.horizon_min,
             "launch_threshold": self.launch_threshold,
             "hybrid_alpha": self.hybrid_alpha,
-            "model": "hybrid_arx_gru",
+            "model": self.model_name,
             "arx_weights": self.rls.weights_path,
-            "gru_checkpoint": self.gru_path,
+            "gru_checkpoint": self.gru_path if self.gru_model is not None else None,
             "label": "stay_soft_15m",
             "require_ac": require_ac,
             "chassis": chassis or ("laptop" if has_battery else "desktop"),

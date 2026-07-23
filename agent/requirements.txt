@@ -1,4 +1,6 @@
+# Agent léger : PAS de torch ici.
+# GRU hybride si torch déjà présent ; sinon ARX seul (suffisant OpenMalaria / Matrix / etc.).
+# Torch + datasets : uniquement à la 1ʳᵉ tâche DISTRIBUTED_LEARNING (runtime-dl-venv).
 psutil
 requests
 numpy
-torch

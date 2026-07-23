@@ -225,12 +225,13 @@ def main():
     syncer.register(machine_id, consent_level=consent_level)
     syncer.start_session(machine_id, session_id)
     
-    # Modele final obligatoire : hybride ARX 15D + GRU
+    # Modele : hybride ARX+GRU si torch present, sinon ARX seul (install legere)
     predictor = HybridRuntimePredictor()
     logger.info(
-        "Hybride pret — ARX=%s GRU=%s",
+        "Predicteur pret — model=%s ARX=%s GRU=%s",
+        getattr(predictor, "model_name", "?"),
         predictor.rls.weights_path,
-        predictor.gru_path,
+        predictor.gru_path if predictor.gru_model is not None else "(off)",
     )
 
     # API locale : le volontaire / coordinateur consulte /predict (horizon 15 min)
