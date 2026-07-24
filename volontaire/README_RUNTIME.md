@@ -48,8 +48,9 @@ Le `run.sh` doit écrire dans `$vc_OUTPUT` au minimum :
 
 Chemins runtime alignés Ashley : `/tmp/vc/{input,output,state,logs,bundles}`.
 
-### Note isolant
+### Isolant seccomp (blocker connu)
 
-Si Ashley accepte la tâche puis échoue (`run.sh terminé code=-1` / « Résultat introuvable »),
-l’app volontaire **relance le même `run.sh` en local** (même contrat `vc_*`) pour ne pas
-bloquer les workflows — en attendant un correctif seccomp côté `vc-uyr`.
+Le profil `Standard` du binaire actuel **bloque** des syscalls indispensables
+(`read`, `close`, `mmap`, `mprotect`, …). Résultat : `run.sh terminé (code=-1)`
+avant toute écriture. **Pas de contournement** — Ashley doit élargir l’allowlist
+et republier le binaire ; ensuite on reteste son bundle d’exemple.

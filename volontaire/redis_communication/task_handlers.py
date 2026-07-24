@@ -1483,35 +1483,7 @@ class TaskManager:
             monitor_thread.daemon = True
             monitor_thread.start()
 
-            result = None
-            try:
-                result = self._poll_runtime_until_done(runtime, task)
-            except RuntimeError as poll_err:
-                # Ashley accepte souvent la tâche puis meurt en code=-1
-                # (seccomp) → Ready sans résultat. On exécute le même run.sh
-                # en local avec le contrat vc_* (run.sh = notre responsabilité).
-                logger.warning(
-                    "Runtime Ashley sans résultat pour %s (%s) — fallback local",
-                    task.task_id,
-                    poll_err,
-                )
-                from volontaire.services.local_bundle_exec import run_bundle_locally
-
-                result = run_bundle_locally(
-                    task_id=str(task.task_id),
-                    bundle_path=bundle_path,
-                )
-            if result is None:
-                from volontaire.services.local_bundle_exec import run_bundle_locally
-
-                logger.warning(
-                    "Timeout/empty Ashley pour %s — fallback local",
-                    task.task_id,
-                )
-                result = run_bundle_locally(
-                    task_id=str(task.task_id),
-                    bundle_path=bundle_path,
-                )
+            result = self._poll_runtime_until_done(runtime, task)
             if result is None:
                 raise TimeoutError(f"Timeout runtime pour la tâche {task.task_id}")
 
