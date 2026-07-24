@@ -69,10 +69,22 @@ fi
 
 install -m 0755 "$SRC_BIN" "$RUNTIME_HOME/bin/vc-uyr"
 
+# Contrat Ashley : chemins /tmp/vc (comme vc-uyr.toml d'origine).
+# VCUY_VC_ROOT permet d'override (tests / machines particulières).
+VC_ROOT="${VCUY_VC_ROOT:-/tmp/vc}"
+mkdir -p "$VC_ROOT"/{input,output,state,logs,bundles}
+# Miroir sous RUNTIME_HOME/data pour debug / outils locaux
 DATA="$RUNTIME_HOME/data"
-# Config adaptée machine : chemins locaux + auth shim local (boot VC-UY1).
+ln -sfn "$VC_ROOT/input" "$DATA/input" 2>/dev/null || true
+ln -sfn "$VC_ROOT/output" "$DATA/output" 2>/dev/null || true
+ln -sfn "$VC_ROOT/state" "$DATA/state" 2>/dev/null || true
+ln -sfn "$VC_ROOT/logs" "$DATA/logs" 2>/dev/null || true
+ln -sfn "$VC_ROOT/bundles" "$DATA/bundles" 2>/dev/null || true
+
+# Config adaptée machine : /tmp/vc + auth shim local (boot VC-UY1).
 cat >"$RUNTIME_HOME/config/vc-uyr.toml" <<EOF
 # Généré par install_runtime.sh — runtime isolant vc-uyr (remplace Docker)
+# Chemins alignés sur le contrat Ashley (/tmp/vc)
 
 [volunteer]
 id    = "vol-local"
@@ -80,12 +92,12 @@ token = "local-runtime-token"
 name  = "Volontaire UY1"
 
 [paths]
-vc_root     = "$DATA"
-input_dir   = "$DATA/input"
-output_dir  = "$DATA/output"
-state_dir   = "$DATA/state"
-logs_dir    = "$DATA/logs"
-bundles_dir = "$DATA/bundles"
+vc_root     = "$VC_ROOT"
+input_dir   = "$VC_ROOT/input"
+output_dir  = "$VC_ROOT/output"
+state_dir   = "$VC_ROOT/state"
+logs_dir    = "$VC_ROOT/logs"
+bundles_dir = "$VC_ROOT/bundles"
 
 [resources]
 cpu_limit_percent  = 30

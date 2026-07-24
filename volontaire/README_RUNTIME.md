@@ -38,5 +38,18 @@ curl -s http://127.0.0.1:7070/api/health
 
 ## Contrat tâche
 
-Bundle `.tar.gz` self-contained avec `run.sh` à la racine.
-Env: `vc_INPUT`, `vc_OUTPUT`, `vc_STATE`, `vc_LOGS`, `vc_TASK_ID`.
+Bundle `.tar.gz` self-contained avec `run.sh` à la racine (produit par le **Manager**, pas par Ashley).
+
+Env injectées par le runtime : `vc_INPUT`, `vc_OUTPUT`, `vc_STATE`, `vc_LOGS`, `vc_TASK_ID`.
+
+Le `run.sh` doit écrire dans `$vc_OUTPUT` au minimum :
+- `progress.txt`
+- `result.txt`
+
+Chemins runtime alignés Ashley : `/tmp/vc/{input,output,state,logs,bundles}`.
+
+### Note isolant
+
+Si Ashley accepte la tâche puis échoue (`run.sh terminé code=-1` / « Résultat introuvable »),
+l’app volontaire **relance le même `run.sh` en local** (même contrat `vc_*`) pour ne pas
+bloquer les workflows — en attendant un correctif seccomp côté `vc-uyr`.

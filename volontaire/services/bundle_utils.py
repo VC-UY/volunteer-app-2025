@@ -16,17 +16,19 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+# Contrat Ashley : écrire dans $vc_OUTPUT (result.txt + progress.txt).
 RUN_SH_TEMPLATE = """#!/bin/bash
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
 export OUTPUT_DIR="${{vc_OUTPUT:-$SCRIPT_DIR/output}}"
+export INPUT_DIR="${{vc_INPUT:-$SCRIPT_DIR}}"
 mkdir -p "$OUTPUT_DIR"
 
-# Exposer les entrées éventuelles fournies hors du bundle
+# Exposer les entrées éventuelles fournies hors du bundle (racine seulement)
 if [ -n "${{vc_INPUT:-}}" ] && [ -d "$vc_INPUT" ]; then
-  find "$vc_INPUT" -maxdepth 3 -type f 2>/dev/null | while read -r src; do
+  find "$vc_INPUT" -maxdepth 1 -type f 2>/dev/null | while read -r src; do
     base="$(basename "$src")"
     if [ ! -f "$SCRIPT_DIR/$base" ]; then
       cp -f "$src" "$SCRIPT_DIR/$base" || true
@@ -35,6 +37,14 @@ if [ -n "${{vc_INPUT:-}}" ] && [ -d "$vc_INPUT" ]; then
 fi
 
 {command}
+
+# Contrat Ashley — fichiers attendus dans vc_OUTPUT
+if [ ! -f "$OUTPUT_DIR/progress.txt" ]; then
+  echo "100" > "$OUTPUT_DIR/progress.txt"
+fi
+if [ ! -f "$OUTPUT_DIR/result.txt" ]; then
+  echo "ok" > "$OUTPUT_DIR/result.txt"
+fi
 """
 
 
