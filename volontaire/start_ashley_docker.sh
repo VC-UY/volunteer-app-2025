@@ -55,14 +55,17 @@ sleep 1
 
 # Conteneur privilégié : binaire Ashley + host network (port 7070)
 # Image minimale avec glibc (le binaire est dynamiquement lié)
-IMG="${VCUY_RUNTIME_IMAGE:-ubuntu:22.04}"
+# Image avec bash+python3 : les bundles Ashley (benchmark / OpenMalaria wrappers) en dépendent.
+# cgroupns=host + bind /sys/fs/cgroup : sinon crash « cgroup.subtree_control … ENOENT »
+IMG="${VCUY_RUNTIME_IMAGE:-python:3.12-slim-bookworm}"
 run_docker docker pull -q "$IMG" >/dev/null || true
 
 run_docker docker run -d --name "$NAME" --restart unless-stopped \
-  --privileged --network host \
+  --privileged --network host --cgroupns=host \
   -e RUST_LOG=info \
   -v "$RUNTIME_HOME:$RUNTIME_HOME" \
   -v /tmp:/tmp \
+  -v /sys/fs/cgroup:/sys/fs/cgroup:rw \
   "$IMG" \
   "$BIN" "$CFG"
 
@@ -78,9 +81,17 @@ for _ in $(seq 1 30); do
   sleep 1
 done
 
+# Le serveur HTTP démarre avant l'init cgroup : attendre que le conteneur reste Up
+sleep 4
+if ! run_docker docker inspect -f '{{.State.Running}}' "$NAME" 2>/dev/null | grep -q true; then
+  echo "❌ Conteneur Ashley crashé après démarrage"
+  run_docker docker logs "$NAME" 2>&1 | tail -40
+  exit 1
+fi
+
 HEALTH="$(curl -sf http://127.0.0.1:7070/api/health || true)"
 echo "health=$HEALTH"
-if [[ "$ok" -ne 1 ]]; then
+if [[ "$ok" -ne 1 ]] || [[ -z "$HEALTH" ]]; then
   echo "❌ Ashley non joignable"
   run_docker docker logs "$NAME" 2>&1 | tail -40
   exit 1

@@ -8,11 +8,21 @@ Le shim Python `runtime_compat` n’est **plus** utilisé.
 ```bash
 cd volontaire
 ./install_runtime.sh
-sudo bash ./install_runtime_system.sh   # OBLIGATOIRE (namespaces root)
+sudo bash ./install_runtime_system.sh   # recommandé (namespaces + cgroups root)
 ./install_daemon.sh
 ```
 
-Sans `sudo`, le binaire Ashley crash (`unshare EPERM`). Pas de fallback compat.
+Sans `sudo`, le binaire Ashley crash (`unshare EPERM`) en user systemd. Alternatives :
+
+```bash
+# 1) root host via Docker privilégié + nsenter (groupe docker requis)
+./start_ashley_host.sh
+
+# 2) conteneur privilégié seul (cgroupns=host) — API OK, exécution tâches plus fragile
+./start_ashley_docker.sh
+```
+
+Pas de fallback `runtime_compat`.
 
 Commande volontaire (install complète) :
 ```bash
